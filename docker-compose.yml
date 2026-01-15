@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: KG_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-curriculum_db}
+      MYSQL_USER: ${DB_USER:-curriculum_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-curriculum_password}
+      TZ: Asia/Seoul
+    ports:
+      - "${DB_PORT:-8001}:3306"
+    volumes:
+      # 데이터 영구 저장
+      - ./docker/mariadb/data:/var/lib/mysql
+      # 백업 파일 저장
+      - ./docker/mariadb/backups:/backups
+      # 초기화 스크립트 (선택사항)
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d
+      # 설정 파일 (선택사항)
+      - ./docker/mariadb/conf.d:/etc/mysql/conf.d
+    networks:
+      - dev_dong_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max_allowed_packet=256M
+      --innodb_buffer_pool_size=512M
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: KG_app
+    restart: unless-stopped
+    environment:
+      # 데이터베이스 설정 (컨테이너 내부에서는 서비스명으로 접근)
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-curriculum_user}
+      DB_PASSWORD: ${DB_PASSWORD:-curriculum_password}
+      DB_DATABASE: ${DB_DATABASE:-curriculum_db}
+      
+      # JWT 설정
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-change-this-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      
+      # LLM API 설정
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-gemini}
+      
+      # 기타 설정
+      DEBUG: ${DEBUG:-True}
+      TZ: Asia/Seoul
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      # 개발 모드: 코드 변경 시 자동 반영 (Hot Reload)
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+      - ./storage:/app/storage
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - dev_dong_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  dev_dong_network:
+    driver: bridge
+

@@ -1,0 +1,81 @@
+# 프로덕션용 docker-compose 설정
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: KG_db_prod
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - ./docker/mariadb/data:/var/lib/mysql
+      - ./docker/mariadb/backups:/backups
+      - ./docker/mariadb/conf.d:/etc/mysql/conf.d
+    networks:
+      - prod_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max_allowed_packet=256M
+      --innodb_buffer_pool_size=512M
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: KG_app_prod
+    restart: always
+    environment:
+      # 데이터베이스 설정
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      
+      # JWT 설정 (프로덕션에서는 반드시 강력한 키 사용)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      
+      # LLM API 설정
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-gemini}
+      
+      # 프로덕션 설정
+      DEBUG: False
+      TZ: Asia/Seoul
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      # 프로덕션: storage만 마운트
+      - ./storage:/app/storage
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - prod_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  prod_network:
+    driver: bridge
+

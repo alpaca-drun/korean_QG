@@ -1,0 +1,4 @@
+[mysqld]
+# 한국 표준시(KST) 설정
+default-time-zone='+09:00'
+
