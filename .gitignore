@@ -38,3 +38,9 @@ wheels/
 .DS_Store
 Thumbs.db
 
+# Docker - MariaDB 데이터 및 백업
+docker/mariadb/data/
+docker/mariadb/backups/
+*.sql
+*.sql.gz
+*.sql.bz2
