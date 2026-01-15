@@ -1,29 +1,23 @@
+# 프로덕션용 docker-compose 설정
 version: '3.8'
 
 services:
   mariadb:
     image: mariadb:10.11
-    container_name: KG_db
-    restart: unless-stopped
+    container_name: KG_db_prod
+    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${DB_DATABASE:-curriculum_db}
-      MYSQL_USER: ${DB_USER:-curriculum_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-curriculum_password}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       TZ: Asia/Seoul
-    ports:
-      - "${DB_PORT:-8001}:3306"
     volumes:
-      # 데이터 영구 저장
       - ./docker/mariadb/data:/var/lib/mysql
-      # 백업 파일 저장
       - ./docker/mariadb/backups:/backups
-      # 초기화 스크립트 (선택사항)
-      - ./docker/mariadb/init:/docker-entrypoint-initdb.d
-      # 설정 파일 (선택사항)
       - ./docker/mariadb/conf.d:/etc/mysql/conf.d
     networks:
-      - dev_dong_network
+      - prod_network
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -38,44 +32,42 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-    container_name: KG_app
-    restart: unless-stopped
+      dockerfile: Dockerfile
+    container_name: KG_app_prod
+    restart: always
     environment:
-      # 데이터베이스 설정 (컨테이너 내부에서는 서비스명으로 접근)
+      # 데이터베이스 설정
       DB_HOST: mariadb
       DB_PORT: 3306
-      DB_USER: ${DB_USER:-curriculum_user}
-      DB_PASSWORD: ${DB_PASSWORD:-curriculum_password}
-      DB_DATABASE: ${DB_DATABASE:-curriculum_db}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
       
-      # JWT 설정
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-change-this-in-production}
+      # JWT 설정 (프로덕션에서는 반드시 강력한 키 사용)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
       
       # LLM API 설정
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-gemini}
       
-      # 기타 설정
-      DEBUG: ${DEBUG:-True}
+      # 프로덕션 설정
+      DEBUG: False
       TZ: Asia/Seoul
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      # 개발 모드: 코드 변경 시 자동 반영 (Hot Reload)
-      - ./app:/app/app
-      - ./scripts:/app/scripts
+      # 프로덕션: storage만 마운트
       - ./storage:/app/storage
     depends_on:
       mariadb:
         condition: service_healthy
     networks:
-      - dev_dong_network
+      - prod_network
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
       interval: 30s
@@ -84,6 +76,6 @@ services:
       start_period: 10s
 
 networks:
-  dev_dong_network:
+  prod_network:
     driver: bridge
 

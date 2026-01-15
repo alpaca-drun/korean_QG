@@ -58,6 +58,14 @@ echo "서버를 중지하려면 Ctrl+C를 누르세요"
 echo "=========================================="
 echo ""
 
-# 개발 모드로 실행 (--reload 옵션 사용)
-uvicorn app.main:app --host "$HOST" --port "$PORT" --reload
+# 개발 모드로 실행 (--reload 옵션 사용, docker 디렉토리 제외)
+uvicorn app.main:app \
+    --host "$HOST" \
+    --port "$PORT" \
+    --reload \
+    --reload-exclude "docker/*" \
+    --reload-exclude "*.sql" \
+    --reload-exclude "*.sql.gz" \
+    --reload-exclude "venv/*" \
+    --reload-exclude "__pycache__/*"
 

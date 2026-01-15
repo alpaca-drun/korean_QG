@@ -7,6 +7,9 @@ from json.decoder import JSONDecodeError
 from app.core.config import settings
 from app.api.v1.api import api_router
 
+
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,

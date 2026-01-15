@@ -514,9 +514,6 @@ class GeminiClient(LLMClientBase):
             # JSON 파싱
             data = json.loads(response_text)
             
-            # 디버깅: 원본 데이터 출력
-            print(f"🔍 LLM 응답 데이터 (첫 번째 문항): {json.dumps(data.get('questions', [{}])[0] if 'questions' in data else {}, ensure_ascii=False, indent=2)[:500]}")
-            
             # MultipleQuestion 형식인 경우
             if "questions" in data:
                 multiple_question = MultipleQuestion(**data)
@@ -541,8 +538,6 @@ class GeminiClient(LLMClientBase):
             print(f"응답 텍스트: {response_text[:500]}")
         except Exception as e:
             print(f"⚠️ 응답 파싱 중 오류: {e}")
-            import traceback
-            traceback.print_exc()
         
         return questions
     
@@ -565,20 +560,16 @@ class GeminiClient(LLMClientBase):
             
             # passage 사용 여부 판단 (빈 문자열이나 None 처리)
             passage = llm_question.passage
+            has_passage = passage and isinstance(passage, str) and passage.strip() and passage != "1"
+            original_used = passage == "1" or has_passage
             
-            # passage가 None이거나 빈 문자열인 경우 처리
-            if not passage or (isinstance(passage, str) and not passage.strip()):
-                has_passage = False
-                original_used = False
-                source_type = "none"
-            elif passage == "1":
-                has_passage = False
-                original_used = True
+            # source_type 결정
+            if passage == "1":
                 source_type = "original"
-            else:
-                has_passage = True
-                original_used = True
+            elif has_passage:
                 source_type = "modified"
+            else:
+                source_type = "none"
             
             return Question(
                 question_id=str(question_number),
