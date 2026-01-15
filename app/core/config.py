@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # 파일 저장소 설정
     file_storage_path: str = "storage/files"  # 파일 저장 폴더 경로 (env에서 설정 가능, app 디렉토리 기준)
     
+    # JWT 인증 설정
+    jwt_secret_key: str = "your-secret-key-change-this-in-production"  # 프로덕션에서는 반드시 변경
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30  # 액세스 토큰 만료 시간 (분)
+    jwt_refresh_token_expire_days: int = 7  # 리프레시 토큰 만료 시간 (일)
+    
     @field_validator('max_parallel_api_keys', 'max_batch_size', 'batch_timeout', 
                      'api_call_timeout', 'api_retry_timeout', 'db_port', mode='before')
     @classmethod

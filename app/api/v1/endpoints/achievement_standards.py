@@ -18,7 +18,6 @@ DUMMY_ACHIEVEMENT_STANDARDS = [
     response_model=ListResponse,
     summary="성취기준 리스트 조회",
     description="특정 소단원에 속한 성취기준 리스트를 조회합니다.",
-    tags=["성취기준"]
 )
 async def get_achievement_standards(
     small_unit_id: int = Query(..., description="소단원 ID", example=1)
@@ -54,7 +53,6 @@ async def get_achievement_standards(
     response_model=AchievementStandardResponse,
     summary="성취기준 상세 조회",
     description="특정 성취기준의 상세 정보를 조회합니다.",
-    tags=["성취기준"]
 )
 async def get_achievement_standard(achievement_standard_id: int):
     """

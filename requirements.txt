@@ -18,4 +18,9 @@ redis==5.0.1
 # 데이터베이스
 pymysql==1.1.0
 
+# JWT 인증
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
+bcrypt==4.0.1
+
 # test

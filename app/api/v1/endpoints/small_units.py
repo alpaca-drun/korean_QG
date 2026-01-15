@@ -18,7 +18,7 @@ DUMMY_SMALL_UNITS = [
     response_model=ListResponse,
     summary="소단원 리스트 조회",
     description="특정 대단원에 속한 소단원 리스트를 조회합니다.",
-    tags=["소단원"]
+    tags=["메타데이터"]
 )
 async def get_small_units(
     large_unit_id: int = Query(..., description="대단원 ID", example=1)
@@ -53,7 +53,7 @@ async def get_small_units(
     response_model=SmallUnitResponse,
     summary="소단원 상세 조회",
     description="특정 소단원의 상세 정보를 조회합니다.",
-    tags=["소단원"]
+    tags=["메타데이터"]
 )
 async def get_small_unit(small_unit_id: int):
     """

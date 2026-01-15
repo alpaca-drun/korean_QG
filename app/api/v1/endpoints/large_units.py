@@ -17,7 +17,7 @@ DUMMY_LARGE_UNITS = [
     response_model=ListResponse,
     summary="대단원 리스트 조회",
     description="모든 대단원 리스트를 조회합니다. 드롭다운 선택용으로 사용됩니다.",
-    tags=["대단원"]
+    tags=["메타데이터"]
 )
 async def get_large_units():
     """
@@ -38,7 +38,7 @@ async def get_large_units():
     response_model=LargeUnitResponse,
     summary="대단원 상세 조회",
     description="특정 대단원의 상세 정보를 조회합니다.",
-    tags=["대단원"]
+    tags=["메타데이터"]
 )
 async def get_large_unit(large_unit_id: int):
     """

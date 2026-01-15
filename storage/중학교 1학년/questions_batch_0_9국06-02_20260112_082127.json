@@ -1,0 +1,1151 @@
+{
+  "metadata": {
+    "batch_index": 0,
+    "achievement_standard": "9국06-02",
+    "grade_level": "중학교 1학년",
+    "total_questions": 30,
+    "generated_at": "20260112_082127"
+  },
+  "questions": [
+    {
+      "question_id": "1",
+      "question_number": 1,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음 현지의 글쓰기 계획으로 보아, 정보를 전달하는 글을 쓸 때 '계획하기' 단계에서 가장 먼저 고려해야 할 요소로 알맞은 것은?",
+        "modified_passage": "<현지의 글쓰기 계획>\n- 주제: 우리 학교 도서관 이용 방법 안내\n- 목적: 도서관 이용에 익숙하지 않은 사람들에게 정보를 주기 위함\n- 예상 독자: 우리 학교 1학년 신입생들\n- 매체: 학교 신문",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글의 분량"
+        },
+        {
+          "number": 2,
+          "text": "글의 주제"
+        },
+        {
+          "number": 3,
+          "text": "문단의 개수"
+        },
+        {
+          "number": 4,
+          "text": "어휘의 수준"
+        },
+        {
+          "number": 5,
+          "text": "수정할 내용"
+        }
+      ],
+      "correct_answer": "2",
+      "explanation": "[정답해설]\n② 정보를 전달하는 글을 쓰기 위한 '계획하기' 단계에서는 글을 쓰는 목적과 글을 통해 전달하고자 하는 핵심 내용인 '주제', 그리고 글을 읽을 '예상 독자'를 결정하는 것이 가장 기본적이고 중요한 요소이다.\n\n[오답피하기]\n①, ③, ④는 글의 내용을 구체적으로 조직하거나 표현하는 단계에서 고려할 사항이다.\n⑤는 글을 다 쓴 후 점검하는 '고쳐쓰기' 단계에서 할 일이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "2",
+      "question_number": 2,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "현지가 '자료 1'의 중요도를 판단할 때 고려한 요소로 가장 알맞은 것은?",
+        "modified_passage": "<현지가 수집한 자료>\n자료 1: 도서관 운영 시간 및 대출 가능 권수 안내문\n자료 2: 도서관을 이용한 학생들의 만족도 설문 조사\n자료 3: 도서관 내부 좌석 배치도 사진",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "자료의 길이"
+        },
+        {
+          "number": 2,
+          "text": "자료의 출처"
+        },
+        {
+          "number": 3,
+          "text": "문장의 유창성"
+        },
+        {
+          "number": 4,
+          "text": "주제와의 관련성"
+        },
+        {
+          "number": 5,
+          "text": "글쓴이의 주관적 견해"
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 현지는 '학교 도서관 이용 방법'이라는 주제에 맞게 도서관 이용 시간과 대출 규정이 담긴 자료를 선택했다. 이는 수집한 자료가 글의 주제를 구현하는 데 얼마나 직접적으로 기여하는지를 판단한 것이다.\n\n[오답피하기]\n① 자료의 길이는 중요도 판단의 핵심 기준이 아니다.\n② 출처는 신뢰성을 판단하는 기준이다.\n③ 문장의 유창성은 표현 단계의 문제이다.\n⑤ 정보를 전달하는 글에서는 객관적인 사실이 중요하므로 주관적 견해는 중요도 판단에서 제외될 수 있다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "3",
+      "question_number": 3,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음은 현지가 개요를 작성하는 과정에서 세운 자료 활용 계획이다. ㉠에 들어갈 내용으로 알맞지 않은 것은?",
+        "modified_passage": "<글의 개요>\n1. 머리말: 도서관 안내 글을 쓰게 된 동기\n2. 본문: ㉠\n3. 맺음말: 도서관 이용 권장 및 당부 사항",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관 위치 안내"
+        },
+        {
+          "number": 2,
+          "text": "도서 대출 및 반납 방법"
+        },
+        {
+          "number": 3,
+          "text": "도서관 이용 시 유의 사항"
+        },
+        {
+          "number": 4,
+          "text": "희망 도서를 신청하는 절차"
+        },
+        {
+          "number": 5,
+          "text": "도서관 청소 당번 정하는 법"
+        }
+      ],
+      "correct_answer": "5",
+      "explanation": "[정답해설]\n⑤ '도서관 청소 당번 정하는 법'은 '도서관 이용 방법 안내'라는 전체 주제 및 '도서관 이용의 실제'라는 본문 내용과 거리가 멀다. 글의 통일성을 해치는 내용이므로 적절하지 않다.\n\n[오답피하기]\n①, ②, ③, ④는 모두 학교 도서관을 처음 이용하는 신입생들에게 유용한 이용 정보에 해당하므로 본문의 ㉠에 포함될 수 있는 적절한 내용이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "4",
+      "question_number": 4,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "정보를 전달하는 글을 쓸 때, <보기>의 '예상 독자'를 고려하여 글을 구성하는 방법으로 가장 적절한 것은?",
+        "modified_passage": null,
+        "box_content": "<보기>\n예상 독자: 중학교 1학년 신입생"
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "전문 용어를 많이 사용한다."
+        },
+        {
+          "number": 2,
+          "text": "어려운 한자어를 섞어 쓴다."
+        },
+        {
+          "number": 3,
+          "text": "독자가 아는 내용을 생략한다."
+        },
+        {
+          "number": 4,
+          "text": "독자의 수준에 맞는 쉬운 용어를 쓴다."
+        },
+        {
+          "number": 5,
+          "text": "자신의 감정을 최대한 화려하게 표현한다."
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 예상 독자가 중학교 1학년 신입생이므로, 이들이 이해하기 어려운 전문 용어나 한자어보다는 수준에 맞는 쉽고 명확한 용어를 사용하는 것이 정보를 효과적으로 전달하는 방법이다.\n\n[오답피하기]\n①, ②는 독자의 이해를 방해한다.\n③ 독자가 이미 아는 내용이라도 설명의 맥락상 필요하면 적절히 포함해야 한다.\n⑤ 정보를 전달하는 글은 감정 표현보다 객관적 사실 전달이 우선이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "5",
+      "question_number": 5,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "정보를 전달하는 글을 고쳐 쓸 때의 기준으로 알맞지 않은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "주제가 선명하게 드러나는가?"
+        },
+        {
+          "number": 2,
+          "text": "전달하는 정보가 정확한 내용인가?"
+        },
+        {
+          "number": 3,
+          "text": "문장 간의 연결이 자연스럽게 이루어졌는가?"
+        },
+        {
+          "number": 4,
+          "text": "글쓴이의 개성적인 문체가 잘 반영되었는가?"
+        },
+        {
+          "number": 5,
+          "text": "독자가 이해하기 어려운 표현은 포함되지 않았는가?"
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 정보를 전달하는 글의 목적은 독자에게 지식이나 정보를 알기 쉽게 전달하는 것이다. 따라서 글쓴이의 개성적인 문체보다는 객관적이고 명료한 표현이 더 중요하다.\n\n[오답피하기]\n① 주제의 선명성은 글의 통일성을 위해 필요하다.\n② 정보의 정확성은 정보 전달 글의 생명이다.\n③ 문장의 연결성은 글의 응집성을 위해 필요하다.\n⑤ 독자의 이해 가능성은 글의 목적 달성을 위해 필수적이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "6",
+      "question_number": 6,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음은 현지가 작성한 초고의 일부이다. ㉠을 고쳐 쓰기 위한 의견으로 가장 적절한 것은?",
+        "modified_passage": "<현지의 초고>\n우리 학교 도서관은 본관 2층에 있습니다. 도서관은 ㉠적당한 시간에 문을 엽니다. 책을 빌리고 싶은 학생은 학생증을 지참해야 합니다.",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글의 흐름과 상관없으므로 삭제한다."
+        },
+        {
+          "number": 2,
+          "text": "문장의 길이를 더 길게 늘여서 쓴다."
+        },
+        {
+          "number": 3,
+          "text": "글쓴이의 주관적인 느낌을 더 추가한다."
+        },
+        {
+          "number": 4,
+          "text": "구체적인 시간 정보를 포함하여 수정한다."
+        },
+        {
+          "number": 5,
+          "text": "도서관의 역사에 대한 정보를 자세히 적는다."
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 정보를 전달하는 글에서 '적당한 시간'과 같은 모호한 표현은 독자에게 정확한 정보를 줄 수 없다. 따라서 '오전 9시부터 오후 4시까지'와 같이 구체적인 수치나 시간을 포함하여 수정하는 것이 적절하다.\n\n[오답피하기]\n① 도서관 이용 시간은 핵심 정보이므로 삭제하면 안 된다.\n② 문장의 길이를 늘이는 것이 정보의 정확성을 높여주는 것은 아니다.\n③ 정보를 전달하는 글에서 주관적 느낌은 지양해야 한다.\n⑤ 도서관의 역사는 이용 방법 안내라는 주제와 거리가 멀다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "7",
+      "question_number": 7,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "현지가 글의 내용을 보충하기 위해 <보기>와 같은 시각 자료를 활용하려고 한다. 이를 통해 얻을 수 있는 효과로 알맞은 것은?",
+        "modified_passage": null,
+        "box_content": "<보기>\n- 도서관 내부의 도서 검색대 사진\n- 대출 절차를 나타낸 흐름도"
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글의 분량을 줄일 수 있다."
+        },
+        {
+          "number": 2,
+          "text": "글쓴이의 상상력을 자극한다."
+        },
+        {
+          "number": 3,
+          "text": "정보를 더 생생하고 이해하기 쉽게 전달한다."
+        },
+        {
+          "number": 4,
+          "text": "독자가 글의 주제를 스스로 정하도록 유도한다."
+        },
+        {
+          "number": 5,
+          "text": "설명하는 대상에 대한 비판적 시각을 갖게 한다."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 사진이나 도표 같은 시각 자료는 텍스트로만 설명할 때보다 정보를 더 직관적이고 생생하게 전달하여 독자의 이해를 돕는 효과가 있다.\n\n[오답피하기]\n① 시각 자료가 추가되면 전체적인 정보량은 늘어날 수 있으나 단순히 분량을 줄이기 위한 목적은 아니다.\n② 정보를 전달하는 글은 상상력보다 사실적 이해가 중요하다.\n④ 주제는 글쓴이가 정하여 전달하는 것이다.\n⑤ 안내문에서 시각 자료는 정보 전달을 돕는 것이지 비판을 유도하는 것이 주된 목적은 아니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "8",
+      "question_number": 8,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "다음 중 현지가 글을 쓰는 과정에서 지켜야 할 '쓰기 윤리'로 가장 적절한 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "최대한 많은 자료를 글에 담는다."
+        },
+        {
+          "number": 2,
+          "text": "남의 글을 자신의 것처럼 꾸며 쓴다."
+        },
+        {
+          "number": 3,
+          "text": "인터넷에 있는 자료는 출처 없이 사용한다."
+        },
+        {
+          "number": 4,
+          "text": "자신의 주장을 뒷받침하기 위해 자료를 왜곡한다."
+        },
+        {
+          "number": 5,
+          "text": "참고한 자료의 출처를 정확하게 밝히며 작성한다."
+        }
+      ],
+      "correct_answer": "5",
+      "explanation": "[정답해설]\n⑤ 다른 사람의 자료나 공공의 정보를 활용할 때는 그 출처를 명확히 밝히는 것이 올바른 쓰기 윤리를 실천하는 방법이다.\n\n[오답피하기]\n②, ③은 표절에 해당하며 쓰기 윤리에 어긋난다.\n④ 자료 왜곡은 정보의 정확성을 해치는 행위이다.\n① 자료의 양보다 질과 윤리적 활용이 중요하다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "9",
+      "question_number": 9,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "현지가 글을 마무리하는 '맺음말' 단계에서 작성하기에 가장 적절한 내용은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관의 위치를 다시 설명한다."
+        },
+        {
+          "number": 2,
+          "text": "글을 쓰게 된 개인적인 고민을 적는다."
+        },
+        {
+          "number": 3,
+          "text": "도서관 이용을 독려하며 글을 마무리한다."
+        },
+        {
+          "number": 4,
+          "text": "새로 들어온 책의 목록을 모두 나열한다."
+        },
+        {
+          "number": 5,
+          "text": "도서관 사서 선생님의 약력을 상세히 소개한다."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 정보를 전달하는 글의 맺음말에서는 본문에서 설명한 내용을 요약하거나, 독자에게 당부하는 말, 또는 이용을 권유하는 내용을 담아 마무리하는 것이 자연스럽다.\n\n[오답피하기]\n① 위치 설명은 이미 본문이나 머리말에서 다루어야 할 정보이다.\n② 개인적 고민은 정보 전달 글의 성격과 맞지 않는다.\n④ 모든 목록 나열은 맺음말의 요약적 성격에 어긋난다.\n⑤ 사서의 약력은 이용 방법 안내라는 주제와 관련성이 낮다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "10",
+      "question_number": 10,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "현지의 쓰기 활동을 통해 알 수 있는 '글쓰기 과정'에 대한 설명으로 알맞지 않은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글쓰기는 계획하기부터 시작된다."
+        },
+        {
+          "number": 2,
+          "text": "한 번 정한 개요는 절대 수정할 수 없다."
+        },
+        {
+          "number": 3,
+          "text": "자료를 수집할 때는 주제와의 관련성을 고려한다."
+        },
+        {
+          "number": 4,
+          "text": "초고를 쓴 후에는 부족한 부분을 점검하여 고쳐 쓴다."
+        },
+        {
+          "number": 5,
+          "text": "글쓰기 각 단계는 서로 밀접하게 연결되어 영향을 주고받는다."
+        }
+      ],
+      "correct_answer": "2",
+      "explanation": "[정답해설]\n② 글쓰기 과정은 회귀적인 특성을 갖는다. 따라서 개요를 작성했더라도 실제 글을 쓰는 과정이나 고쳐쓰기 단계에서 필요에 따라 언제든지 수정하고 보완할 수 있다.\n\n[오답피하기]\n① 계획하기는 글쓰기의 첫 단계이다.\n③ 주제와 관련 없는 자료는 독자에게 혼란을 준다.\n④ 고쳐쓰기는 글의 완성도를 높이는 필수 과정이다.\n⑤ 각 단계는 독립적인 것이 아니라 유기적으로 연결되어 있다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "1",
+      "question_number": 1,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음 현지의 글쓰기 계획으로 보아, 정보를 전달하는 글을 쓸 때 '계획하기' 단계에서 할 일로 알맞은 것은?",
+        "modified_passage": "현지의 글쓰기 계획\n- 글을 쓰는 목적: 우리 학교 도서관의 이용 방법을 안내하기 위해\n- 주제: 효율적인 도서관 이용 수칙과 혜택\n- 예상 독자: 도서관 이용이 낯선 신입생들\n- 매체: 학교 누리집 게시판",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "주제에 맞는 사진이나 도표를 수집한다."
+        },
+        {
+          "number": 2,
+          "text": "글의 내용을 문단별로 구체화하여 개요를 짠다."
+        },
+        {
+          "number": 3,
+          "text": "글을 읽을 독자의 수준과 관심사를 미리 파악한다."
+        },
+        {
+          "number": 4,
+          "text": "완성된 글을 맞춤법에 맞게 고치며 완성도를 높인다."
+        },
+        {
+          "number": 5,
+          "text": "수집한 자료가 믿을 만한 것인지 출처를 꼼꼼히 확인한다."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 계획하기 단계에서는 글을 쓰는 목적을 분명히 하고, 주제를 정하며, 글을 읽을 예상 독자가 누구인지 파악하는 활동이 이루어집니다.\n[오답피하기]\n①, ⑤는 자료 수집 및 선정 단계, ②는 내용 조직하기(개요 작성) 단계, ④는 고쳐 쓰기 단계에 해당합니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "2",
+      "question_number": 2,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음에서 현지가 '자료 1'의 중요도를 판단할 때 고려한 요소로 알맞은 것은?",
+        "modified_passage": "현지가 수집한 자료\n- 자료 1: 도서관 대출 및 반납 절차가 담긴 안내 책자\n- 자료 2: 작년에 도서관을 가장 많이 이용한 학생의 인터뷰\n- 자료 3: 다른 학교의 급식 메뉴 사진",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "자료가 얼마나 최신 정보인가?"
+        },
+        {
+          "number": 2,
+          "text": "자료의 출처가 믿을 만한 곳인가?"
+        },
+        {
+          "number": 3,
+          "text": "글의 주제 및 목적과 관련이 있는가?"
+        },
+        {
+          "number": 4,
+          "text": "독자의 흥미를 끌 수 있는 시각 자료인가?"
+        },
+        {
+          "number": 5,
+          "text": "자료의 양이 글을 채우기에 충분히 많은가?"
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 자료의 중요도를 판단할 때 가장 핵심적인 기준은 글의 주제 및 목적을 달성하는 데 얼마나 직접적으로 기여하는가 하는 '목표 연관성'입니다.\n[오답피하기]\n①, ②는 자료의 신뢰성과 객관성을 판단하는 기준이며, ④는 자료의 효과성을 판단하는 기준입니다. ⑤는 자료 선정의 올바른 기준이 아닙니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "3",
+      "question_number": 3,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음은 <보기>의 개요를 작성하는 과정에서 세운 자료 활용 계획이다. 내용이 알맞지 않은 것은?",
+        "modified_passage": "<보기>\n[글의 개요]\n가. 처음: 도서관 이용 안내의 목적\n  1. 도서관 소개\n나. 중간: 구체적인 이용 방법\n  1. 도서 대출 및 반납 방법\n  2. 이용 시 주의 사항\n다. 끝: 도서관 이용의 유익함과 당부\n  1. 도서관 이용을 통해 얻는 즐거움\n  2. 활발한 이용 당부",
+        "box_content": "글의 주제: 신입생을 위한 학교 도서관 이용 안내"
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "가-1에는 도서관 개관 시간과 위치 정보를 넣는다."
+        },
+        {
+          "number": 2,
+          "text": "나-1에는 대출 가능 권수와 기간에 대한 자료를 활용한다."
+        },
+        {
+          "number": 3,
+          "text": "나-2에는 연체 시 발생하는 불이익에 대한 정보를 추가한다."
+        },
+        {
+          "number": 4,
+          "text": "다-1에는 도서관 추천 도서 목록을 상세히 나열한다."
+        },
+        {
+          "number": 5,
+          "text": "다-2에는 도서관을 자주 이용해 달라는 당부의 말을 적는다."
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ '다-1'은 도서관 이용 시 얻을 수 있는 혜택(정서적 안정, 지식 습득 등)을 다루는 항목이므로, 단순히 도서 목록을 나열하는 것은 항목의 취지와 어긋납니다.\n[오답피하기]\n①, ②, ③, ⑤는 각 개요 항목의 소주제에 부합하는 적절한 자료 활용 계획입니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "4",
+      "question_number": 4,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "정보를 전달하는 글을 고쳐 쓸 때의 기준으로 알맞지 않은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글의 주제가 하나로 잘 응집되어 있는가?"
+        },
+        {
+          "number": 2,
+          "text": "독자가 이해하기 어려운 전문 용어는 없는가?"
+        },
+        {
+          "number": 3,
+          "text": "문단 사이의 연결이 자연스럽고 논리적인가?"
+        },
+        {
+          "number": 4,
+          "text": "글쓴이의 주관적인 감정이 풍부하게 담겨 있는가?"
+        },
+        {
+          "number": 5,
+          "text": "정확한 사실에 근거하여 정보를 전달하고 있는가?"
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 정보를 전달하는 글은 객관적인 사실을 바탕으로 독자가 정보를 정확히 이해하도록 돕는 글이므로, 글쓴이의 주관적인 감정을 풍부하게 담는 것은 적절하지 않습니다.\n[오답피하기]\n①은 통일성, ②는 독자 고려, ③은 조직의 적절성, ⑤는 정보의 정확성 측면에서 고쳐 쓰기의 올바른 기준입니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "5",
+      "question_number": 5,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "위 글의 ㉠에 들어갈 내용으로 가장 적절한 것은?",
+        "modified_passage": "현지가 작성한 초고의 일부\n  우리 학교 도서관은 본관 2층에 있습니다. 도서관에는 다양한 분야의 책들이 갖춰져 있어 여러분의 꿈을 키우기에 좋습니다. \n  먼저, 책을 빌리는 방법을 알려 드립니다. ( ㉠ ) 또한, 다 읽은 책은 반납함에 넣거나 사서 선생님께 직접 드려야 합니다. \n  도서관은 우리 모두의 공간입니다. 이용 수칙을 잘 지켜 즐거운 독서 시간을 가졌으면 좋겠습니다.",
+        "box_content": "㉠: 도서 대출 방법"
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관이 너무 시끄러워 공부하기 힘들다는 불만 사항"
+        },
+        {
+          "number": 2,
+          "text": "도서관에 새로 들어온 신간 도서들이 아주 재미있다는 소감"
+        },
+        {
+          "number": 3,
+          "text": "책을 빌릴 때는 학생증을 지참해야 하며 1인당 3권까지 가능하다는 사실"
+        },
+        {
+          "number": 4,
+          "text": "도서관 복도에 게시된 명언들이 학생들에게 큰 감동을 준다는 내용"
+        },
+        {
+          "number": 5,
+          "text": "학교 급식실 옆에 도서관이 위치하여 이동하기 편리하다는 평가"
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ ㉠은 '도서 대출 방법'이라는 소주제에 해당하는 구체적인 정보가 들어가야 하므로, 학생증 지참 및 대출 권수 제한과 같은 구체적인 이용 규칙이 가장 적절합니다.\n[오답피하기]\n①, ②, ④, ⑤는 도서 대출 방법이라는 구체적인 안내 정보와는 거리가 먼 주관적 감상이나 환경에 대한 내용입니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "6",
+      "question_number": 6,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "다음 현지의 자료 활용 계획 중, 글의 신뢰성을 높이기 위한 방법으로 가장 적절한 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "개인 블로그에 올라온 확인되지 않은 후기를 인용한다."
+        },
+        {
+          "number": 2,
+          "text": "학교 도서관 운영 규정집에 명시된 공식 정보를 사용한다."
+        },
+        {
+          "number": 3,
+          "text": "최대한 자극적인 문구를 사용하여 독자의 시선을 사로잡는다."
+        },
+        {
+          "number": 4,
+          "text": "자료의 출처를 밝히지 않고 필요한 부분만 골라 본문에 넣는다."
+        },
+        {
+          "number": 5,
+          "text": "실제 사실보다는 글의 흐름에 맞게 수치를 조금씩 수정하여 제시한다."
+        }
+      ],
+      "correct_answer": "2",
+      "explanation": "[정답해설]\n② 정보를 전달하는 글에서 신뢰성을 확보하기 위해서는 공식적인 기관의 자료나 검증된 규정집 등의 객관적인 자료를 활용해야 합니다.\n[오답피하기]\n①은 신뢰성이 낮고, ③은 전달의 효과성만을 강조하며, ④는 윤리적 문제와 신뢰성 저하를 야기합니다. ⑤는 정보의 왜곡으로 신뢰성을 심각하게 훼손하는 행위입니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "7",
+      "question_number": 7,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "다음 현지의 글쓰기 과정에서 '예상 독자'를 고려한 활동으로 가장 적절한 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관의 역사를 아주 상세하게 서술한다."
+        },
+        {
+          "number": 2,
+          "text": "어려운 한자어나 전문 용어를 가급적 많이 사용한다."
+        },
+        {
+          "number": 3,
+          "text": "신입생들이 궁금해할 만한 대출 절차를 중심으로 내용을 구성한다."
+        },
+        {
+          "number": 4,
+          "text": "이미 도서관 이용에 익숙한 3학년 학생들의 입장에서 글을 쓴다."
+        },
+        {
+          "number": 5,
+          "text": "독자의 연령대와 상관없이 글쓴이가 평소 쓰고 싶었던 내용을 쓴다."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 현지의 예상 독자는 도서관 이용이 낯선 '신입생'이므로, 그들의 수준과 필요에 맞춰 가장 기초적이고 필수적인 정보인 대출 절차를 중심으로 구성하는 것이 적절합니다.\n[오답피하기]\n①은 독자의 필요를 벗어난 과도한 정보이며, ②와 ④는 신입생이라는 독자 층을 배려하지 않은 방식입니다. ⑤는 독자 고려라는 쓰기 원칙에 어긋납니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "8",
+      "question_number": 8,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "정보를 전달하는 글의 특성을 고려할 때, <보기>의 문장을 고쳐 쓴 결과로 가장 적절한 것은?",
+        "modified_passage": "<보기>\n[초고의 문장]\n우리 학교 도서관은 아침부터 늦게까지 문을 열어서 참 편리하고 좋습니다.",
+        "box_content": "정보 전달의 명확성"
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관은 정말 최고로 멋진 곳이니 꼭 가 보세요."
+        },
+        {
+          "number": 2,
+          "text": "도서관에서 책을 읽으면 기분이 아마 좋아질 것입니다."
+        },
+        {
+          "number": 3,
+          "text": "우리 도서관은 오전 9시부터 오후 4시 30분까지 운영합니다."
+        },
+        {
+          "number": 4,
+          "text": "사서 선생님은 천사처럼 친절하시니 겁먹지 말고 질문하세요."
+        },
+        {
+          "number": 5,
+          "text": "도서관에 있는 수만 권의 책들이 여러분을 기다리고 있을걸요."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 정보를 전달하는 글은 주관적이고 모호한 표현보다는 구체적인 수치나 사실을 바탕으로 명확하게 진술해야 합니다. 운영 시간을 정확히 명시한 진술이 가장 적절합니다.\n[오답피하기]\n①, ②, ④, ⑤는 모두 주관적인 감탄, 추측, 비유, 추측성 표현 등이 포함되어 있어 객관적인 정보 전달에 부적절합니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "9",
+      "question_number": 9,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "현지가 개요를 바탕으로 글을 쓸 때, '중간' 부분에 들어갈 내용으로 적절하지 않은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관 내에서 음식물 섭취를 금지한다는 안내"
+        },
+        {
+          "number": 2,
+          "text": "희망 도서를 신청하는 방법과 처리 과정에 대한 설명"
+        },
+        {
+          "number": 3,
+          "text": "도서관을 처음 세운 교장 선생님의 교육 철학 소개"
+        },
+        {
+          "number": 4,
+          "text": "컴퓨터를 사용하여 원하는 책을 찾는 검색 방법 안내"
+        },
+        {
+          "number": 5,
+          "text": "대출한 책을 깨끗하게 사용해야 한다는 주의 사항 전달"
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ '중간' 부분은 구체적인 이용 방법과 수칙을 다루는 단계입니다. 도서관 설립자의 교육 철학은 이용 안내라는 글의 목적 및 주제와 거리가 멀며, 실질적인 정보 전달에 도움이 되지 않습니다.\n[오답피하기]\n①, ②, ④, ⑤는 모두 도서관을 이용하는 학생들에게 필요한 실질적이고 구체적인 이용 수칙 및 방법들입니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "10",
+      "question_number": 10,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "현지가 수집한 다음 자료 중, 글의 시각적 효과를 높이기 위해 '매체'의 특성을 가장 잘 활용한 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "도서관 이용 수칙을 길게 늘여 쓴 줄글 자료"
+        },
+        {
+          "number": 2,
+          "text": "도서관의 위치를 한눈에 보여 주는 층별 안내도"
+        },
+        {
+          "number": 3,
+          "text": "사서 선생님의 하루 일과를 시간순으로 정리한 표"
+        },
+        {
+          "number": 4,
+          "text": "작년에 도서관을 이용했던 학생들의 이름 명단"
+        },
+        {
+          "number": 5,
+          "text": "도서관 건립 당시 사용했던 벽돌의 재질에 대한 설명"
+        }
+      ],
+      "correct_answer": "2",
+      "explanation": "[정답해설]\n② 안내도는 복잡한 위치 정보를 시각적으로 구조화하여 독자가 정보를 쉽고 빠르게 파악할 수 있게 돕는 매체 자료로, 정보 전달의 효과를 높이는 데 매우 적절합니다.\n[오답피하기]\n①은 가독성이 떨어지며, ③, ④, ⑤는 이용 안내라는 글의 목적에 부합하지 않거나 시각적 효과가 크지 않은 정보입니다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "1",
+      "question_number": 1,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음 현지의 글쓰기 계획으로 보아, 정보를 전달하는 글을 쓸 때 '계획하기' 단계에서 할 일로 가장 알맞은 것은?",
+        "modified_passage": "현지는 우리 학교의 새로운 동아리 활동을 소개하는 글을 쓰기로 하였다.\n- 글의 목적: 정보 전달\n- 글의 주제: 우리 학교 자율 동아리의 종류와 특징 안내\n- 예상 독자: 자율 동아리에 관심이 있는 전교생",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글의 주제 설정하기"
+        },
+        {
+          "number": 2,
+          "text": "글의 세부 내용 구성하기"
+        },
+        {
+          "number": 3,
+          "text": "수집한 자료의 가치 판단하기"
+        },
+        {
+          "number": 4,
+          "text": "문단 간의 연결 관계 확인하기"
+        },
+        {
+          "number": 5,
+          "text": "맞춤법과 띄어쓰기 오류 수정하기"
+        }
+      ],
+      "correct_answer": "1",
+      "explanation": "[정답해설]\n① '계획하기' 단계는 글을 쓰기 전 방향을 잡는 단계로, 글의 목적, 주제, 예상 독자를 설정하는 과정이 포함된다.\n[오답피하기]\n② '내용 조직하기' 단계에 해당한다.\n③ '내용 생성하기' 단계에서 수집한 자료를 선별하는 과정이다.\n④, ⑤ '고쳐 쓰기' 단계에서 수행하는 활동이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "2",
+      "question_number": 2,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음에서 현지가 ㉠을 판단할 때 고려한 요소로 가장 알맞은 것은?",
+        "modified_passage": "현지는 동아리 소개 글을 쓰기 위해 다음과 같은 자료를 수집하였다.\n[자료 1] 전국 중학교 동아리 운영 현황 통계\n[자료 2] 우리 학교 자율 동아리 목록 및 활동 사진\n현지는 이 중 [자료 2]가 글의 주제를 드러내는 데 더 ㉠중요하다고 판단하였다.",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "자료의 최신성"
+        },
+        {
+          "number": 2,
+          "text": "자료의 흥미성"
+        },
+        {
+          "number": 3,
+          "text": "자료 출처의 권위성"
+        },
+        {
+          "number": 4,
+          "text": "글의 주제와의 관련성"
+        },
+        {
+          "number": 5,
+          "text": "예상 독자의 배경지식 수준"
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 현지는 동아리 종류를 소개하려는 목적에 맞춰, 학교 밖이 아닌 학교 안의 동아리 통계 자료를 선택했다. 이는 글의 주제 및 목적과의 관련성을 최우선으로 고려한 것이다.\n[오답피하기]\n①, ③ 자료의 객관적 품질과 관련되나 현지의 판단 근거와는 거리가 멀다.\n② 독자의 재미를 고려한 기준이다.\n⑤ 독자가 내용을 이해할 수 있는지를 고려한 기준이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "3",
+      "question_number": 3,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "다음은 현지가 세운 자료 활용 계획이다. <보기>의 개요를 완성하기 위해 ㉡에 들어갈 자료로 가장 알맞은 것은?",
+        "modified_passage": null,
+        "box_content": "<보기>\n[개요]\n1. 머리말: 자율 동아리 소개의 취지\n2. 본문\n  가. 자율 동아리의 정의와 개설 방법\n  나. 우리 학교 주요 자율 동아리 현황\n  다. ㉡자율 동아리 활동의 즐거움\n3. 맺음말: 동아리 참여 권유"
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "동아리 부원들의 소감 인터뷰"
+        },
+        {
+          "number": 2,
+          "text": "동아리 연간 예산 편성 내역"
+        },
+        {
+          "number": 3,
+          "text": "타 학교 동아리의 우수 사례"
+        },
+        {
+          "number": 4,
+          "text": "동아리실 청소 당번 배정표"
+        },
+        {
+          "number": 5,
+          "text": "동아리 활동 시 주의 사항"
+        }
+      ],
+      "correct_answer": "1",
+      "explanation": "[정답해설]\n① '자율 동아리 활동의 즐거움'이라는 하위 항목을 뒷받침하기 위해서는 실제 활동한 학생들의 생생한 목소리가 담긴 인터뷰 자료가 가장 적절하다.\n[오답피하기]\n②, 4, ⑤ 글의 주제인 '활동의 즐거움'과는 직접적인 관련이 적은 행정적 자료이다.\n③ 우리 학교 동아리를 소개하는 글의 맥락에서 벗어난다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "4",
+      "question_number": 4,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "정보를 전달하는 글을 고쳐 쓸 때, 문단 수준에서 점검해야 할 내용으로 가장 알맞은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글 전체의 주제가 명확한가?"
+        },
+        {
+          "number": 2,
+          "text": "단어의 표기가 맞춤법에 맞는가?"
+        },
+        {
+          "number": 3,
+          "text": "문단 내의 문장들이 하나로 집중되는가?"
+        },
+        {
+          "number": 4,
+          "text": "문장 성분 간의 호응이 자연스럽게 이루어지는가?"
+        },
+        {
+          "number": 5,
+          "text": "독자의 흥미를 끌 수 있는 제목이 설정되었는가?"
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 문단 수준의 고쳐 쓰기에서는 문단의 통일성(하나의 소주제에 집중됨)과 연결 관계를 점검해야 한다.\n[오답피하기]\n①, ⑤ 글 전체 수준에서의 점검 사항이다.\n②, ④ 문장이나 단어 수준에서의 점검 사항이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "5",
+      "question_number": 5,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음 현지의 초고를 고쳐 쓰기 위한 의견으로 알맞지 않은 것은?",
+        "modified_passage": "[현지의 초고]\n제목: 글\n우리 학교에는 다양한 자율 동아리가 있다. 먼저 수학 동아리는 매주 수요일에 모여 문제를 풀고 토론한다. 나는 어제 점심에 떡볶이를 먹었는데 정말 맛있었다. 동아리 활동을 통해 친구들과 친해질 수 있다.",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글의 제목을 구체적으로 수정한다."
+        },
+        {
+          "number": 2,
+          "text": "어려운 한자어를 쉬운 말로 바꾼다."
+        },
+        {
+          "number": 3,
+          "text": "문맥에 어색한 문장 연결을 바로잡는다."
+        },
+        {
+          "number": 4,
+          "text": "주제와 관련 없는 세 번째 문장을 삭제한다."
+        },
+        {
+          "number": 5,
+          "text": "독자의 이해를 돕기 위해 사진 자료를 추가한다."
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 세 번째 문장인 '수학 동아리는 매주 수요일에 모여 문제를 풀고 토론한다.'는 글의 주제인 '동아리 활동 내용 소개'와 밀접한 관련이 있으므로 삭제해서는 안 된다.\n[오답피하기]\n① '글'이라는 제목은 너무 막연하므로 구체화가 필요하다.\n② 중학교 1학년 독자를 고려할 때 '진작'과 같은 표현은 더 쉬운 표현으로 검토할 수 있다.\n③ '그리고' 등의 접속어 사용이 적절한지 살펴야 한다.\n⑤ 정보 전달의 효과를 높이기 위한 적절한 방안이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "6",
+      "question_number": 6,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "original"
+      },
+      "question_text": {
+        "text": "현지가 예상 독자를 '신입생'으로 설정했을 때, 글쓰기 전략으로 가장 적절한 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "전문적인 학술 용어를 사용하여 신뢰성을 높인다."
+        },
+        {
+          "number": 2,
+          "text": "학교 생활이 낯선 독자를 위해 친절하게 설명한다."
+        },
+        {
+          "number": 3,
+          "text": "독자가 이미 알고 있는 내용은 과감하게 생략한다."
+        },
+        {
+          "number": 4,
+          "text": "자신의 주장을 강조하기 위해 강한 어조를 사용한다."
+        },
+        {
+          "number": 5,
+          "text": "복잡한 수치 데이터를 나열하여 정확한 정보를 준다."
+        }
+      ],
+      "correct_answer": "2",
+      "explanation": "[정답해설]\n② 예상 독자인 신입생은 학교의 동아리 시스템에 대해 잘 모를 가능성이 크므로, 쉽고 친절한 설명을 제공하는 것이 효과적인 전략이다.\n[오답피하기]\n①, ⑤ 중학교 1학년 수준의 독자에게는 오히려 이해를 방해할 수 있다.\n③ 신입생은 배경지식이 부족할 수 있으므로 상세한 정보가 필요하다.\n④ 정보 전달을 목적으로 하는 글이므로 객관적이고 설명적인 어조가 적절하다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "7",
+      "question_number": 7,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "내용 생성하기 단계에서 수집한 자료의 '신뢰성'을 판단하는 기준으로 가장 알맞은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "자료의 내용이 재미있는가?"
+        },
+        {
+          "number": 2,
+          "text": "자료의 양이 충분히 많은가?"
+        },
+        {
+          "number": 3,
+          "text": "자료가 최신 정보를 담고 있는가?"
+        },
+        {
+          "number": 4,
+          "text": "자료를 만든 사람이 믿을 만한가?"
+        },
+        {
+          "number": 5,
+          "text": "자료가 글의 주제와 직접 관련되는가?"
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ 자료의 신뢰성은 출처의 권위나 작성자의 전문성, 정보의 정확성 등을 통해 판단한다.\n[오답피하기]\n① 흥미성 기준이다.\n③ 최신성 기준이다.\n⑤ 적절성(관련성) 기준이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "8",
+      "question_number": 8,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음 <보기>의 자료 활용 계획 중 적절하지 않은 것은?",
+        "modified_passage": "현지는 다음과 같은 자료를 수집하였다.\n[자료 1] 우리 학교 자율 동아리 수 변화 그래프 (ㄱ)\n[자료 2] 작년 동아리 발표회 현장 사진 (ㄷ)\n[자료 3] 동아리 활동에 참여한 선배의 인터뷰 (ㄴ)",
+        "box_content": "<보기>\n현지는 수집한 자료를 활용하여 글의 내용을 풍성하게 하려고 한다."
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "ㄱ: 동아리의 종류를 시각적으로 보여준다."
+        },
+        {
+          "number": 2,
+          "text": "ㄴ: 동아리 가입에 대한 흥미를 유발한다."
+        },
+        {
+          "number": 3,
+          "text": "ㄷ: 자율 동아리의 구체적 활동 모습을 전달한다."
+        },
+        {
+          "number": 4,
+          "text": "ㄱ: 동아리별 예산 지원 금액을 비교하여 보여준다."
+        },
+        {
+          "number": 5,
+          "text": "ㄴ: 동아리 활동을 통해 얻은 보람을 생생하게 전한다."
+        }
+      ],
+      "correct_answer": "4",
+      "explanation": "[정답해설]\n④ [자료 1]은 동아리 수에 대한 통계 자료이므로, 이를 통해 예산 지원 금액을 비교하여 보여준다는 계획은 자료의 내용과 일치하지 않는다.\n[오답피하기]\n① 통계 수치를 그래프로 나타내면 종류나 비중을 시각화하기 좋다.\n②, ⑤ 인터뷰는 독자의 공감을 이끌어내고 흥미를 유발하는 데 효과적이다.\n③ 사진은 실제 모습을 사실적으로 전달하는 데 적합하다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "9",
+      "question_number": 9,
+      "passage_info": {
+        "original_used": false,
+        "source_type": "none"
+      },
+      "question_text": {
+        "text": "정보를 전달하는 글의 특성을 고려할 때, 초고를 쓸 때 유의할 점으로 알맞지 않은 것은?",
+        "modified_passage": null,
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "객관적인 사실을 바탕으로 서술한다."
+        },
+        {
+          "number": 2,
+          "text": "독자가 이해하기 쉬운 용어를 사용한다."
+        },
+        {
+          "number": 3,
+          "text": "필자의 주관적인 감정을 풍부하게 담아낸다."
+        },
+        {
+          "number": 4,
+          "text": "내용의 흐름이 논리적이고 체계적이어야 한다."
+        },
+        {
+          "number": 5,
+          "text": "그림이나 도표 등을 활용하여 정보를 효과적으로 전달한다."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 정보를 전달하는 글은 객관성과 투명성이 중요하므로 필자의 개인적인 감정이나 편견을 드러내는 것은 지양해야 한다.\n[오답피하기]\n①, ④ 정보 전달 글의 핵심적인 요건이다.\n②, ⑤ 독자의 이해를 돕기 위한 효과적인 방법이다.",
+      "db_question_id": null
+    },
+    {
+      "question_id": "10",
+      "question_number": 10,
+      "passage_info": {
+        "original_used": true,
+        "source_type": "modified"
+      },
+      "question_text": {
+        "text": "다음은 현지가 글을 쓰는 과정에서 작성한 메모이다. 이를 통해 알 수 있는 글쓰기의 특징으로 가장 알맞은 것은?",
+        "modified_passage": "[현지의 메모]\n개요를 작성하다 보니 동아리 개설 방법에 대한 구체적인 정보가 부족하다는 것을 알게 되었다. 그래서 다시 학교 누리집에 들어가 관련 규정을 찾아보고 개요 내용을 보충하였다.",
+        "box_content": null
+      },
+      "choices": [
+        {
+          "number": 1,
+          "text": "글쓰기는 한 번에 끝나는 고정된 과정이다."
+        },
+        {
+          "number": 2,
+          "text": "글쓰기는 단계별로 엄격하게 분리되어 진행된다."
+        },
+        {
+          "number": 3,
+          "text": "글쓰기는 이전 단계로 돌아가 내용을 수정할 수 있다."
+        },
+        {
+          "number": 4,
+          "text": "글쓰기는 자료 수집보다 문장 작성이 훨씬 중요하다."
+        },
+        {
+          "number": 5,
+          "text": "글쓰기는 독자의 반응을 고려할 필요가 없는 활동이다."
+        }
+      ],
+      "correct_answer": "3",
+      "explanation": "[정답해설]\n③ 현지가 개요를 쓰다가 다시 자료를 찾으러 가는 과정은 글쓰기가 순차적으로만 진행되는 것이 아니라 앞뒤 단계로 조절하며 진행되는 '회귀적' 과정임을 보여준다.\n[오답피하기]\n①, ② 글쓰기는 유동적이고 반복적인 과정이다.\n④ 모든 단계가 유기적으로 연결되어 있으며 우열을 가리기 어렵다.\n⑤ 글쓰기는 독자와 소통하는 사회적 상호작용 과정이다.",
+      "db_question_id": null
+    }
+  ]
+}
