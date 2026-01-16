@@ -4,22 +4,54 @@ from pydantic import BaseModel, Field
 
 class CurriculumInfo(BaseModel):
     """교육과정 정보"""
-    achievement_standard: str = Field(..., description="성취기준", example="[9국06-02]")
-    grade_level: str = Field(..., description="대상학년", example="중학교 1학년")
-    main_unit: str = Field(..., description="대단원", example="바람직한 언어생활")
-    sub_unit: str = Field(..., description="소단원", example="매체로 소통하기")
+    achievement_code: Optional[str] = Field(None, description="성취기준 코드", example="9국06-02")
+    achievement_content: Optional[str] = Field(None, description="성취기준 내용", example="자연수의 덧셈을 이해하고 계산할 수 있다.")
+    evaluation_content: Optional[str] = Field(None, description="평가기준 내용", example="평가기준.")
+
+
+class QuestionGeneration(BaseModel):
+    """문항 생성 요청 스키마"""
+    project_id: int = Field(..., description="프로젝트 ID")
+    question_type: str = Field(..., description="문항유형(예:5지선다)")
+    stem_directive: Optional[str] = Field(None, description="발문 유형(예:~로 옳은것은)")
+    target_count: int = Field(..., description="문항수")
+    use_negative_word: bool = Field(..., description="부정어 사용 여부")
+    additional_prompt: Optional[str] = Field(None, description="추가 지시사항 (선택사항)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "project_id": 1,
+                "question_type": "5지선다",
+                "stem_directive": "~로 옳은것은",
+                "target_count": 10,
+                "use_negative_word": False,
+                "additional_prompt": "추가 지시사항"
+            }
+        }
+
 
 
 class QuestionGenerationRequest(BaseModel):
     """문항 생성 요청 스키마"""
+    config_id: int = Field(..., description="설정 ID")
+    project_id: int = Field(..., description="프로젝트 ID")
     passage: str = Field(..., description="원본 지문 텍스트")
     learning_objective: str = Field(..., description="학습목표")
-    curriculum_info: CurriculumInfo = Field(..., description="교육과정 정보")
+    learning_activity: str = Field(default="", description="학습활동")
+    learning_element: str = Field(default="", description="학습요소")
+    school_level: str = Field(..., description="학교급(초등학교, 중학교, 고등학교)")
+    grade_level: str = Field(..., description="대상학년")
+    semester: str = Field(..., description="학기")
+    large_unit: str = Field(..., description="대단원")
+    small_unit: str = Field(..., description="소단원")
+
+    curriculum_info: List[CurriculumInfo] = Field(..., description="교육과정 정보")
     generation_count: int = Field(..., ge=1, le=50, description="생성할 문항 수", example=15)
-    media_type: str = Field(default="writing", description="매체 타입 (writing, speaking, listening, reading)", example="writing")
+    study_area: str = Field(default="writing", description="매체 타입 (writing, speaking, listening, reading)", example="writing")
     file_paths: Optional[List[str]] = Field(
         None, 
-        description="업로드할 파일 경로 리스트 (파일명 또는 상대 경로, grade_level에 따라 자동으로 분리된 폴더 사용)",
+        description="업로드할 파일 경로 리스트 (파일명 또는 상대 경로, school_level에 따라 자동으로 분리된 폴더 사용)",
         example=["textbook.pdf", "image1.jpg", "subfolder/document.pdf"]
     )
     file_display_names: Optional[List[str]] = Field(
@@ -31,16 +63,17 @@ class QuestionGenerationRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example":   {
+                "config_id": 1,
+                "project_id": 1,
                 "passage": "여기에 첫 번째 지문 텍스트를 입력합니다...",
                 "learning_objective": "상호 작용적 매체의 특성과 소통 맥락을 이해하고 분석할 수 있는가?",
-                "curriculum_info": {
-                "achievement_standard": "9국06-02",
-                "grade_level": "중학교 1학년",
-                "main_unit": "바람직한 언어생활",
-                "sub_unit": "매체로 소통하기"
-                },
+                "curriculum_info": [{
+                "achievement_code": "9국06-02",
+                "achievement_content": "자연수의 덧셈을 이해하고 계산할 수 있다.",
+                "evaluation_content": "평가기준."
+                }],
                 "generation_count": 30,
-                "media_type": "writing",
+                "study_area": "writing",
                 "file_paths": ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"],
                 "file_display_names": ["교과서론 1권", "교과서론 2권"]
             }
@@ -62,8 +95,20 @@ class Choice(BaseModel):
 
 class PassageInfo(BaseModel):
     """지문 정보"""
-    original_used: bool = Field(..., description="제공 지문 사용여부")
-    source_type: str = Field(..., description="지문 출처 타입", example="original")
+    original_used: Optional[bool] = Field(default=True, description="제공 지문 사용여부")
+    source_type: Optional[str] = Field(default="original", description="지문 출처 타입", example="original, modified, none")
+    
+    @classmethod
+    def model_validate(cls, value):
+        """빈 문자열을 기본값으로 변환"""
+        if isinstance(value, dict):
+            # original_used가 빈 문자열이면 기본값 사용
+            if value.get('original_used') == '':
+                value['original_used'] = True
+            # source_type이 빈 문자열이면 기본값 사용  
+            if value.get('source_type') == '':
+                value['source_type'] = 'original'
+        return super().model_validate(value)
 
 
 class QuestionText(BaseModel):
@@ -80,7 +125,7 @@ class Question(BaseModel):
     passage_info: PassageInfo = Field(..., description="지문 정보")
     question_text: QuestionText = Field(..., description="문제 텍스트")
     choices: List[Choice] = Field(..., description="선지 목록", min_length=4, max_length=5)
-    correct_answer: str = Field(..., description="정답문항")
+    correct_answer: str = Field(..., description="정답 여러개인경우 ,로구분(1,2,3,4,5) ")
     explanation: str = Field(..., description="해설")
     db_question_id: Optional[int] = Field(None, description="데이터베이스에 저장된 문항 ID")
 
@@ -91,9 +136,9 @@ class LLMQuestion(BaseModel):
     question_text: str = Field(..., description="문제 문장, 지문 제외")
     reference_text: Optional[str] = Field(default=None, description="보기 내용 (있는 경우)")
     choices: List[Choice] = Field(..., description="5개의 선지 목록")
-    correct_answer: str = Field(..., description="정답 번호 (1,2,3,4,5) 여러개인경우 ,로구분")
+    correct_answer: str = Field(..., description="정답  여러개인경우 ,로구분(1,2,3,4,5)")
     explanation: str = Field(..., description="정답 해설 및 오답 피하기를 포함한 해설")
-    passage: Optional[str] = Field(default=None, description="필요한 경우 줄바꿈(\\n)을 포함하여 가독성 있게 작성해야 한다.")
+    passage: Optional[str] = Field(default=None, description="필요한 경우 작성하며 줄바꿈(\\n)을 포함하여 가독성 있게 작성해야 한다.")
     
     class Config:
         # 빈 문자열을 None으로 변환

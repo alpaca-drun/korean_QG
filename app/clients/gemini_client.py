@@ -560,16 +560,20 @@ class GeminiClient(LLMClientBase):
             
             # passage 사용 여부 판단 (빈 문자열이나 None 처리)
             passage = llm_question.passage
-            has_passage = passage and isinstance(passage, str) and passage.strip() and passage != "1"
-            original_used = passage == "1" or has_passage
             
-            # source_type 결정
-            if passage == "1":
-                source_type = "original"
-            elif has_passage:
-                source_type = "modified"
-            else:
+            # passage가 None이거나 빈 문자열인 경우 처리
+            if not passage or (isinstance(passage, str) and not passage.strip()):
+                has_passage = False
+                original_used = False  # 명시적으로 False 할당
                 source_type = "none"
+            elif passage == "1":
+                has_passage = False
+                original_used = True  # 명시적으로 True 할당
+                source_type = "original"
+            else:
+                has_passage = True
+                original_used = True  # 명시적으로 True 할당
+                source_type = "modified"
             
             return Question(
                 question_id=str(question_number),
@@ -588,7 +592,7 @@ class GeminiClient(LLMClientBase):
                 explanation=llm_question.explanation
             )
         except Exception as e:
-            print(f"⚠️ 문항 변환 실패: {e}")
+            print(f"⚠️ 문항 변환 실패 [Q{question_number}]: {e}")
             return None
     
     def _convert_schema_for_google_genai(self, schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -686,12 +690,21 @@ class GeminiClient(LLMClientBase):
                 Question, PassageInfo, QuestionText, Choice
             )
             
+            # original_used 값 처리 (빈 문자열이면 기본값 사용)
+            passage_info_data = data.get("passage_info", {})
+            original_used_value = passage_info_data.get("original_used", True)
+            
+            if original_used_value == "" or original_used_value is None:
+                original_used_value = True
+            
+            source_type_value = passage_info_data.get("source_type") or "original"
+            
             return Question(
                 question_id=str(data.get("question_id", question_number)),
                 question_number=question_number,
                 passage_info=PassageInfo(
-                    original_used=data.get("passage_info", {}).get("original_used", False),
-                    source_type=data.get("passage_info", {}).get("source_type", "original")
+                    original_used=original_used_value,
+                    source_type=source_type_value
                 ),
                 question_text=QuestionText(
                     text=data.get("question_text", {}).get("text", ""),
@@ -705,6 +718,9 @@ class GeminiClient(LLMClientBase):
                 correct_answer=str(data.get("correct_answer", "")),
                 explanation=data.get("explanation", "")
             )
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ _parse_question 에러: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 

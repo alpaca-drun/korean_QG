@@ -44,3 +44,6 @@ docker/mariadb/backups/
 *.sql
 *.sql.gz
 *.sql.bz2
+
+# Storage - 생성된 질문 파일들
+storage/

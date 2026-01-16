@@ -6,46 +6,37 @@ from typing import List, Optional
 from app.core.config import settings
 
 
-def parse_grade_level_to_path(grade_level: str) -> str:
+def parse_school_level_to_path(school_level: str) -> str:
     """
-    grade_level 값을 파일 경로 형식으로 변환
+    school_level 값을 파일 경로 형식으로 변환
     
     Args:
-        grade_level: 학년 정보 (예: "중학교 1학년", "고등학교 2학년")
+        school_level: 학교급 정보 (예: "초등학교", "중학교", "고등학교")
         
     Returns:
-        파일 경로 형식의 문자열 (예: "middle_school_1", "high_school_2")
+        학교급 형식의 문자열 (예: "elementary_school", "middle_school", "high_school")
     """
-    if not grade_level:
+    if not school_level:
         return "default"
     
-    # 정규화 (공백 제거 등)
-    grade_level = grade_level.strip()
+    # 문자열로 변환 및 정규화
+    school_level = str(school_level).strip().lower()
     
-    # 중학교/고등학교 구분 및 학년 추출
-    if "중학교" in grade_level or "중" in grade_level:
-        school_type = "middle_school"
-    elif "고등학교" in grade_level or "고등" in grade_level or "고" in grade_level:
-        school_type = "high_school"
-    elif "초등학교" in grade_level or "초등" in grade_level or "초" in grade_level:
-        school_type = "elementary_school"
+    # 학교급 매핑
+    if "초등" in school_level or "elementary" in school_level:
+        return "elementary_school"
+    elif "중학" in school_level or "중등" in school_level or "middle" in school_level:
+        return "middle_school"
+    elif "고등" in school_level or "고교" in school_level or "high" in school_level:
+        return "high_school"
     else:
-        # 알 수 없는 경우 grade_level을 그대로 사용 (공백은 언더스코어로 변환)
-        return re.sub(r'[^\w가-힣]', '_', grade_level).lower()
-    
-    # 학년 추출 (1~6 숫자)
-    grade_match = re.search(r'(\d+)', grade_level)
-    if grade_match:
-        grade = grade_match.group(1)
-    else:
-        grade = "1"  # 기본값
-    
-    return f"{school_type}_{grade}"
+        # 알 수 없는 경우 정규화된 값 반환
+        return re.sub(r'[^\w]', '_', school_level).lower() or "default"
 
 
 def resolve_file_paths(
     file_paths: Optional[List[str]],
-    grade_level: Optional[str] = None,
+    school_level: Optional[str] = None,
     base_path: Optional[str] = None
 ) -> List[str]:
     """
@@ -53,7 +44,7 @@ def resolve_file_paths(
     
     Args:
         file_paths: 파일 경로 리스트 (파일명, 상대 경로, 또는 절대 경로)
-        grade_level: 학년 정보 (예: "중학교 1학년") - grade_level에 따라 경로가 달라짐
+        school_level: 학교급 정보 (예: "초등학교", "중학교", "고등학교") - 학교급별로 경로가 달라짐
         base_path: 기본 경로 (None이면 settings.file_storage_path 사용)
         
     Returns:
@@ -66,10 +57,10 @@ def resolve_file_paths(
     if base_path is None:
         base_path = settings.file_storage_path
     
-    # grade_level이 있으면 경로에 추가
-    if grade_level:
-        grade_path = parse_grade_level_to_path(grade_level)
-        base_path = os.path.join(base_path, grade_path)
+    # school_level이 있으면 학교급 경로에 추가
+    if school_level:
+        school_path = parse_school_level_to_path(school_level)
+        base_path = os.path.join(base_path, school_path)
     
     # 기본 경로를 절대 경로로 변환
     if not os.path.isabs(base_path):
@@ -102,19 +93,19 @@ def resolve_file_paths(
     return resolved_paths
 
 
-def ensure_storage_directory(grade_level: Optional[str] = None):
+def ensure_storage_directory(school_level: Optional[str] = None):
     """
     파일 저장 디렉토리가 존재하는지 확인하고, 없으면 생성
     
     Args:
-        grade_level: 학년 정보 (예: "중학교 1학년") - grade_level에 따라 경로가 달라짐
+        school_level: 학교급 정보 (예: "초등학교", "중학교", "고등학교") - 학교급별로 경로가 달라짐
     """
     storage_path = settings.file_storage_path
     
-    # grade_level이 있으면 경로에 추가
-    if grade_level:
-        grade_path = parse_grade_level_to_path(grade_level)
-        storage_path = os.path.join(storage_path, grade_path)
+    # school_level이 있으면 학교급 경로에 추가
+    if school_level:
+        school_path = parse_school_level_to_path(school_level)
+        storage_path = os.path.join(storage_path, school_path)
     
     # 상대 경로인 경우 app 디렉토리 기준으로 변환
     if not os.path.isabs(storage_path):
