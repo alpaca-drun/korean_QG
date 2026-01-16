@@ -133,7 +133,7 @@ def create_temp_token_for_user_1() -> str:
     """
     임시 함수: user_id가 1인 액세스 토큰을 생성합니다.
     """
-    return create_access_token(data={"sub": "1"})
+    return create_refresh_token(data={"sub": "1"})
 
 # 테스트용 토큰 생성
 token = create_temp_token_for_user_1()

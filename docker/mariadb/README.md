@@ -69,3 +69,4 @@ docker-compose logs -f mariadb
 - `data/`와 `backups/` 디렉토리는 Git에 포함되지 않습니다.
 - 데이터를 완전히 삭제하려면 `docker-compose down -v`를 사용하세요 (주의: 모든 데이터가 삭제됩니다).
 
+
