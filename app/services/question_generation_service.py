@@ -1,6 +1,7 @@
 from typing import List, Optional
 from threading import Lock
 from app.schemas.question_generation import (
+    QuestionGeneration,
     QuestionGenerationRequest,
     Question,
     QuestionGenerationSuccessResponse,
@@ -24,171 +25,11 @@ class QuestionGenerationService:
             llm_client: LLM 클라이언트 (None이면 기본 클라이언트 사용)
         """
         self.llm_client = llm_client or LLMClientFactory.create_client()
-    
-    async def generate_questions(
-        self,
-        request: QuestionGenerationRequest,
-        provider: Optional[str] = None
-    ) -> QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse:
-        """
-        문항 생성
         
-        Args:
-            request: 문항 생성 요청
-            provider: LLM 제공자 (선택사항)
-            
-        Returns:
-            성공 또는 실패 응답
-        """
-        try:
-            # LLM 클라이언트 설정
-            if provider:
-                self.llm_client = LLMClientFactory.create_client(provider=provider)
-            
-            # API 키 검증
-            if not self.llm_client.validate_api_key():
-                return QuestionGenerationErrorResponse(
-                    success=False,
-                    error=ErrorDetail(
-                        code="INVALID_API_KEY",
-                        message="LLM API 키가 유효하지 않습니다.",
-                        details="환경 변수에 API 키를 설정해주세요."
-                    )
-                )
-            
-            # grade_level 추출
-            grade_level = request.curriculum_info.grade_level if request.curriculum_info else None
-            
-            # 파일 저장 디렉토리 확인 및 생성 (grade_level에 따라 경로 결정)
-            ensure_storage_directory(grade_level)
-            
-            # 파일 경로를 실제 경로로 변환 (grade_level에 따라 경로 결정)
-            resolved_file_paths = resolve_file_paths(
-                request.file_paths, 
-                grade_level=grade_level
-            ) if request.file_paths else None
-            
-            # 사용자가 요청한 문항 수를 10으로 나눠서 배치 생성
-            # 예: 30문항 요청 → 3개 배치 (각 10문항씩)
-            total_count = request.generation_count
-            batch_size = 10
-            num_batches = (total_count + batch_size - 1) // batch_size  # 올림 계산
-            
-            all_questions = []
-            
-            # 각 배치마다 프롬프트 생성 및 API 호출
-            for batch_idx in range(num_batches):
-                # 마지막 배치는 남은 문항 수만큼 (하지만 프롬프트는 항상 10으로 고정)
-                batch_request = request.model_copy()  # 요청 복사
-                batch_request.generation_count = batch_size  # 배치 크기는 10으로 고정
-                
-                # 프롬프트 생성 (시스템 프롬프트와 사용자 프롬프트 분리)
-                system_prompt, user_prompt = PromptTemplate.build_prompt(batch_request)
-                
-                # LLM API 호출 (각 배치마다 다른 API 키 사용)
-                batch_questions = await self.llm_client.generate_questions(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    count=batch_size,  # 항상 10문항
-                    file_paths=resolved_file_paths,
-                    file_display_names=request.file_display_names
-                )
-                
-                all_questions.extend(batch_questions)
-            
-            # 요청한 문항 수만큼만 반환 (초과 생성된 경우 자름)
-            questions = all_questions[:total_count]
-            
-            # JSON 파일로 저장
-            try:
-                import json
-                from datetime import datetime
-                import os
-                
-                # 저장 디렉토리 생성 (grade_level에 따라)
-                output_dir = f"storage/{grade_level}" if grade_level else "storage/default"
-                os.makedirs(output_dir, exist_ok=True)
-                
-                # 타임스탬프
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                
-                # 파일명 생성
-                achievement_std = request.curriculum_info.achievement_standard if request.curriculum_info else "unknown"
-                filename = f"questions_{achievement_std}_{timestamp}.json"
-                filepath = os.path.join(output_dir, filename)
-                
-                # 데이터 변환
-                questions_data = [q.model_dump() if hasattr(q, 'model_dump') else q.dict() for q in questions]
-                
-                # JSON 파일로 저장
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        "metadata": {
-                            "achievement_standard": achievement_std,
-                            "grade_level": grade_level,
-                            "total_questions": len(questions),
-                            "generated_at": timestamp
-                        },
-                        "questions": questions_data
-                    }, f, ensure_ascii=False, indent=2)
-                
-                print(f"✅ JSON 파일 저장 완료: {filepath}")
-                
-            except Exception as e:
-                print(f"⚠️ JSON 저장 실패: {e}")
-            
-            # # DB 저장 (설정된 경우) - 주석처리
-            # if settings.db_host and settings.db_database:
-            #     try:
-            #         lock = Lock()
-            #         # Pydantic v2에서는 model_dump() 사용
-            #         questions_data = [q.model_dump() if hasattr(q, 'model_dump') else q.dict() for q in questions]
-            #         question_ids = save_questions_batch_to_db(
-            #             questions_data,
-            #             lock=lock,
-            #             info_id=None  # TODO: info_id를 요청에서 받아오도록 수정
-            #         )
-            #         
-            #         # DB ID를 문항에 매핑
-            #         for question, db_id in zip(questions, question_ids):
-            #             if db_id:
-            #                 question.db_question_id = db_id
-            #     except Exception as e:
-            #         # DB 저장 실패해도 문항 생성은 성공으로 처리
-            #         print(f"DB 저장 실패 (문항은 생성됨): {e}")
-            
-            # 응답 생성
-            return QuestionGenerationSuccessResponse(
-                success=True,
-                total_questions=len(questions),
-                questions=questions
-            )
-            
-        except Exception as e:
-            error_code = "API_ERROR"
-            error_message = "LLM API 호출 중 오류가 발생했습니다."
-            error_details = str(e)
-            
-            # 에러 타입에 따른 분류
-            if "Rate limit" in str(e) or "rate limit" in str(e).lower():
-                error_code = "RATE_LIMIT_EXCEEDED"
-                error_message = "API 호출 한도가 초과되었습니다."
-            elif "API 키" in str(e) or "api key" in str(e).lower():
-                error_code = "INVALID_API_KEY"
-                error_message = "API 키가 유효하지 않습니다."
-            
-            return QuestionGenerationErrorResponse(
-                success=False,
-                error=ErrorDetail(
-                    code=error_code,
-                    message=error_message,
-                    details=error_details
-                )
-            )
-    
     async def generate_questions_batch(
         self,
-        requests: List[QuestionGenerationRequest],
+        requests: List[QuestionGeneration],
+        current_user_id: str,
         provider: Optional[str] = None
     ) -> List[QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse]:
         """
@@ -220,34 +61,51 @@ class QuestionGenerationService:
         file_display_names_list = []
         request_mapping = []  # 배치 결과를 원래 요청에 매핑하기 위한 리스트
         
-        # 각 요청마다 grade_level에 따라 디렉토리 생성 및 경로 변환
+        # 각 요청마다 school_level에 따라 디렉토리 생성 및 경로 변환
         for req_idx, req in enumerate(requests):
             total_count = req.generation_count
             batch_size = 10
             num_batches = (total_count + batch_size - 1) // batch_size  # 올림 계산
             
-            # grade_level 추출
-            grade_level = req.curriculum_info.grade_level if req.curriculum_info else None
+            # school_level 추출
+            school_level = req.school_level if hasattr(req, 'school_level') else None
+
+            print(f"🟣🟣 요청 {req_idx}: {total_count}개 문항 → {num_batches}개 배치")
+            print(f"🟣🟣 School Level: {school_level}")
+
             
-            # 파일 저장 디렉토리 확인 및 생성 (grade_level에 따라 경로 결정)
-            if grade_level:
-                ensure_storage_directory(grade_level)
+            # 파일 저장 디렉토리 확인 및 생성 (school_level에 따라 경로 결정)
+            if school_level:
+                ensure_storage_directory(school_level)
             
-            # 파일 경로를 실제 경로로 변환 (grade_level에 따라 경로 결정)
+            # 파일 경로를 실제 경로로 변환 (school_level에 따라 경로 결정)
             resolved_file_paths = resolve_file_paths(
                 req.file_paths, 
-                grade_level=grade_level
+                school_level=school_level
             ) if req.file_paths else None
             
-            # 각 배치마다 프롬프트 생성
+            # 첫 번째 배치에서 system_prompt 생성 (모든 배치에서 동일)
+            first_batch_request = req.model_copy()
+            first_batch_request.generation_count = batch_size
+            sys_prompt, _ = PromptTemplate.build_prompt(first_batch_request)
+            
+            # 각 배치마다 user_prompt 생성 (문항 수만 다름)
             for batch_idx in range(num_batches):
                 batch_request = req.model_copy()  # 요청 복사
-                batch_request.generation_count = batch_size  # 배치 크기는 10으로 고정
                 
-                sys_prompt, usr_prompt = PromptTemplate.build_prompt(batch_request)
-                system_prompts.append(sys_prompt)
-                user_prompts.append(usr_prompt)
-                counts.append(batch_size)  # 항상 10문항
+                # 현재 배치에서 요청할 문항 수 계산 (마지막 배치는 남은 개수만큼)
+                remaining = total_count - (batch_idx * batch_size)
+                current_batch_size = min(batch_size, remaining)
+                batch_request.generation_count = current_batch_size
+                
+                print(f"  📦 배치 {batch_idx + 1}/{num_batches}: {current_batch_size}개 문항")
+                
+                # user_prompt만 다시 생성 (문항 개수가 반영됨)
+                _, user_prompt = PromptTemplate.build_prompt(batch_request)
+                
+                system_prompts.append(sys_prompt)  # 동일한 system_prompt 재사용
+                user_prompts.append(user_prompt)
+                counts.append(current_batch_size)  # 실제 배치 크기
                 file_paths_list.append(resolved_file_paths)  # 변환된 경로 사용
                 file_display_names_list.append(req.file_display_names)
                 
@@ -255,7 +113,8 @@ class QuestionGenerationService:
                 request_mapping.append({
                     'request_idx': req_idx,
                     'batch_idx': batch_idx,
-                    'total_count': total_count
+                    'total_count': total_count,
+                    'current_batch_size': current_batch_size
                 })
         
         try:
@@ -268,16 +127,32 @@ class QuestionGenerationService:
                 file_display_names_list=file_display_names_list
             )
             
-            # 배치 결과를 원래 요청별로 그룹화
+            # 배치 결과를 원래 요청별로 그룹화 (배치 정보 포함)
             request_questions = {}  # {request_idx: [questions]}
+            request_batch_info = {}  # {request_idx: [batch_info]}
             
             for batch_result, mapping in zip(batch_results, request_mapping):
                 req_idx = mapping['request_idx']
+                batch_idx = mapping['batch_idx']
+                
                 if req_idx not in request_questions:
                     request_questions[req_idx] = []
+                    request_batch_info[req_idx] = []
                 
                 if batch_result:
-                    request_questions[req_idx].extend(batch_result)
+                    # 각 문항에 배치 정보 추가
+                    for question in batch_result:
+                        # 문항 데이터에 배치 정보 추가 (dict로 변환 후 추가)
+                        question_dict = question.model_dump() if hasattr(question, 'model_dump') else question.dict()
+                        question_dict['batch_index'] = batch_idx + 1  # 1부터 시작
+                        request_questions[req_idx].append(question_dict)
+                    
+                    # 배치별 정보 기록
+                    request_batch_info[req_idx].append({
+                        'batch_number': batch_idx + 1,
+                        'requested_count': mapping['current_batch_size'],
+                        'generated_count': len(batch_result)
+                    })
             
             # 응답 생성 및 DB 저장
             responses = []
@@ -285,6 +160,72 @@ class QuestionGenerationService:
             
             for req_idx, request in enumerate(requests):
                 questions = request_questions.get(req_idx, [])
+                
+                # 부족한 경우 재요청 로직 (최대 3회)
+                retry_count = 0
+                max_retries = 3
+                
+                while len(questions) < request.generation_count and retry_count < max_retries:
+                    shortage = request.generation_count - len(questions)
+                    retry_count += 1
+                    
+                    print(f"🔄 재요청 {retry_count}/{max_retries}: {shortage}개 부족 (요청 {request.generation_count}개 → 생성 {len(questions)}개)")
+                    
+                    try:
+                        # 재요청을 위한 프롬프트 생성
+                        retry_request = request.model_copy()
+                        retry_request.generation_count = shortage
+                        sys_prompt, user_prompt = PromptTemplate.build_prompt(retry_request)
+                        
+                        # 파일 경로 해결
+                        school_level = request.school_level if hasattr(request, 'school_level') else None
+                        resolved_file_paths = resolve_file_paths(
+                            request.file_paths,
+                            school_level=school_level
+                        ) if request.file_paths else None
+                        
+                        # 부족한 만큼만 재요청 (단일 요청)
+                        retry_results = await self.llm_client.generate_questions(
+                            system_prompt=sys_prompt,
+                            user_prompt=user_prompt,
+                            count=shortage,
+                            file_paths=resolved_file_paths,
+                            file_display_names=request.file_display_names
+                        )
+                        
+                        if retry_results:
+                            # 재요청 결과를 dict로 변환하여 추가
+                            for question in retry_results:
+                                question_dict = question.model_dump() if hasattr(question, 'model_dump') else question.dict()
+                                question_dict['batch_index'] = f"retry_{retry_count}"  # 재요청 표시
+                                questions.append(question_dict)
+                            
+                            # 배치 정보 업데이트
+                            if req_idx not in request_batch_info:
+                                request_batch_info[req_idx] = []
+                            request_batch_info[req_idx].append({
+                                'batch_number': f'재요청_{retry_count}',
+                                'requested_count': shortage,
+                                'generated_count': len(retry_results)
+                            })
+                            
+                            print(f"✅ 재요청 완료: {len(retry_results)}개 추가 생성 (누적 {len(questions)}개)")
+                        else:
+                            print(f"⚠️ 재요청 실패: 결과 없음")
+                            break
+                            
+                    except Exception as e:
+                        print(f"❌ 재요청 에러 ({retry_count}회차): {e}")
+                        import traceback
+                        traceback.print_exc()
+                        break
+                
+                # 최종 결과 확인
+                if len(questions) < request.generation_count:
+                    final_shortage = request.generation_count - len(questions)
+                    print(f"⚠️ 최종 부족: {final_shortage}개 (요청 {request.generation_count}개 → 최종 {len(questions)}개)")
+                else:
+                    print(f"✅ 목표 달성: {len(questions)}개 생성 완료")
                 
                 # 요청한 문항 수만큼만 반환 (초과 생성된 경우 자름)
                 questions = questions[:request.generation_count]
@@ -297,32 +238,36 @@ class QuestionGenerationService:
                         import os
                         
                         # 저장 디렉토리 생성
-                        grade_level = request.curriculum_info.grade_level if request.curriculum_info else None
-                        output_dir = f"storage/{grade_level}" if grade_level else "storage/default"
+                        from app.utils.file_path import parse_school_level_to_path
+                        school_level = request.school_level if hasattr(request, 'school_level') else None
+                        school_path = parse_school_level_to_path(school_level) if school_level else "default"
+                        output_dir = f"storage/{school_path}"
                         os.makedirs(output_dir, exist_ok=True)
                         
                         # 타임스탬프
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         
                         # 파일명 생성
-                        achievement_std = request.curriculum_info.achievement_standard if request.curriculum_info else "unknown"
-                        filename = f"questions_batch_{req_idx}_{achievement_std}_{timestamp}.json"
+                        achievement_code = request.curriculum_info[0].achievement_code if request.curriculum_info and len(request.curriculum_info) > 0 else "unknown"
+                        filename = f"questions_batch_{req_idx}_{achievement_code}_{timestamp}.json"
                         filepath = os.path.join(output_dir, filename)
                         
-                        # 데이터 변환
-                        questions_data = [q.model_dump() if hasattr(q, 'model_dump') else q.dict() for q in questions]
+                        # 배치별 정보 가져오기
+                        batch_info = request_batch_info.get(req_idx, [])
                         
                         # JSON 파일로 저장
                         with open(filepath, 'w', encoding='utf-8') as f:
                             json.dump({
                                 "metadata": {
-                                    "batch_index": req_idx,
-                                    "achievement_standard": achievement_std,
-                                    "grade_level": grade_level,
+                                    "request_index": req_idx,
+                                    "achievement_code": achievement_code,
+                                    "school_level": school_level,
                                     "total_questions": len(questions),
-                                    "generated_at": timestamp
+                                    "requested_count": request.generation_count,
+                                    "generated_at": timestamp,
+                                    "batches": batch_info
                                 },
-                                "questions": questions_data
+                                "questions": questions  # 이미 dict로 변환됨
                             }, f, ensure_ascii=False, indent=2)
                         
                         print(f"✅ JSON 파일 저장 완료 (배치 {req_idx}): {filepath}")
@@ -353,11 +298,38 @@ class QuestionGenerationService:
                     #         # DB 저장 실패해도 문항 생성은 성공으로 처리
                     #         print(f"DB 저장 실패 (문항은 생성됨): {e}")
                     
+                    # dict를 Question 객체로 변환
+                    question_objects = []
+                    for q_idx, q_dict in enumerate(questions):
+                        try:
+                            # passage_info의 빈 문자열 처리
+                            if 'passage_info' in q_dict and isinstance(q_dict['passage_info'], dict):
+                                passage_info = q_dict['passage_info']
+                                
+                                # original_used 처리
+                                orig_val = passage_info.get('original_used')
+                                if orig_val == '' or orig_val is None:
+                                    passage_info['original_used'] = True
+                                elif isinstance(orig_val, str):
+                                    # 문자열 "true"/"false" 처리
+                                    passage_info['original_used'] = orig_val.lower() == 'true'
+                                
+                                # source_type 처리
+                                src_val = passage_info.get('source_type')
+                                if src_val == '' or src_val is None:
+                                    passage_info['source_type'] = 'original'
+                            
+                            question_obj = Question(**q_dict)
+                            question_objects.append(question_obj)
+                        except Exception as e:
+                            print(f"⚠️ 문항 변환 실패 [{q_idx}]: {e}")
+                            continue
+                    
                     responses.append(
                         QuestionGenerationSuccessResponse(
                             success=True,
-                            total_questions=len(questions),
-                            questions=questions
+                            total_questions=len(question_objects),
+                            questions=question_objects
                         )
                     )
                 else:

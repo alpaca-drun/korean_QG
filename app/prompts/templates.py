@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 from app.schemas.question_generation import QuestionGenerationRequest
 from app.prompts.writing_prompts import WRITING_SYSTEM_PROMPT, WRITING_USER_PROMPT_TEMPLATE
+from app.prompts.listening_speaking_prompts import LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT, LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
 
 
 class PromptTemplate:
@@ -76,18 +77,39 @@ JSON 형식으로 출력해주세요:
         Returns:
             (system_prompt, user_prompt) 튜플
         """
+        # 성취기준 정보 텍스트 생성 (여러 개일 수 있음)
+        achievement_text = ""
+        if request.curriculum_info and len(request.curriculum_info) > 0:
+            for idx, ach in enumerate(request.curriculum_info, start=1):
+                achievement_code = ach.achievement_code or ""
+                achievement_content = ach.achievement_content or ""
+                evaluation_content = ach.evaluation_content or ""
+                achievement_text += (
+                    f"성취기준 코드_{idx} : {achievement_code}\n"
+                    f"성취기준_{idx} : {achievement_content}\n"
+                    f"평가기준_{idx} : {evaluation_content}\n\n"
+                )
+        else:
+            achievement_text = "성취기준 정보 없음"
+        print("🟣🟣🟣")
+        print(achievement_text)
+
         # 매체 타입에 따라 프롬프트 선택
         if system_prompt is None:
-            if request.media_type == "writing":
-                system_prompt = WRITING_SYSTEM_PROMPT
+            if request.study_area == "매체":
+                system_prompt_template = WRITING_SYSTEM_PROMPT
+            elif request.study_area == "말하기/듣기":
+                system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
             else:
                 # 기본 프롬프트 (다른 매체 타입은 추후 추가)
-                system_prompt = cls.BASE_TEMPLATE
+                system_prompt_template = cls.BASE_TEMPLATE
         
         # media_type에 따라 프롬프트 템플릿 변경
         if user_prompt_template is None:
-            if request.media_type == "writing":
+            if request.study_area == "매체":
                 user_prompt_template = WRITING_USER_PROMPT_TEMPLATE
+            elif request.study_area == "말하기/듣기":
+                user_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
             else:
                 # 기본 템플릿
                 user_prompt_template = cls.BASE_TEMPLATE
@@ -95,17 +117,29 @@ JSON 형식으로 출력해주세요:
         # 사용자 프롬프트에 변수 채우기
         # 프롬프트에서는 항상 10문항씩 생성하도록 고정
         # question_count와 generation_count 둘 다 전달 (템플릿에 따라 다름)
+        system_prompt = system_prompt_template.format(
+            school_level=request.school_level,
+            grade_level=request.grade_level,
+            semester=request.semester,
+            large_unit_name=request.large_unit,
+            small_unit_name=request.small_unit,
+            achievement_text=achievement_text,
+            learning_objective=request.learning_objective,
+            learning_activity=getattr(request, 'learning_activity', ''),
+            learning_element=getattr(request, 'learning_element', ''),
+            passage=request.passage
+        )
         user_prompt = user_prompt_template.format(
-            question_count=10,  # 항상 10문항 고정 (WRITING_USER_PROMPT_TEMPLATE용)
-            generation_count=10,  # 항상 10문항 고정 (BASE_TEMPLATE용)
+            school_level=request.school_level if hasattr(request, 'school_level') else None,
+            grade_level=request.grade_level if hasattr(request, 'grade_level') else None,
+            semester=request.semester if hasattr(request, 'semester') else None,
+            generation_count=request.generation_count,
             passage=request.passage,
             learning_objective=request.learning_objective,
-            achievement_standard=request.curriculum_info.achievement_standard,
-            grade_level=request.curriculum_info.grade_level,
-            main_unit=request.curriculum_info.main_unit,
-            sub_unit=request.curriculum_info.sub_unit
+            learning_activity=getattr(request, 'learning_activity', ''),
+            learning_element=getattr(request, 'learning_element', '')
         )
-        
+
         return system_prompt, user_prompt
     
     @classmethod
