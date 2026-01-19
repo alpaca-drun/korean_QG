@@ -38,6 +38,9 @@ wheels/
 .DS_Store
 Thumbs.db
 
+# git credentials (PAT etc.)
+.git-credentials
+
 # Docker - MariaDB 데이터 및 백업
 docker/mariadb/data/
 docker/mariadb/backups/
