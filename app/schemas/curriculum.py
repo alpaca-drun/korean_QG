@@ -167,3 +167,39 @@ class SelectSaveResultResponse(BaseModel):
                 "saved_count": 3
             }
         }
+
+
+class ScopeCreateRequest(BaseModel):
+    """범위 생성 요청 스키마"""
+    grade: int
+    semester: int
+    publisher_author: str
+    large_unit_id: int
+    large_unit_name: str
+    small_unit_id: int
+    small_unit_name: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "grade": 1,
+                "semester": 1,
+                "publisher_author": "미래엔",
+                "large_unit_id": 1,
+                "large_unit_name": "1. 문학의 즐거움",
+                "small_unit_id": 1,
+                "small_unit_name": "(1) 시 감상하기"
+            }
+        }
+
+
+class ScopeCreateResponse(BaseModel):
+    """범위 생성 응답 스키마"""
+    scope_id: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "scope_id": 123
+            }
+        }
