@@ -6,7 +6,9 @@ from app.schemas.question_generation import (
     Question,
     QuestionGenerationSuccessResponse,
     QuestionGenerationErrorResponse,
-    ErrorDetail
+    ErrorDetail,
+    GenerationMetadata,
+    BatchInfo
 )
 from app.clients.factory import LLMClientFactory
 from app.clients.base import LLMClientBase
@@ -139,20 +141,38 @@ class QuestionGenerationService:
                     request_questions[req_idx] = []
                     request_batch_info[req_idx] = []
                 
-                if batch_result:
+                # batch_result는 이제 Dict 형태: {'questions': [...], 'metadata': {...}}
+                questions = batch_result.get('questions', []) if isinstance(batch_result, dict) else batch_result
+                metadata = batch_result.get('metadata', {}) if isinstance(batch_result, dict) else {}
+                
+                print(f"🔍 [배치 결과] req_idx={req_idx}, batch_idx={batch_idx}, 문항수={len(questions)}")
+                print(f"📊 [메타데이터] {metadata}")
+                
+                if questions:
                     # 각 문항에 배치 정보 추가
-                    for question in batch_result:
+                    for question in questions:
                         # 문항 데이터에 배치 정보 추가 (dict로 변환 후 추가)
                         question_dict = question.model_dump() if hasattr(question, 'model_dump') else question.dict()
                         question_dict['batch_index'] = batch_idx + 1  # 1부터 시작
                         request_questions[req_idx].append(question_dict)
                     
-                    # 배치별 정보 기록
-                    request_batch_info[req_idx].append({
+                    # 배치별 정보 기록 (토큰 정보 및 소요 시간 포함)
+                    batch_info = {
                         'batch_number': batch_idx + 1,
                         'requested_count': mapping['current_batch_size'],
-                        'generated_count': len(batch_result)
-                    })
+                        'generated_count': len(questions),
+                        'input_tokens': metadata.get('input_tokens', 0),
+                        'output_tokens': metadata.get('output_tokens', 0),
+                        'total_tokens': metadata.get('total_tokens', 0),
+                        'duration_seconds': metadata.get('duration_seconds', 0)
+                    }
+                    
+                    # 에러가 있으면 추가
+                    if 'error' in metadata:
+                        batch_info['error'] = metadata['error']
+                    
+                    print(f"✅ [배치 정보 저장] {batch_info}")
+                    request_batch_info[req_idx].append(batch_info)
             
             # 응답 생성 및 DB 저장
             responses = []
@@ -184,32 +204,51 @@ class QuestionGenerationService:
                             school_level=school_level
                         ) if request.file_paths else None
                         
-                        # 부족한 만큼만 재요청 (단일 요청)
-                        retry_results = await self.llm_client.generate_questions(
+                        # 부족한 만큼만 재요청 (단일 요청, 메타데이터 포함)
+                        retry_result = await self.llm_client.generate_questions(
                             system_prompt=sys_prompt,
                             user_prompt=user_prompt,
                             count=shortage,
                             file_paths=resolved_file_paths,
-                            file_display_names=request.file_display_names
+                            file_display_names=request.file_display_names,
+                            return_metadata=True  # 메타데이터 포함 요청
                         )
                         
-                        if retry_results:
+                        # retry_result는 Dict 형태: {'questions': [...], 'metadata': {...}}
+                        retry_questions = retry_result.get('questions', []) if isinstance(retry_result, dict) else retry_result
+                        retry_metadata = retry_result.get('metadata', {}) if isinstance(retry_result, dict) else {}
+                        
+                        print(f"🔍 [재요청 결과] 문항수={len(retry_questions)}, 메타데이터={retry_metadata}")
+                        
+                        if retry_questions:
                             # 재요청 결과를 dict로 변환하여 추가
-                            for question in retry_results:
+                            for question in retry_questions:
                                 question_dict = question.model_dump() if hasattr(question, 'model_dump') else question.dict()
                                 question_dict['batch_index'] = f"retry_{retry_count}"  # 재요청 표시
                                 questions.append(question_dict)
                             
-                            # 배치 정보 업데이트
+                            # 배치 정보 업데이트 (토큰 정보 포함)
                             if req_idx not in request_batch_info:
                                 request_batch_info[req_idx] = []
-                            request_batch_info[req_idx].append({
-                                'batch_number': f'재요청_{retry_count}',
-                                'requested_count': shortage,
-                                'generated_count': len(retry_results)
-                            })
                             
-                            print(f"✅ 재요청 완료: {len(retry_results)}개 추가 생성 (누적 {len(questions)}개)")
+                            retry_batch_info = {
+                                'batch_number': f'retry_{retry_count}',  # 문항의 batch_index와 동일하게
+                                'requested_count': shortage,
+                                'generated_count': len(retry_questions),
+                                'input_tokens': retry_metadata.get('input_tokens', 0),
+                                'output_tokens': retry_metadata.get('output_tokens', 0),
+                                'total_tokens': retry_metadata.get('total_tokens', 0),
+                                'duration_seconds': retry_metadata.get('duration_seconds', 0)
+                            }
+                            
+                            # 에러가 있으면 추가
+                            if 'error' in retry_metadata:
+                                retry_batch_info['error'] = retry_metadata['error']
+                            
+                            request_batch_info[req_idx].append(retry_batch_info)
+                            
+                            print(f"✅ 재요청 완료: {len(retry_questions)}개 추가 생성 (누적 {len(questions)}개)")
+                            print(f"📊 [재요청 배치 정보] {retry_batch_info}")
                         else:
                             print(f"⚠️ 재요청 실패: 결과 없음")
                             break
@@ -227,7 +266,21 @@ class QuestionGenerationService:
                 else:
                     print(f"✅ 목표 달성: {len(questions)}개 생성 완료")
                 
-                # 요청한 문항 수만큼만 반환 (초과 생성된 경우 자름)
+                # 초과 생성된 경우 is_used 필드 추가 (0, 1 태깅)
+                if len(questions) > request.generation_count:
+                    trimmed = questions[:request.generation_count]
+                    excess = questions[request.generation_count:]
+                    # 사용분에 is_used=1, 나머지에 is_used=0 태그 추가
+                    for q in trimmed:
+                        q['is_used'] = 1
+                    for q in excess:
+                        q['is_used'] = 0
+                    questions = trimmed + excess
+                else:
+                    # 요청 수 이하면 모두 is_used=1
+                    for q in questions:
+                        q['is_used'] = 1
+                # 요청한 문항 수만 반환(배치 파일에는 is_used=0 포함되어 뒤에 붙음, 배치 반환에는 사용된 것만)
                 questions = questions[:request.generation_count]
                 
                 if questions:
@@ -275,28 +328,44 @@ class QuestionGenerationService:
                     except Exception as e:
                         print(f"⚠️ JSON 저장 실패 (배치 {req_idx}): {e}")
                     
-                    # # DB 저장 (설정된 경우) - 주석처리
-                    # if settings.db_host and settings.db_database:
-                    #     try:
-                    #         # Question 객체를 dict로 변환
-                    #         questions_data = []
-                    #         for q in questions:
-                    #             q_dict = q.model_dump() if hasattr(q, 'model_dump') else q.dict()
-                    #             questions_data.append(q_dict)
-                    #         
-                    #         question_ids = save_questions_batch_to_db(
-                    #             questions_data,
-                    #             lock=lock,
-                    #             info_id=None  # TODO: info_id를 요청에서 받아오도록 수정
-                    #         )
-                    #         
-                    #         # DB ID를 문항에 매핑
-                    #         for question, db_id in zip(questions, question_ids):
-                    #             if db_id:
-                    #                 question.db_question_id = db_id
-                    #     except Exception as e:
-                    #         # DB 저장 실패해도 문항 생성은 성공으로 처리
-                    #         print(f"DB 저장 실패 (문항은 생성됨): {e}")
+                    # dict를 Question 객체로 변환
+                    question_objects = []
+                    for q_idx, q_dict in enumerate(questions):
+                        try:
+                            # passage_info의 빈 문자열 처리
+                            if 'passage_info' in q_dict and isinstance(q_dict['passage_info'], dict):
+                                passage_info = q_dict['passage_info']
+                                
+                                # original_used 처리
+                                orig_val = passage_info.get('original_used')
+                                if orig_val == '' or orig_val is None:
+                                    passage_info['original_used'] = True
+                                elif isinstance(orig_val, str):
+                                    # 문자열 "true"/"false" 처리
+                                    passage_info['original_used'] = orig_val.lower() == 'true'
+                                
+                                # source_type 처리
+                                src_val = passage_info.get('source_type')
+                                if src_val == '' or src_val is None:
+                                    passage_info['source_type'] = 'original'
+                            
+                            question_obj = Question(**q_dict)
+                            question_objects.append(question_obj)
+                        except Exception as e:
+                            print(f"⚠️ 문항 변환 실패 [{q_idx}]: {e}")
+                            continue
+                    
+                    # 메타데이터 생성 (JSON 저장과 동일한 구조)
+                    batch_info_objects = [BatchInfo(**bi) for bi in batch_info]
+                    metadata = GenerationMetadata(
+                        request_index=req_idx,
+                        achievement_code=achievement_code,
+                        school_level=school_level,
+                        total_questions=len(question_objects),
+                        requested_count=request.generation_count,
+                        generated_at=timestamp,
+                        batches=batch_info_objects
+                    )
                     
                     # dict를 Question 객체로 변환
                     question_objects = []
@@ -329,7 +398,8 @@ class QuestionGenerationService:
                         QuestionGenerationSuccessResponse(
                             success=True,
                             total_questions=len(question_objects),
-                            questions=question_objects
+                            questions=question_objects,
+                            metadata=metadata
                         )
                     )
                 else:

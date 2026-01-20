@@ -59,8 +59,9 @@ class GeminiClient(LLMClientBase):
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
         model_name: str = "gemini-3-flash-preview",
+        return_metadata: bool = False,
         **kwargs
-    ) -> List[Question]:
+    ):
         """
         Gemini API를 사용하여 문항 생성 (자동 재시도 및 키 로테이션, 타임아웃 처리)
         
@@ -72,10 +73,12 @@ class GeminiClient(LLMClientBase):
             file_paths: 업로드할 파일 경로 리스트
             file_display_names: 파일 표시 이름 리스트
             model_name: 사용할 모델 이름
+            return_metadata: True이면 메타데이터 포함한 Dict 반환, False면 List[Question] 반환
             **kwargs: 추가 파라미터
             
         Returns:
-            생성된 문항 리스트
+            return_metadata=False: List[Question]
+            return_metadata=True: Dict[str, Any] with 'questions' and 'metadata'
         """
         if not self.api_key_manager:
             raise ValueError("Gemini API 키가 설정되지 않았습니다.")
@@ -89,6 +92,8 @@ class GeminiClient(LLMClientBase):
         
         # 일반적인 순차 재시도 방식
         last_error = None
+        import time
+        start_time = time.time()
         
         for attempt in range(max_retries):
             try:
@@ -102,14 +107,22 @@ class GeminiClient(LLMClientBase):
                 timeout = settings.api_retry_timeout if attempt > 0 else settings.api_call_timeout
                 
                 try:
-                    response = await asyncio.wait_for(
+                    response_obj = await asyncio.wait_for(
                         self._call_api_with_files(
                             system_prompt, user_prompt, model, 
-                            file_paths, file_display_names, count, model_name
+                            file_paths, file_display_names, count, model_name,
+                            return_response_obj=return_metadata
                         ),
                         timeout=timeout
                     )
-                    questions = self._parse_response(response, count)
+                    
+                    # return_metadata=True면 response 객체, False면 response.text
+                    if return_metadata:
+                        response_text = response_obj.text
+                    else:
+                        response_text = response_obj
+                    
+                    questions = self._parse_response(response_text, count)
                 except asyncio.TimeoutError:
                     # 타임아웃 발생 시 해당 키를 일시적으로 차단
                     self.api_key_manager.mark_error(api_key, "timeout")
@@ -117,6 +130,35 @@ class GeminiClient(LLMClientBase):
                 
                 # 성공 시 현재 키 성공 표시
                 self.api_key_manager.mark_success(api_key)
+                
+                # 메타데이터 추출 (요청된 경우)
+                if return_metadata:
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    
+                    metadata = {
+                        'input_tokens': 0,
+                        'output_tokens': 0,
+                        'total_tokens': 0,
+                        'duration_seconds': round(duration, 2)
+                    }
+                    
+                    # usage_metadata 추출
+                    print(f"🔍 [DEBUG] response 객체 확인: hasattr(usage_metadata) = {hasattr(response_obj, 'usage_metadata')}")
+                    if hasattr(response_obj, 'usage_metadata'):
+                        usage = response_obj.usage_metadata
+                        print(f"📊 [토큰 정보] usage_metadata: {usage}")
+                        metadata['input_tokens'] = getattr(usage, 'prompt_token_count', 0)
+                        metadata['output_tokens'] = getattr(usage, 'candidates_token_count', 0)
+                        metadata['total_tokens'] = getattr(usage, 'total_token_count', 0)
+                        print(f"✅ [토큰 추출] input={metadata['input_tokens']}, output={metadata['output_tokens']}, total={metadata['total_tokens']}, duration={metadata['duration_seconds']}초")
+                    else:
+                        print(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response_obj)}")
+                    
+                    return {
+                        'questions': questions,
+                        'metadata': metadata
+                    }
                 
                 return questions
                 
@@ -177,9 +219,9 @@ class GeminiClient(LLMClientBase):
         for api_key in keys_to_try:
             model = self._get_model(api_key, model_name)
             task = asyncio.create_task(
-                self._call_api_with_timeout_and_files(
-                    system_prompt, user_prompt, model, api_key, count,
-                    file_paths, file_display_names, model_name
+                self._call_api_with_files(
+                    system_prompt, user_prompt, model,
+                    file_paths, file_display_names, count, model_name
                 )
             )
             tasks.append((task, api_key))
@@ -246,9 +288,23 @@ class GeminiClient(LLMClientBase):
         file_display_names_list: Optional[List[Optional[List[str]]]] = None,
         model_names: Optional[List[str]] = None,
         **kwargs
-    ) -> List[List[Question]]:
+    ) -> List[Dict[str, Any]]:
         """
         배치 문항 생성 (병렬 처리 - 최대 5개 API 키 동시 사용, 타임아웃 처리)
+        
+        Returns:
+            각 배치의 결과를 담은 딕셔너리 리스트:
+            [
+                {
+                    'questions': List[Question],
+                    'metadata': {
+                        'input_tokens': int,
+                        'output_tokens': int,
+                        'total_tokens': int,
+                        'duration_seconds': float
+                    }
+                }
+            ]
         """
         if not self.api_key_manager:
             raise ValueError("Gemini API 키가 설정되지 않았습니다.")
@@ -310,12 +366,30 @@ class GeminiClient(LLMClientBase):
                         )
                         batch_results.append(result)
                     except asyncio.TimeoutError:
-                        # 타임아웃 발생 시 빈 리스트 반환
+                        # 타임아웃 발생 시 빈 결과 반환
                         print(f"⚠️ API 호출 타임아웃 ({settings.api_call_timeout}초 초과)")
-                        batch_results.append([])
+                        batch_results.append({
+                            'questions': [],
+                            'metadata': {
+                                'input_tokens': 0,
+                                'output_tokens': 0,
+                                'total_tokens': 0,
+                                'duration_seconds': settings.api_call_timeout,
+                                'error': 'Timeout'
+                            }
+                        })
                     except Exception as e:
                         print(f"⚠️ API 호출 실패: {str(e)[:100]}")
-                        batch_results.append([])
+                        batch_results.append({
+                            'questions': [],
+                            'metadata': {
+                                'input_tokens': 0,
+                                'output_tokens': 0,
+                                'total_tokens': 0,
+                                'duration_seconds': 0,
+                                'error': str(e)[:100]
+                            }
+                        })
                 
                 # 결과 추가
                 all_results.extend(batch_results)
@@ -332,11 +406,25 @@ class GeminiClient(LLMClientBase):
         file_display_names: Optional[List[str]] = None,
         model_name: str = "gemini-3-flash-preview",
         **kwargs
-    ) -> List[Question]:
+    ) -> Dict[str, Any]:
         """
         동기 방식으로 단일 문항 생성 (ThreadPoolExecutor용)
         주의: 타임아웃은 상위 레벨의 asyncio.wait_for에서 처리됨
+        
+        Returns:
+            {
+                'questions': List[Question],
+                'metadata': {
+                    'input_tokens': int,
+                    'output_tokens': int,
+                    'total_tokens': int,
+                    'duration_seconds': float
+                }
+            }
         """
+        import time
+        start_time = time.time()
+        
         try:
             model = self._get_model(api_key, model_name)
             
@@ -393,24 +481,72 @@ class GeminiClient(LLMClientBase):
             else:
                 response = structured_model.generate_content(full_prompt)
             
+            # 소요 시간 계산
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            # 토큰 정보 추출
+            metadata = {
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'total_tokens': 0,
+                'duration_seconds': round(duration, 2)
+            }
+            
+            # Gemini API의 usage_metadata에서 토큰 정보 추출
+            print(f"🔍 [DEBUG] response 객체 확인: hasattr(usage_metadata) = {hasattr(response, 'usage_metadata')}")
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                print(f"📊 [토큰 정보] usage_metadata: {usage}")
+                metadata['input_tokens'] = getattr(usage, 'prompt_token_count', 0)
+                metadata['output_tokens'] = getattr(usage, 'candidates_token_count', 0)
+                metadata['total_tokens'] = getattr(usage, 'total_token_count', 0)
+                print(f"✅ [토큰 추출] input={metadata['input_tokens']}, output={metadata['output_tokens']}, total={metadata['total_tokens']}, duration={metadata['duration_seconds']}초")
+            else:
+                print(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response)}")
+                print(f"⚠️ [WARNING] response 속성: {dir(response)}")
+            
             questions = self._parse_response(response.text, count)
             
             # 성공 표시
             self.api_key_manager.mark_success(api_key)
             
-            return questions
+            return {
+                'questions': questions,
+                'metadata': metadata
+            }
             
         except google_exceptions.ResourceExhausted as e:
             # Rate limit 에러
             self.api_key_manager.mark_error(api_key, "rate_limit")
-            raise Exception(f"Rate limit exceeded: {str(e)}")
+            end_time = time.time()
+            return {
+                'questions': [],
+                'metadata': {
+                    'input_tokens': 0,
+                    'output_tokens': 0,
+                    'total_tokens': 0,
+                    'duration_seconds': round(end_time - start_time, 2),
+                    'error': f"Rate limit exceeded: {str(e)}"
+                }
+            }
         except Exception as e:
             error_str = str(e).lower()
             if "timeout" in error_str or "timed out" in error_str:
                 self.api_key_manager.mark_error(api_key, "timeout")
             elif "api key" in error_str or "permission" in error_str:
                 self.api_key_manager.mark_error(api_key, "invalid_key")
-            raise
+            end_time = time.time()
+            return {
+                'questions': [],
+                'metadata': {
+                    'input_tokens': 0,
+                    'output_tokens': 0,
+                    'total_tokens': 0,
+                    'duration_seconds': round(end_time - start_time, 2),
+                    'error': str(e)
+                }
+            }
     
     async def _call_api(self, prompt: str, model) -> str:
         """Gemini API 호출 (비동기 래퍼)"""
@@ -432,9 +568,17 @@ class GeminiClient(LLMClientBase):
         file_display_names: Optional[List[str]] = None,
         count: int = 10,
         model_name: str = "gemini-3-flash-preview",
+        return_response_obj: bool = False,
         **kwargs
-    ) -> str:
-        """파일이 포함된 Gemini API 호출 (구조화된 출력)"""
+    ):
+        """파일이 포함된 Gemini API 호출 (구조화된 출력)
+        
+        Args:
+            return_response_obj: True면 response 객체 전체 반환, False면 response.text만 반환
+            
+        Returns:
+            response 객체 또는 response.text
+        """
         import os
         from app.schemas.question_generation import MultipleQuestion
         
@@ -499,7 +643,11 @@ class GeminiClient(LLMClientBase):
                 lambda: structured_model.generate_content(full_prompt)
             )
         
-        return response.text
+        # return_response_obj에 따라 반환 형식 결정
+        if return_response_obj:
+            return response  # 전체 response 객체 반환
+        else:
+            return response.text  # text만 반환
     
     def _parse_response(self, response_text: str, expected_count: int) -> List[Question]:
         """
@@ -589,7 +737,8 @@ class GeminiClient(LLMClientBase):
                 ),
                 choices=llm_question.choices,
                 correct_answer=llm_question.correct_answer,
-                explanation=llm_question.explanation
+                explanation=llm_question.explanation,
+                llm_difficulty=llm_question.llm_difficulty
             )
         except Exception as e:
             print(f"⚠️ 문항 변환 실패 [Q{question_number}]: {e}")
