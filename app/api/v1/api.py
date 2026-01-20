@@ -3,11 +3,11 @@ from app.api.v1.endpoints import (
     login,
     large_units,
     small_units,
-    achievement_standards,
     passages,
     question_generation,
     result,
     dashboard,
+    scopes,
 )
 
 api_router = APIRouter()
@@ -41,10 +41,10 @@ api_router.include_router(
     tags=["메타데이터"]
 )
 
-# 성취기준 라우터
+# 사용자 선택 범위 저장 라우터
 api_router.include_router(
-    achievement_standards.router,
-    prefix="/achievement-standards",
+    scopes.router,
+    prefix="/scopes",
     tags=["메타데이터"]
 )
 
