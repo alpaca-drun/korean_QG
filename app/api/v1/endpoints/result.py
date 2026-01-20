@@ -1,4 +1,9 @@
 from fastapi import APIRouter, HTTPException, status, Query
+from fastapi.responses import FileResponse
+from pathlib import Path
+import tempfile
+
+from app.download.dev import fill_table_from_list, get_question_data_from_db
 from app.schemas.curriculum import (
     ListResponse, 
     SelectSaveResultRequest,
@@ -254,17 +259,42 @@ async def update_selected_results(request: SelectSaveResultRequest):
 
 @router.get(
     "/download",
-    response_model=ListResponse,
-    summary="선택된 항목 다운로드",
-    description="선택된 항목을 다운로드합니다.",
+    summary="프로젝트 문항 DOCX 다운로드",
+    description="project_id 기준으로 문항을 조회하여 sample3.docx 양식으로 DOCX 파일을 생성/다운로드합니다.",
     tags=["결과 관리"]
 )
-async def download_selected_results():
+async def download_selected_results(
+    project_id: int = Query(..., description="프로젝트 ID", example=1),
+    category: str = Query("", description="문서 상단 {category} 치환 값", example="말하기듣기"),
+):
     """
-    선택된 항목을 다운로드합니다.
-    """ 
-    return SelectSaveResultResponse(
-        success=True,
-        message="선택된 항목을 다운로드했습니다.",
-        saved_count=len(DUMMY_GENERATED_RESULTS)
+    project_id로 문항을 조회하여 docx 파일로 반환합니다.
+    """
+    # 템플릿 경로 (app/download/sample3.docx)
+    template_path = Path(__file__).resolve().parents[3] / "download" / "sample3.docx"
+    if not template_path.exists():
+        raise HTTPException(status_code=500, detail=f"템플릿 파일을 찾을 수 없습니다: {template_path}")
+
+    # 데이터 조회
+    try:
+        data_list = get_question_data_from_db(project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"문항 조회 실패: {str(e)}")
+
+    if not data_list:
+        raise HTTPException(status_code=404, detail=f"project_id={project_id}에 해당하는 문항이 없습니다.")
+
+    # 임시 파일 생성 후 docx 저장
+    out_dir = Path(tempfile.gettempdir())
+    out_path = out_dir / f"output-project-{project_id}.docx"
+
+    try:
+        fill_table_from_list(str(template_path), str(out_path), data_list, category=category)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DOCX 생성 실패: {str(e)}")
+
+    return FileResponse(
+        path=str(out_path),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=f"output-project-{project_id}.docx",
     )
