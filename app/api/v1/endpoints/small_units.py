@@ -1,74 +1,52 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.schemas.curriculum import SmallUnitResponse, ListResponse
+from app.schemas.curriculum import ListResponse
+from app.db.database import select_with_query
 
 router = APIRouter()
-
-
-# 더미 데이터 (추후 DB 조회로 변경 예정)
-DUMMY_SMALL_UNITS = [
-    {"id": 1, "large_unit_id": 1, "name": "자연수의 덧셈", "description": "자연수의 덧셈에 대한 소단원"},
-    {"id": 2, "large_unit_id": 1, "name": "자연수의 뺄셈", "description": "자연수의 뺄셈에 대한 소단원"},
-    {"id": 3, "large_unit_id": 2, "name": "평면도형", "description": "평면도형에 대한 소단원"},
-    {"id": 4, "large_unit_id": 2, "name": "입체도형", "description": "입체도형에 대한 소단원"},
-]
 
 
 @router.get(
     "",
     response_model=ListResponse,
     summary="소단원 리스트 조회",
-    description="특정 대단원에 속한 소단원 리스트를 조회합니다.",
+    description="학년, 학기, 출판사/저자, 대단원에 해당하는 소단원 리스트를 조회합니다.",
     tags=["메타데이터"]
 )
 async def get_small_units(
+    grade: int = Query(..., description="학년 (1, 2, 3)", example=1),
+    semester: int = Query(..., description="학기 (1, 2)", example=1),
+    publisher_author: str = Query(..., description="출판사/저자", example="미래엔"),
     large_unit_id: int = Query(..., description="대단원 ID", example=1)
 ):
     """
-    대단원 ID를 기반으로 소단원 리스트를 반환합니다.
+    학년, 학기, 출판사/저자, 대단원 ID를 기반으로 소단원 리스트를 반환합니다.
     
+    - **grade**: 학년 (필수)
+    - **semester**: 학기 (필수)
+    - **publisher_author**: 출판사/저자 (필수)
     - **large_unit_id**: 대단원 ID (필수)
-    - **id**: 소단원 고유 ID
-    - **name**: 소단원 이름
-    - **description**: 소단원 설명
-    
-    추후 DB 조회로 변경 예정입니다.
     """
-    # TODO: DB 조회로 변경
-    filtered_units = [
-        unit for unit in DUMMY_SMALL_UNITS 
-        if unit["large_unit_id"] == large_unit_id
-    ]
+    query = """
+        SELECT DISTINCT small_unit_id, small_unit_name
+        FROM project_scopes
+        WHERE grade = %s AND semester = %s AND publisher_author = %s AND large_unit_id = %s
+            AND small_unit_id IS NOT NULL AND small_unit_name IS NOT NULL
+        ORDER BY small_unit_id
+    """
     
-    if not filtered_units:
+    results = select_with_query(query, (grade, semester, publisher_author, large_unit_id))
+    
+    if not results:
         raise HTTPException(
             status_code=404,
-            detail=f"대단원 ID {large_unit_id}에 해당하는 소단원을 찾을 수 없습니다."
+            detail=f"해당 조건에 맞는 소단원을 찾을 수 없습니다."
         )
     
-    return ListResponse(items=filtered_units, total=len(filtered_units))
-
-
-@router.get(
-    "/{small_unit_id}",
-    response_model=SmallUnitResponse,
-    summary="소단원 상세 조회",
-    description="특정 소단원의 상세 정보를 조회합니다.",
-    tags=["메타데이터"]
-)
-async def get_small_unit(small_unit_id: int):
-    """
-    소단원 ID로 특정 소단원의 상세 정보를 반환합니다.
+    items = [
+        {"id": row["small_unit_id"], "name": row["small_unit_name"]}
+        for row in results
+    ]
     
-    - **small_unit_id**: 소단원 ID
-    """
-    # TODO: DB 조회로 변경
-    for unit in DUMMY_SMALL_UNITS:
-        if unit["id"] == small_unit_id:
-            return SmallUnitResponse(**unit)
-    
-    raise HTTPException(
-        status_code=404,
-        detail=f"소단원 ID {small_unit_id}를 찾을 수 없습니다."
-    )
+    return ListResponse(items=items, total=len(items))
 
 
