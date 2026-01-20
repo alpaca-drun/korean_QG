@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 
 
@@ -128,6 +128,9 @@ class Question(BaseModel):
     correct_answer: str = Field(..., description="정답 여러개인경우 ,로구분(1,2,3,4,5) ")
     explanation: str = Field(..., description="해설")
     db_question_id: Optional[int] = Field(None, description="데이터베이스에 저장된 문항 ID")
+    batch_index: Optional[Union[int, str]] = Field(None, description="배치 인덱스 (숫자 또는 'retry_N')")
+    is_used: Optional[int] = Field(None, description="사용 여부 (1: 사용, 0: 여분)")
+    llm_difficulty: Optional[int] = Field(None, description="LLM 난이도 (1: 쉬움, 2: 보통, 3: 어려움) - DB 저장 시 자동으로 '쉬움', '보통', '어려움'으로 변환됨")
 
 
 # LLM 응답용 모델 (기존 실험 코드 구조)
@@ -139,6 +142,7 @@ class LLMQuestion(BaseModel):
     correct_answer: str = Field(..., description="정답  여러개인경우 ,로구분(1,2,3,4,5)")
     explanation: str = Field(..., description="정답 해설 및 오답 피하기를 포함한 해설")
     passage: Optional[str] = Field(default=None, description="필요한 경우 작성하며 줄바꿈(\\n)을 포함하여 가독성 있게 작성해야 한다.")
+    llm_difficulty: Optional[int] = Field(default=None, description="문항 난이도 (1: 쉬움, 2: 보통, 3: 어려움)")
     
     class Config:
         # 빈 문자열을 None으로 변환
@@ -168,11 +172,35 @@ class QuestionGenerationErrorResponse(BaseModel):
         }
 
 
+class BatchInfo(BaseModel):
+    """배치 생성 정보"""
+    batch_number: Union[int, str] = Field(..., description="배치 번호 (숫자 또는 '재요청_N')")
+    requested_count: int = Field(..., description="요청한 문항 수")
+    generated_count: int = Field(..., description="생성된 문항 수")
+    input_tokens: int = Field(0, description="입력 토큰 수")
+    output_tokens: int = Field(0, description="출력 토큰 수")
+    total_tokens: int = Field(0, description="총 토큰 수")
+    duration_seconds: float = Field(0, description="소요 시간 (초)")
+    error: Optional[str] = Field(None, description="에러 메시지 (있는 경우)")
+
+
+class GenerationMetadata(BaseModel):
+    """문항 생성 메타데이터"""
+    request_index: int = Field(..., description="요청 인덱스")
+    achievement_code: str = Field(..., description="성취기준 코드")
+    school_level: Optional[str] = Field(None, description="학교급")
+    total_questions: int = Field(..., description="총 생성된 문항 수")
+    requested_count: int = Field(..., description="요청한 문항 수")
+    generated_at: str = Field(..., description="생성 시각 (YYYYMMDD_HHMMSS)")
+    batches: List[BatchInfo] = Field(..., description="배치별 상세 정보")
+
+
 class QuestionGenerationSuccessResponse(BaseModel):
     """문항 생성 성공 응답"""
     success: bool = Field(True, description="성공여부")
     total_questions: int = Field(..., description="생성된 문항 수")
     questions: List[Question] = Field(..., description="생성된 문항 목록")
+    metadata: Optional[GenerationMetadata] = Field(None, description="생성 메타데이터 (배치 정보, 토큰 사용량 등)")
     message: Optional[str] = Field(None, description="추가 메시지")
 
     class Config:
@@ -204,6 +232,41 @@ class QuestionGenerationSuccessResponse(BaseModel):
                         "explanation": "학급 누리집은 댓글 기능을 통해 생산자와 수용자가 실시간으로 의견을 주고받을 수 있는 상호 작용적 특성을 가집니다."
                     }
                 ]
+            }
+        }
+
+
+class BatchJobStartResponse(BaseModel):
+    """배치 작업 시작 응답 (백그라운드 처리용)"""
+    success: bool = Field(..., description="작업 시작 성공 여부")
+    message: str = Field(..., description="응답 메시지")
+    batch_count: int = Field(..., description="처리할 배치 요청 수")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "배치 문항 생성이 백그라운드에서 시작되었습니다. 완료 후 DB에 자동 저장됩니다.",
+                "batch_count": 3
+            }
+        }
+
+
+class BatchJobErrorResponse(BaseModel):
+    """배치 작업 시작 실패 응답"""
+    success: bool = Field(False, description="작업 시작 실패")
+    message: str = Field(..., description="오류 메시지")
+    error: Optional[ErrorDetail] = Field(None, description="에러 상세 정보")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": False,
+                "message": "배치 작업 시작 중 오류가 발생했습니다.",
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "요청 데이터가 올바르지 않습니다."
+                }
             }
         }
 

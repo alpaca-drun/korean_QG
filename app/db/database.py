@@ -29,7 +29,8 @@ def get_db_connection():
             database=settings.db_database,
             charset='utf8mb4',
             cursorclass=DictCursor,
-            autocommit=False
+            autocommit=False,
+            init_command="SET time_zone = '+09:00'"  # KST 명시적 설정
         )
         yield connection
         connection.commit()
@@ -447,3 +448,9 @@ def search(
             cursor.execute(sql, params)
             return cursor.fetchall()
 
+def update_with_query(query: str, params: tuple):
+    """커스텀 쿼리로 업데이트"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.rowcount
