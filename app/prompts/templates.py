@@ -77,6 +77,9 @@ JSON 형식으로 출력해주세요:
         Returns:
             (system_prompt, user_prompt) 튜플
         """
+
+        print("🟣🟣ss🟣question_type")
+        print(request.question_type)
         # 성취기준 정보 텍스트 생성 (여러 개일 수 있음)
         achievement_text = ""
         if request.curriculum_info and len(request.curriculum_info) > 0:
@@ -94,26 +97,39 @@ JSON 형식으로 출력해주세요:
         print("🟣🟣🟣")
         print(achievement_text)
 
-        # 매체 타입에 따라 프롬프트 선택
+        # # 매체 타입에 따라 프롬프트 선택
+        # if system_prompt is None:
+        #     if request.study_area == "매체":
+        #         system_prompt_template = WRITING_SYSTEM_PROMPT
+        #     elif request.study_area == "말하기/듣기":
+        #         system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
+        #     else:
+        #         # 기본 프롬프트 (다른 매체 타입은 추후 추가)
+        #         system_prompt_template = cls.BASE_TEMPLATE
+        
+        # # media_type에 따라 프롬프트 템플릿 변경
+        # if user_prompt_template is None:
+        #     if request.study_area == "매체":
+        #         user_prompt_template = WRITING_USER_PROMPT_TEMPLATE
+        #     elif request.study_area == "말하기/듣기":
+        #         user_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
+        #     else:
+        #         # 기본 템플릿
+        #         user_prompt_template = cls.BASE_TEMPLATE
+
         if system_prompt is None:
-            if request.study_area == "매체":
-                system_prompt_template = WRITING_SYSTEM_PROMPT
-            elif request.study_area == "말하기/듣기":
+            if request.question_type == "5지선다":
                 system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
             else:
-                # 기본 프롬프트 (다른 매체 타입은 추후 추가)
-                system_prompt_template = cls.BASE_TEMPLATE
-        
-        # media_type에 따라 프롬프트 템플릿 변경
+                system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
+
         if user_prompt_template is None:
-            if request.study_area == "매체":
-                user_prompt_template = WRITING_USER_PROMPT_TEMPLATE
-            elif request.study_area == "말하기/듣기":
+            if request.question_type == "5지선다":
                 user_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
             else:
-                # 기본 템플릿
-                user_prompt_template = cls.BASE_TEMPLATE
-        
+                user_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
+
+
         # 사용자 프롬프트에 변수 채우기
         # 프롬프트에서는 항상 10문항씩 생성하도록 고정
         # question_count와 generation_count 둘 다 전달 (템플릿에 따라 다름)
