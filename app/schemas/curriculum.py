@@ -333,7 +333,7 @@ class PassageCustomUpdateRequest(BaseModel):
             "example": {
                 "custom_title": "수정된 커스텀 제목",
                 "title": "수정된 제목",
-                "context": "수정된 내용"
+                "context": "수정된 내용",
                 "scope_id": 123
             }
         }
