@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: KG_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-curriculum_db}
+      MYSQL_USER: ${DB_USER:-curriculum_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-curriculum_password}
+      TZ: Asia/Seoul
+    ports:
+      - "${DB_PORT:-8001}:3306"
+    volumes:
+      # 데이터 영구 저장
+      - ./docker/mariadb/data:/var/lib/mysql
+      # 백업 파일 저장
+      - ./docker/mariadb/backups:/backups
+      # 초기화 스크립트 (선택사항)
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d
+      # 설정 파일 (선택사항)
+      - ./docker/mariadb/conf.d:/etc/mysql/conf.d
+    networks:
+      - dev_dong_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max_allowed_packet=256M
+      --innodb_buffer_pool_size=512M
+
+networks:
+  dev_dong_network:
+    name: dev_dong_network
+    driver: bridge
+
