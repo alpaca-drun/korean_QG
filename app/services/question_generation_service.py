@@ -30,7 +30,7 @@ class QuestionGenerationService:
         
     async def generate_questions_batch(
         self,
-        requests: List[QuestionGeneration],
+        requests: List[QuestionGenerationRequest],
         current_user_id: str,
         provider: Optional[str] = None
     ) -> List[QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse]:
