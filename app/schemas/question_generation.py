@@ -49,6 +49,12 @@ class QuestionGenerationRequest(BaseModel):
     curriculum_info: List[CurriculumInfo] = Field(..., description="교육과정 정보")
     generation_count: int = Field(..., ge=1, le=50, description="생성할 문항 수", example=15)
     study_area: str = Field(default="writing", description="매체 타입 (writing, speaking, listening, reading)", example="writing")
+    
+    # 문항 생성 관련 필드
+    question_type: str = Field(..., description="문항유형(예:5지선다)")
+    stem_directive: Optional[str] = Field(None, description="발문 유형(예:~로 옳은것은)")
+    use_negative_word: bool = Field(default=False, description="부정어 사용 여부")
+    additional_prompt: Optional[str] = Field(None, description="추가 지시사항 (선택사항)")
     file_paths: Optional[List[str]] = Field(
         None, 
         description="업로드할 파일 경로 리스트 (파일명 또는 상대 경로, school_level에 따라 자동으로 분리된 폴더 사용)",
@@ -74,6 +80,10 @@ class QuestionGenerationRequest(BaseModel):
                 }],
                 "generation_count": 30,
                 "study_area": "writing",
+                "question_type": "5지선다",
+                "stem_directive": "~로 옳은것은",
+                "use_negative_word": False,
+                "additional_prompt": "추가 지시사항",
                 "file_paths": ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"],
                 "file_display_names": ["교과서론 1권", "교과서론 2권"]
             }

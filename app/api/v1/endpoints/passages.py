@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from typing import Optional
 from app.schemas.curriculum import (
     PassageResponse, 
@@ -9,6 +9,7 @@ from app.schemas.curriculum import (
 )
 from app.db.storage import get_db_connection
 import json
+from app.utils.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -73,7 +74,8 @@ async def get_passages(
     text_type: Optional[int] = Query(None, description="텍스트 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)", example=1),
     scope_id: Optional[int] = Query(None, description="스코프 ID", example=1),
     limit: int = Query(100, description="조회 개수 제한", ge=1, le=1000),
-    offset: int = Query(0, description="조회 시작 위치", ge=0)
+    offset: int = Query(0, description="조회 시작 위치", ge=0),
+    current_user_id: str = Depends(get_current_user)
 ):
     """
     지문 리스트를 반환합니다.
@@ -99,6 +101,7 @@ async def get_passages(
         )
     
     try:
+        user_id = int(current_user_id)
         with connection.cursor() as cursor:
             # scope_id 결정
             scope_ids = []
@@ -140,11 +143,11 @@ async def get_passages(
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            IFNULL(is_use, 1) as is_use
                     FROM passage_custom
-                    WHERE {where_clause}
+                    WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ORDER BY custom_passage_id DESC
                     LIMIT %s OFFSET %s
                 """
-                params.extend([limit, offset])
+                params.extend([user_id, limit, offset])
                 cursor.execute(sql, params)
             else:  # 전체 (원본 + 커스텀)
                 # 전체 개수 조회
@@ -152,10 +155,11 @@ async def get_passages(
                     SELECT COUNT(*) as total FROM (
                         SELECT passage_id FROM passages WHERE {where_clause}
                         UNION ALL
-                        SELECT custom_passage_id FROM passage_custom WHERE {where_clause}
+                        SELECT custom_passage_id FROM passage_custom WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ) as combined
                 """
                 count_params = params.copy()
+                count_params.append(user_id)
                 cursor.execute(count_sql, count_params)
                 total_result = cursor.fetchone()
                 total = total_result['total'] if total_result else 0
@@ -178,12 +182,12 @@ async def get_passages(
                            IFNULL(is_use, 1) as is_use,
                            2 as source_type
                     FROM passage_custom
-                    WHERE {where_clause}
+                    WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ORDER BY id DESC
                     LIMIT %s OFFSET %s
                 """
                 list_params = params.copy()
-                list_params.extend([limit, offset])
+                list_params.extend([user_id, limit, offset])
                 cursor.execute(sql, list_params)
                 passages = cursor.fetchall()
                 
@@ -332,7 +336,7 @@ async def get_passages(
     description="특정 지문의 상세 정보를 조회합니다.",
     tags=["지문"]
 )
-async def get_passage(passage_id: int):
+async def get_passage(passage_id: int, current_user_id: str = Depends(get_current_user)):
     """
     지문 ID로 특정 지문의 상세 정보를 반환합니다.
     
@@ -346,6 +350,7 @@ async def get_passage(passage_id: int):
         )
     
     try:
+        user_id = int(current_user_id)
         with connection.cursor() as cursor:
             # 원본 지문에서 먼저 조회
             sql = """
@@ -367,9 +372,9 @@ async def get_passage(passage_id: int):
                            NULL as description, scope_id,
                            IFNULL(is_use, 1) as is_use
                     FROM passage_custom
-                    WHERE custom_passage_id = %s
+                    WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
                 """
-                cursor.execute(sql, (passage_id,))
+                cursor.execute(sql, (passage_id, user_id))
                 passage = cursor.fetchone()
             
             if not passage:
@@ -453,7 +458,7 @@ async def get_passage(passage_id: int):
     description="특정 키워드를 포함하는 지문을 검색합니다.",
     tags=["지문"]
 )
-async def search_passages_by_keyword(keyword: str):
+async def search_passages_by_keyword(keyword: str, current_user_id: str = Depends(get_current_user)):
     """
     키워드를 포함하는 모든 지문을 반환합니다.
     
@@ -472,6 +477,7 @@ async def search_passages_by_keyword(keyword: str):
         )
     
     try:
+        user_id = int(current_user_id)
         with connection.cursor() as cursor:
             # 원본 지문과 커스텀 지문 모두 검색
             sql = """
@@ -487,11 +493,11 @@ async def search_passages_by_keyword(keyword: str):
                        context as content,
                        NULL as description, scope_id, NULL as achievement_standard_id
                 FROM passage_custom
-                WHERE (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+                WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
                 ORDER BY id DESC
             """
             search_pattern = f"%{keyword}%"
-            cursor.execute(sql, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+            cursor.execute(sql, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))
             passages = cursor.fetchall()
             
             if not passages:
@@ -660,7 +666,7 @@ async def search_passages_by_keyword(keyword: str):
     description="새로운 지문을 생성합니다.",
     tags=["지문"]
 )
-async def create_passage(request: PassageCreateRequest):
+async def create_passage(request: PassageCreateRequest, current_user_id: str = Depends(get_current_user)):
     """
     새로운 지문을 생성합니다.
     
@@ -681,6 +687,9 @@ async def create_passage(request: PassageCreateRequest):
         )
     
     try:
+        user_id = int(current_user_id)
+        if request.user_id != user_id:
+            raise HTTPException(status_code=403, detail="user_id가 현재 로그인 사용자와 일치하지 않습니다.")
         with connection.cursor() as cursor:
             # 1) scope_id 결정: request.scope_id 우선, 없으면 achievement_standard_id로 매핑
             scope_id = request.scope_id
@@ -704,7 +713,7 @@ async def create_passage(request: PassageCreateRequest):
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, (
-                request.user_id,
+                user_id,
                 scope_id,
                 request.custom_title or request.title,  # custom_title
                 request.title,  # title
@@ -762,7 +771,7 @@ async def create_passage(request: PassageCreateRequest):
     description="원본지문을 기반으로 지문을 생성합니다.",
     tags=["지문"]
 )
-async def update_passage(passage_id: int, request: PassageCreateFromSourceRequest):
+async def update_passage(passage_id: int, request: PassageCreateFromSourceRequest, current_user_id: str = Depends(get_current_user)):
     """
     원본 지문을 기반으로 새로운 지문을 생성합니다.
     
@@ -782,14 +791,15 @@ async def update_passage(passage_id: int, request: PassageCreateFromSourceReques
         )
     
     try:
+        user_id = int(current_user_id)
         with connection.cursor() as cursor:
             # 원본 지문 확인
             check_sql = """
                 SELECT passage_id, scope_id FROM passages WHERE passage_id = %s
                 UNION
-                SELECT custom_passage_id, scope_id FROM passage_custom WHERE custom_passage_id = %s
+                SELECT custom_passage_id, scope_id FROM passage_custom WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
             """
-            cursor.execute(check_sql, (passage_id, passage_id))
+            cursor.execute(check_sql, (passage_id, passage_id, user_id))
             source_passage = cursor.fetchone()
             
             if not source_passage:
@@ -806,32 +816,23 @@ async def update_passage(passage_id: int, request: PassageCreateFromSourceReques
             else:
                 scope_id = scope_ids[0]
             
-            # passages 테이블에 새 지문 저장
-            sql = """
-                INSERT INTO passages (title, context, auth, scope_id)
-                VALUES (%s, %s, NULL, %s)
+            # ✅ 사용자 커스텀 지문으로 저장 (passage_custom)
+            insert_sql = """
+                INSERT INTO passage_custom (user_id, scope_id, custom_title, title, auth, context, passage_id)
+                VALUES (%s, %s, %s, %s, NULL, %s, %s)
             """
-            cursor.execute(sql, (request.title, request.content, scope_id))
+            cursor.execute(insert_sql, (
+                user_id,
+                scope_id,
+                request.title,   # custom_title
+                request.title,   # title
+                request.content,
+                passage_id       # 원본 지문 ID 연결
+            ))
             connection.commit()
-            new_passage_id = cursor.lastrowid
-            
-            # 생성된 지문 조회
-            select_sql = """
-                SELECT passage_id as id, title, context as content, 
-                       NULL as description, scope_id
-                FROM passages
-                WHERE passage_id = %s
-            """
-            cursor.execute(select_sql, (new_passage_id,))
-            passage = cursor.fetchone()
-            
-            # 응답 형식 변환
-            item = dict(passage)
-            item['achievement_standard_id'] = request.achievement_standard_id
-            if item.get('description') is None:
-                item['description'] = ""
-            
-            return PassageResponse(**item)
+            new_custom_passage_id = cursor.lastrowid
+
+            return await get_passage(new_custom_passage_id, current_user_id=current_user_id)
             
     except HTTPException:
         raise
@@ -856,7 +857,7 @@ async def update_passage(passage_id: int, request: PassageCreateFromSourceReques
     description="실제 DELETE가 아니라 passage_custom.is_use=0으로 비활성 처리합니다.",
     tags=["지문"]
 )
-async def delete_passage(passage_id: int):
+async def delete_passage(passage_id: int, current_user_id: str = Depends(get_current_user)):
     """
     지문 ID를 기반으로 지문을 소프트 삭제 처리합니다.
     
@@ -872,14 +873,15 @@ async def delete_passage(passage_id: int):
         )
     
     try:
+        user_id = int(current_user_id)
         with connection.cursor() as cursor:
             # 커스텀 지문만 소프트 삭제 (is_use=0)
             sql = """
                 UPDATE passage_custom
                 SET is_use = 0
-                WHERE custom_passage_id = %s
+                WHERE custom_passage_id = %s AND user_id = %s
             """
-            cursor.execute(sql, (passage_id,))
+            cursor.execute(sql, (passage_id, user_id))
             updated = cursor.rowcount > 0
 
             if not updated:
