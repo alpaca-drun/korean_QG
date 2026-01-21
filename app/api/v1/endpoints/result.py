@@ -1,15 +1,16 @@
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import FileResponse
 from pathlib import Path
 import tempfile
 
 from app.download.dev import fill_table_from_list, get_question_data_from_db
+from app.db.database import select_one
 from app.schemas.curriculum import (
     ListResponse, 
     SelectSaveResultRequest,
     SelectSaveResultResponse
 )
-
+from app.utils.dependencies import get_current_user
 router = APIRouter()
 
 
@@ -34,13 +35,26 @@ DUMMY_SAVED_RESULTS = []
     tags=["결과 관리"]
 )
 async def get_result(
-    result_id: int = Query(..., description="결과 ID", example=1)
+    result_id: int = Query(..., description="결과 ID", example=1), 
+    current_user_id: str = Depends(get_current_user)
 ):
     """
     결과 ID를 기반으로 결과 리스트를 반환합니다.
     
     추후 DB 조회로 변경 예정입니다.
     """
+    # ✅ 임시 권한 체크:
+    # 현재는 result 관련 테이블이 없어 더미 데이터를 반환하므로,
+    # result_id를 project_id로 간주하여 해당 프로젝트 소유자인지 확인합니다.
+    user_id = int(current_user_id)
+    project = select_one(
+        "projects",
+        where={"project_id": result_id, "user_id": user_id, "is_deleted": False},
+        columns="project_id",
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="결과를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+
     # TODO: DB 조회로 변경
     filtered_results = [
         result for result in DUMMY_GENERATED_RESULTS 
@@ -66,7 +80,7 @@ async def get_result(
     description="선택한 결과들을 DB에 저장합니다.",
     tags=["결과 관리"]
 )
-async def save_selected_results(request: SelectSaveResultRequest):
+async def save_selected_results(request: SelectSaveResultRequest, current_user_id: str = Depends(get_current_user)):
     """
     선택한 결과들을 DB에 저장합니다.
     
@@ -93,6 +107,16 @@ async def save_selected_results(request: SelectSaveResultRequest):
     추후 DB 저장으로 변경 예정입니다.
     """
     # TODO: DB 저장으로 변경
+    # ✅ 임시 권한 체크 (더미 저장이므로 request.result_ids를 project_id로 간주)
+    user_id = int(current_user_id)
+    for rid in request.result_ids or []:
+        project = select_one(
+            "projects",
+            where={"project_id": rid, "user_id": user_id, "is_deleted": False},
+            columns="project_id",
+        )
+        if not project:
+            raise HTTPException(status_code=403, detail=f"저장 권한이 없습니다. (result_id={rid})")
     
     if not request.result_ids:
         return SelectSaveResultResponse(
@@ -165,7 +189,7 @@ async def save_selected_results(request: SelectSaveResultRequest):
     description="선택한 결과들을 DB에 수정합니다.",
     tags=["결과 관리"]
 )
-async def update_selected_results(request: SelectSaveResultRequest):
+async def update_selected_results(request: SelectSaveResultRequest, current_user_id: str = Depends(get_current_user)):
     """
     선택한 결과들을 DB에 저장합니다.
     
@@ -192,6 +216,16 @@ async def update_selected_results(request: SelectSaveResultRequest):
     추후 DB 저장으로 변경 예정입니다.
     """
     # TODO: DB 저장으로 변경
+    # ✅ 임시 권한 체크 (더미 수정이므로 request.result_ids를 project_id로 간주)
+    user_id = int(current_user_id)
+    for rid in request.result_ids or []:
+        project = select_one(
+            "projects",
+            where={"project_id": rid, "user_id": user_id, "is_deleted": False},
+            columns="project_id",
+        )
+        if not project:
+            raise HTTPException(status_code=403, detail=f"수정 권한이 없습니다. (result_id={rid})")
     
     if not request.result_ids:
         return SelectSaveResultResponse(
@@ -266,6 +300,7 @@ async def update_selected_results(request: SelectSaveResultRequest):
 async def download_selected_results(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
     category: str = Query("", description="문서 상단 {category} 치환 값", example="말하기듣기"),
+    current_user_id: str = Depends(get_current_user)
 ):
     """
     project_id로 문항을 조회하여 docx 파일로 반환합니다.
@@ -275,9 +310,16 @@ async def download_selected_results(
     if not template_path.exists():
         raise HTTPException(status_code=500, detail=f"템플릿 파일을 찾을 수 없습니다: {template_path}")
 
+    # ✅ 프로젝트 소유권 확인 (현재 로그인 사용자만 접근 가능)
+    user_id = int(current_user_id)
+    project = select_one("projects", where={"project_id": project_id, "user_id": user_id, "is_deleted": False}, columns="project_id")
+    if not project:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+
     # 데이터 조회
     try:
-        data_list = get_question_data_from_db(project_id)
+        # 내부에서도 user_id로 한번 더 검증/필터링
+        data_list = get_question_data_from_db(project_id, user_id=user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"문항 조회 실패: {str(e)}")
 

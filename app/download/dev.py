@@ -322,7 +322,7 @@ def get_project_id_from_env_or_arg(project_id: str | int | None = None) -> int:
         raise ValueError(f"PROJECT_ID가 정수가 아닙니다: {project_id}")
 
 
-def get_project_passage_text(project_id: int) -> str:
+def get_project_passage_text(project_id: int, user_id: int | None = None) -> str:
     """
     project_source_config를 기반으로 프로젝트의 지문(원본/커스텀)을 가져옵니다.
     - custom_passage_id가 있으면 passage_custom.context
@@ -341,6 +341,16 @@ def get_project_passage_text(project_id: int) -> str:
         ORDER BY psc.created_at DESC
         LIMIT 1
     """
+    # 프로젝트 소유권 검증(선택)
+    if user_id is not None:
+        ownership = execute_query_via_app_db(
+            "SELECT project_id FROM projects WHERE project_id = %s AND user_id = %s AND is_deleted = 0 LIMIT 1",
+            params=(project_id, user_id),
+            fetch=True,
+        )
+        if not ownership:
+            return ""
+
     results = execute_query_via_app_db(query, params=(project_id,), fetch=True)
     if not results:
         return ""
@@ -348,7 +358,7 @@ def get_project_passage_text(project_id: int) -> str:
     return (row.get("custom_context") or row.get("passage_context") or "").strip()
 
 
-def get_question_data_from_db(project_id: int | None = None):
+def get_question_data_from_db(project_id: int | None = None, user_id: int | None = None):
     """
     DB에서 질문(객관식/단답형/OX) 데이터를 가져오는 함수
     
@@ -360,7 +370,7 @@ def get_question_data_from_db(project_id: int | None = None):
     """
     # project_id_int = get_project_id_from_env_or_arg(project_id)
     project_id_int = project_id
-    passage_text = get_project_passage_text(project_id_int)
+    passage_text = get_project_passage_text(project_id_int, user_id=user_id)
     print(f"passage_text: {passage_text}")
     
     # ✅ 현재 DB 스키마 기반: multiple_choice_questions / short_answer_questions / true_false_questions
@@ -381,6 +391,7 @@ def get_question_data_from_db(project_id: int | None = None):
                 mcq.box_content AS box_content,
                 1 AS qtype
             FROM multiple_choice_questions mcq
+            JOIN projects p ON p.project_id = mcq.project_id
             WHERE mcq.project_id = %s
         )
         UNION ALL
@@ -399,6 +410,7 @@ def get_question_data_from_db(project_id: int | None = None):
                 saq.box_content AS box_content,
                 2 AS qtype
             FROM short_answer_questions saq
+            JOIN projects p2 ON p2.project_id = saq.project_id
             WHERE saq.project_id = %s
         )
         UNION ALL
@@ -417,6 +429,7 @@ def get_question_data_from_db(project_id: int | None = None):
                 NULL AS box_content,
                 3 AS qtype
             FROM true_false_questions tfq
+            JOIN projects p3 ON p3.project_id = tfq.project_id
             WHERE tfq.project_id = %s
         )
         ORDER BY created_at ASC
@@ -445,11 +458,23 @@ def get_question_data_from_db(project_id: int | None = None):
         #     print(f"   ⚠️ 경고: {env_prefix}_password 환경변수가 설정되지 않았습니다.")
         
         # print(f"   DB 연결 시도 중...")
-        results = execute_query_via_app_db(
-            query,
-            params=(project_id_int, project_id_int, project_id_int),
-            fetch=True,
+        # 프로젝트 소유권/삭제 여부 필터링(선택)
+        if user_id is None:
+            base_filters = " AND 1=1"
+            params = (project_id_int, project_id_int, project_id_int)
+        else:
+            base_filters = " AND p.user_id = %s AND p.is_deleted = 0"
+            # p2/p3도 동일하게 적용되도록 문자열 치환
+            params = (project_id_int, user_id, project_id_int, user_id, project_id_int, user_id)
+
+        filtered_query = (
+            query
+            .replace("WHERE mcq.project_id = %s", f"WHERE mcq.project_id = %s{base_filters}")
+            .replace("WHERE saq.project_id = %s", f"WHERE saq.project_id = %s AND p2.user_id = %s AND p2.is_deleted = 0" if user_id is not None else "WHERE saq.project_id = %s")
+            .replace("WHERE tfq.project_id = %s", f"WHERE tfq.project_id = %s AND p3.user_id = %s AND p3.is_deleted = 0" if user_id is not None else "WHERE tfq.project_id = %s")
         )
+
+        results = execute_query_via_app_db(filtered_query, params=params, fetch=True)
         
         if not results:
             print(f"   ⚠️ project_id={project_id_int}에 해당하는 문항 데이터가 없습니다.")
