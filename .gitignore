@@ -38,9 +38,9 @@ wheels/
 .DS_Store
 Thumbs.db
 
+<<<<<<< HEAD
 # git credentials (PAT etc.)
 .git-credentials
-.git/credentials
 
 # Docker - MariaDB 데이터 및 백업
 docker/mariadb/data/
@@ -51,3 +51,6 @@ docker/mariadb/backups/
 
 # Storage - 생성된 질문 파일들
 storage/
+=======
+.git/credentials
+>>>>>>> 7b938f4 (Fix : gitignore 수정)
