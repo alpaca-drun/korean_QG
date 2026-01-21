@@ -40,6 +40,7 @@ Thumbs.db
 
 # git credentials (PAT etc.)
 .git-credentials
+.git/credentials
 
 # Docker - MariaDB 데이터 및 백업
 docker/mariadb/data/
