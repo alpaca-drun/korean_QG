@@ -70,54 +70,54 @@ async def save_selected_results(request: QuestionMetaUpdateRequest, current_user
 #     description="feedback_score/is_used/modified_difficulty/modified_passage를 업데이트합니다.",
 #     tags=["결과 관리"]
 # )
-# async def update_selected_results(request: QuestionMetaUpdateRequest, current_user_id: str = Depends(get_current_user)):
-#     user_id = int(current_user_id)
+async def update_selected_results(request: QuestionMetaUpdateRequest, current_user_id: str = Depends(get_current_user)):
+    user_id = int(current_user_id)
 
-#     # 프로젝트 소유권 확인
-#     project = select_one(
-#         "projects",
-#         where={"project_id": request.project_id, "user_id": user_id, "is_deleted": False},
-#         columns="project_id",
-#     )
-#     if not project:
-#         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+    # 프로젝트 소유권 확인
+    project = select_one(
+        "projects",
+        where={"project_id": request.project_id, "user_id": user_id, "is_deleted": False},
+        columns="project_id",
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
 
-#     # 업데이트 데이터 구성 (전달된 값만)
-#     data = {}
-#     if request.feedback_score is not None:
-#         data["feedback_score"] = request.feedback_score
-#     if request.is_used is not None:
-#         data["is_used"] = int(request.is_used)
-#     if request.modified_difficulty is not None:
-#         data["modified_difficulty"] = request.modified_difficulty
-#     if request.modified_passage is not None:
-#         data["modified_passage"] = request.modified_passage
+    # 업데이트 데이터 구성 (전달된 값만)
+    data = {}
+    if request.feedback_score is not None:
+        data["feedback_score"] = request.feedback_score
+    if request.is_used is not None:
+        data["is_used"] = int(request.is_used)
+    if request.modified_difficulty is not None:
+        data["modified_difficulty"] = request.modified_difficulty
+    if request.modified_passage is not None:
+        data["modified_passage"] = request.modified_passage
 
-#     if not data:
-#         return QuestionMetaUpdateResponse(success=False, message="업데이트할 값이 없습니다.", updated_count=0)
+    if not data:
+        return QuestionMetaUpdateResponse(success=False, message="업데이트할 값이 없습니다.", updated_count=0)
 
-#     # 테이블/PK 매핑
-#     table_map = {
-#         "multiple_choice": ("multiple_choice_questions", "question_id"),
-#         "true_false": ("true_false_questions", "ox_question_id"),
-#         "short_answer": ("short_answer_questions", "short_question_id"),
-#     }
-#     if request.question_type not in table_map:
-#         raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다.")
+    # 테이블/PK 매핑
+    table_map = {
+        "multiple_choice": ("multiple_choice_questions", "question_id"),
+        "true_false": ("true_false_questions", "ox_question_id"),
+        "short_answer": ("short_answer_questions", "short_question_id"),
+    }
+    if request.question_type not in table_map:
+        raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다.")
 
-#     table, pk = table_map[request.question_type]
+    table, pk = table_map[request.question_type]
 
-#     # project_id까지 where에 포함해 타 프로젝트 문항 업데이트 방지
-#     updated_count = update(
-#         table=table,
-#         data=data,
-#         where={pk: request.question_id, "project_id": request.project_id},
-#     )
+    # project_id까지 where에 포함해 타 프로젝트 문항 업데이트 방지
+    updated_count = update(
+        table=table,
+        data=data,
+        where={pk: request.question_id, "project_id": request.project_id},
+    )
 
-#     if updated_count <= 0:
-#         return QuestionMetaUpdateResponse(success=False, message="업데이트 대상 문항을 찾을 수 없습니다.", updated_count=0)
+    if updated_count <= 0:
+        return QuestionMetaUpdateResponse(success=False, message="업데이트 대상 문항을 찾을 수 없습니다.", updated_count=0)
 
-#     return QuestionMetaUpdateResponse(success=True, message="업데이트 완료", updated_count=updated_count)
+    return QuestionMetaUpdateResponse(success=True, message="업데이트 완료", updated_count=updated_count)
 
 
 @router.get(

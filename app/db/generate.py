@@ -349,7 +349,7 @@ def get_project_all_questions(project_id: int):
             is_used,
             created_at
         FROM multiple_choice_questions
-        WHERE project_id = %s
+        WHERE project_id = %s AND IFNULL(is_used, 1) = 1
     """
     
     # OX 문항
@@ -364,7 +364,7 @@ def get_project_all_questions(project_id: int):
             is_used,
             created_at
         FROM true_false_questions
-        WHERE project_id = %s
+        WHERE project_id = %s AND IFNULL(is_used, 1) = 1
     """
     
     # 단답형 문항
@@ -379,7 +379,7 @@ def get_project_all_questions(project_id: int):
             is_used,
             created_at
         FROM short_answer_questions
-        WHERE project_id = %s
+        WHERE project_id = %s AND IFNULL(is_used, 1) = 1
     """
     
     # UNION으로 통합
@@ -389,7 +389,7 @@ def get_project_all_questions(project_id: int):
         {tf_query}
         UNION ALL
         {sa_query}
-        ORDER BY created_at DESC
+        ORDER BY id ASC
     """
     
     results = select_with_query(union_query, (project_id, project_id, project_id))
