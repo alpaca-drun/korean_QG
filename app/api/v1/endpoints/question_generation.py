@@ -134,10 +134,22 @@ async def generate_questions_batch_async(
         question_generation_requests = []
         ## DB에서 프로젝트 정보 조회
         generation_configs = get_generation_config(requests.project_id)
-
+        
+        # generation_configs가 None인 경우 처리
+        if not generation_configs:
+            return BatchJobErrorResponse(
+                success=False,
+                message=f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                error=ErrorDetail(
+                    code="PROJECT_NOT_FOUND",
+                    message=f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                    details="프로젝트가 존재하지 않거나 설정이 완료되지 않았습니다."
+                )
+            )
         
         obj_dict = requests.model_dump()
         obj_dict["config_id"] = generation_configs.get("config_id")
+        obj_dict["project_name"] = generation_configs.get("project_name", "알 수 없는 프로젝트")
         obj_dict["passage"] = generation_configs.get("passage")
         obj_dict["learning_objective"] = generation_configs.get("learning_objective")
         obj_dict["learning_activity"] = generation_configs.get("learning_activity") or ""

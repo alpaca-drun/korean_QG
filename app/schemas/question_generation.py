@@ -36,6 +36,7 @@ class QuestionGenerationRequest(BaseModel):
     """문항 생성 요청 스키마"""
     config_id: int = Field(..., description="설정 ID")
     project_id: int = Field(..., description="프로젝트 ID")
+    project_name: Optional[str] = Field(None, description="프로젝트 이름 (메일 전송용)")
     passage: str = Field(..., description="원본 지문 텍스트")
     passage_title: Optional[str] = Field(None, description="작품 이름")
     passage_author: Optional[str] = Field(None, description="작품 저자")
