@@ -230,3 +230,18 @@ async def get_available_providers():
         "default": "gemini"
     }
 
+
+from app.clients.email import get_email_client
+@router.post(
+    "/send-email",
+    summary="이메일 전송",
+    description="이메일을 전송합니다.",
+    tags=["이메일"]
+)
+async def send_email(to_address: str, project_name: str, success_count: int, total_count: int, total_questions: int):
+    email_client = get_email_client()
+    email_client.send_success_email(to_address, project_name, success_count, total_count, total_questions)
+    return {
+        "success": True,
+        "message": "이메일 전송 성공"
+    }

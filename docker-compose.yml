@@ -27,6 +27,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-gemini}
       
+      # AWS SES 이메일 설정
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SES_REGION: ${AWS_SES_REGION:-ap-northeast-2}
+      AWS_SES_SENDER_EMAIL: ${AWS_SES_SENDER_EMAIL:-no-reply@example.com}
+      AWS_SES_BCC_EMAIL: ${AWS_SES_BCC_EMAIL:-}
+      
       # 기타 설정
       DEBUG: ${DEBUG:-True}
       TZ: Asia/Seoul
