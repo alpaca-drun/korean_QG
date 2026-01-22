@@ -189,6 +189,25 @@ class SelectSaveResultResponse(BaseModel):
         }
 
 
+class QuestionMetaUpdateRequest(BaseModel):
+    """문항 메타데이터(피드백/사용여부/난이도/변형지문) 업데이트 요청"""
+    project_id: int
+    question_type: str  # "multiple_choice" | "true_false" | "short_answer"
+    question_id: int
+
+    feedback_score: Optional[float] = None
+    is_used: Optional[int] = None  # 1/0 (DB 호환)
+    modified_difficulty: Optional[str] = None
+    modified_passage: Optional[str] = None
+
+
+class QuestionMetaUpdateResponse(BaseModel):
+    """문항 메타데이터 업데이트 응답"""
+    success: bool
+    message: str
+    updated_count: int = 0
+
+
 
 # Passages 관련 스키마 (DB 스키마 기반)
 class PassageDBResponse(BaseModel):
@@ -236,15 +255,14 @@ class PassageDBCreateRequest(BaseModel):
 
 class ScopeCreateResponse(BaseModel):
     """범위 생성 응답 스키마"""
+    project_id: int
     scope_id: int
 
 
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "새 지문 제목",
-                "context": "지문 내용입니다.",
-                "auth": "저자명",
+                "projetct_id": "1",
                 "scope_id": 1
             }
         }

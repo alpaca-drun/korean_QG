@@ -70,8 +70,8 @@ def get_scope_ids_by_achievement(achievement_standard_id: int, connection) -> li
     tags=["지문"]
 )
 async def get_passages(
-    achievement_standard_id: Optional[int] = Query(None, description="성취기준 ID", example=1),
-    text_type: Optional[int] = Query(None, description="텍스트 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)", example=1),
+    achievement_standard_id: int = Query(None, description="성취기준 ID", example=1),
+    text_type: int = Query(None, description="텍스트 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)", example=1),
     scope_id: Optional[int] = Query(None, description="스코프 ID", example=1),
     limit: int = Query(100, description="조회 개수 제한", ge=1, le=1000),
     offset: int = Query(0, description="조회 시작 위치", ge=0),
@@ -127,7 +127,8 @@ async def get_passages(
                 sql = f"""
                     SELECT passage_id as id, title, context as content, 
                            NULL as description, scope_id, NULL as achievement_standard_id,
-                           1 as is_use
+                           1 as is_use,
+                           0 as is_custom
                     FROM passages
                     WHERE {where_clause}
                     ORDER BY passage_id DESC
@@ -141,7 +142,8 @@ async def get_passages(
                            COALESCE(custom_title, title) as title, 
                            context as content,
                            NULL as description, scope_id, NULL as achievement_standard_id,
-                           IFNULL(is_use, 1) as is_use
+                           IFNULL(is_use, 1) as is_use,
+                           1 as is_custom
                     FROM passage_custom
                     WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ORDER BY custom_passage_id DESC
@@ -169,7 +171,8 @@ async def get_passages(
                     SELECT passage_id as id, title, context as content, 
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            1 as is_use,
-                           1 as source_type
+                           1 as source_type,
+                           0 as is_custom
                     FROM passages
                     WHERE {where_clause}
                     
@@ -180,7 +183,8 @@ async def get_passages(
                            context as content,
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            IFNULL(is_use, 1) as is_use,
-                           2 as source_type
+                           2 as source_type,
+                           1 as is_custom
                     FROM passage_custom
                     WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ORDER BY id DESC
@@ -239,6 +243,13 @@ async def get_passages(
                             item['is_use'] = int(item['is_use']) if item['is_use'] is not None else 1
                         except (ValueError, TypeError):
                             item['is_use'] = 1
+                    # is_custom 설정 (source_type 기반)
+                    if item.get('source_type') == 1:
+                        # 원본 지문: is_custom = 0
+                        item['is_custom'] = 0
+                    elif item.get('source_type') == 2:
+                        # 커스텀 지문: is_custom = 1
+                        item['is_custom'] = 1
                     # source_type 제거 (응답에 포함하지 않음)
                     item.pop('source_type', None)
                     items.append(item)
@@ -258,6 +269,13 @@ async def get_passages(
             items = []
             for passage in passages:
                 item = dict(passage)
+                # is_custom 설정 (SQL에서 이미 설정되어 있지만, 명시적으로 정리)
+                if text_type == 1:
+                    # 원본 지문만: is_custom = 0
+                    item['is_custom'] = 0
+                elif text_type == 2:
+                    # 커스텀 지문만: is_custom = 1
+                    item['is_custom'] = 1
                 # achievement_standard_id가 None이면 scope_id로 찾기
                 if item.get('achievement_standard_id') is None and item.get('scope_id'):
                     with connection.cursor() as inner_cursor:
@@ -336,11 +354,16 @@ async def get_passages(
     description="특정 지문의 상세 정보를 조회합니다.",
     tags=["지문"]
 )
-async def get_passage(passage_id: int, current_user_id: str = Depends(get_current_user)):
+async def get_passage(
+    passage_id: int,
+    source_type: Optional[int] = Query(None, description="지문 소스 타입 (1: 원본 지문, 2: 커스텀 지문, None: 자동 검색)", example=1),
+    current_user_id: str = Depends(get_current_user)
+):
     """
     지문 ID로 특정 지문의 상세 정보를 반환합니다.
     
     - **passage_id**: 지문 ID
+    - **source_type**: 지문 소스 타입 (1: passages 테이블, 2: passage_custom 테이블, None: 둘 다 검색)
     """
     connection = get_db_connection()
     if not connection:
@@ -352,19 +375,20 @@ async def get_passage(passage_id: int, current_user_id: str = Depends(get_curren
     try:
         user_id = int(current_user_id)
         with connection.cursor() as cursor:
-            # 원본 지문에서 먼저 조회
-            sql = """
-                SELECT passage_id as id, title, context as content, 
-                       NULL as description, scope_id,
-                       1 as is_use
-                FROM passages
-                WHERE passage_id = %s
-            """
-            cursor.execute(sql, (passage_id,))
-            passage = cursor.fetchone()
+            passage = None
             
-            # 원본 지문에 없으면 커스텀 지문에서 조회
-            if not passage:
+            # source_type에 따라 조회
+            if source_type == 1:  # 원본 지문만
+                sql = """
+                    SELECT passage_id as id, title, context as content, 
+                           NULL as description, scope_id,
+                           1 as is_use
+                    FROM passages
+                    WHERE passage_id = %s
+                """
+                cursor.execute(sql, (passage_id,))
+                passage = cursor.fetchone()
+            elif source_type == 2:  # 커스텀 지문만
                 sql = """
                     SELECT custom_passage_id as id, 
                            COALESCE(custom_title, title) as title, 
@@ -376,6 +400,31 @@ async def get_passage(passage_id: int, current_user_id: str = Depends(get_curren
                 """
                 cursor.execute(sql, (passage_id, user_id))
                 passage = cursor.fetchone()
+            else:  # None: 자동 검색 (원본 먼저, 없으면 커스텀)
+                # 원본 지문에서 먼저 조회
+                sql = """
+                    SELECT passage_id as id, title, context as content, 
+                           NULL as description, scope_id,
+                           1 as is_use
+                    FROM passages
+                    WHERE passage_id = %s
+                """
+                cursor.execute(sql, (passage_id,))
+                passage = cursor.fetchone()
+                
+                # 원본 지문에 없으면 커스텀 지문에서 조회
+                if not passage:
+                    sql = """
+                        SELECT custom_passage_id as id, 
+                               COALESCE(custom_title, title) as title, 
+                               context as content,
+                               NULL as description, scope_id,
+                               IFNULL(is_use, 1) as is_use
+                        FROM passage_custom
+                        WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
+                    """
+                    cursor.execute(sql, (passage_id, user_id))
+                    passage = cursor.fetchone()
             
             if not passage:
                 raise HTTPException(
@@ -458,11 +507,16 @@ async def get_passage(passage_id: int, current_user_id: str = Depends(get_curren
     description="특정 키워드를 포함하는 지문을 검색합니다.",
     tags=["지문"]
 )
-async def search_passages_by_keyword(keyword: str, current_user_id: str = Depends(get_current_user)):
+async def search_passages_by_keyword(
+    keyword: str,
+    source_type: Optional[int] = Query(None, description="지문 소스 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)", example=1),
+    current_user_id: str = Depends(get_current_user)
+):
     """
-    키워드를 포함하는 모든 지문을 반환합니다.
+    키워드를 포함하는 지문을 반환합니다.
     
     - **keyword**: 검색할 키워드
+    - **source_type**: 지문 소스 타입 (1: passages 테이블만, 2: passage_custom 테이블만, None: 둘 다)
     
     지문의 제목(title), 내용(context)에서 키워드를 검색합니다.
     
@@ -479,25 +533,48 @@ async def search_passages_by_keyword(keyword: str, current_user_id: str = Depend
     try:
         user_id = int(current_user_id)
         with connection.cursor() as cursor:
-            # 원본 지문과 커스텀 지문 모두 검색
-            sql = """
-                SELECT passage_id as id, title, context as content, 
-                       NULL as description, scope_id, NULL as achievement_standard_id
-                FROM passages
-                WHERE title LIKE %s OR context LIKE %s
-                
-                UNION ALL
-                
-                SELECT custom_passage_id as id, 
-                       COALESCE(custom_title, title) as title, 
-                       context as content,
-                       NULL as description, scope_id, NULL as achievement_standard_id
-                FROM passage_custom
-                WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
-                ORDER BY id DESC
-            """
             search_pattern = f"%{keyword}%"
-            cursor.execute(sql, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))
+            
+            # source_type에 따라 다른 쿼리 실행
+            if source_type == 1:  # 원본 지문만
+                sql = """
+                    SELECT passage_id as id, title, context as content, 
+                           NULL as description, scope_id, NULL as achievement_standard_id
+                    FROM passages
+                    WHERE title LIKE %s OR context LIKE %s
+                    ORDER BY id DESC
+                """
+                cursor.execute(sql, (search_pattern, search_pattern))
+            elif source_type == 2:  # 커스텀 지문만
+                sql = """
+                    SELECT custom_passage_id as id, 
+                           COALESCE(custom_title, title) as title, 
+                           context as content,
+                           NULL as description, scope_id, NULL as achievement_standard_id
+                    FROM passage_custom
+                    WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+                    ORDER BY id DESC
+                """
+                cursor.execute(sql, (user_id, search_pattern, search_pattern, search_pattern))
+            else:  # None: 전체 (원본 + 커스텀)
+                sql = """
+                    SELECT passage_id as id, title, context as content, 
+                           NULL as description, scope_id, NULL as achievement_standard_id
+                    FROM passages
+                    WHERE title LIKE %s OR context LIKE %s
+                    
+                    UNION ALL
+                    
+                    SELECT custom_passage_id as id, 
+                           COALESCE(custom_title, title) as title, 
+                           context as content,
+                           NULL as description, scope_id, NULL as achievement_standard_id
+                    FROM passage_custom
+                    WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+                    ORDER BY id DESC
+                """
+                cursor.execute(sql, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))
+            
             passages = cursor.fetchall()
             
             if not passages:
@@ -857,13 +934,18 @@ async def update_passage(passage_id: int, request: PassageCreateFromSourceReques
     description="실제 DELETE가 아니라 passage_custom.is_use=0으로 비활성 처리합니다.",
     tags=["지문"]
 )
-async def delete_passage(passage_id: int, current_user_id: str = Depends(get_current_user)):
+async def delete_passage(
+    passage_id: int,
+    source_type: Optional[int] = Query(None, description="지문 소스 타입 (1: 원본 지문, 2: 커스텀 지문, None: 자동 판단)", example=2),
+    current_user_id: str = Depends(get_current_user)
+):
     """
     지문 ID를 기반으로 지문을 소프트 삭제 처리합니다.
     
-    - **passage_id**: 커스텀 지문 ID (passage_custom.custom_passage_id)
+    - **passage_id**: 지문 ID
+    - **source_type**: 지문 소스 타입 (1: passages 테이블, 2: passage_custom 테이블, None: 자동 판단)
     
-    주의: 원본 지문(passages)은 삭제하지 않습니다.
+    주의: 원본 지문(passages)은 삭제할 수 없습니다. source_type=1이면 400 에러를 반환합니다.
     """
     connection = get_db_connection()
     if not connection:
@@ -875,7 +957,14 @@ async def delete_passage(passage_id: int, current_user_id: str = Depends(get_cur
     try:
         user_id = int(current_user_id)
         with connection.cursor() as cursor:
-            # 커스텀 지문만 소프트 삭제 (is_use=0)
+            # source_type이 1이면 원본 지문 삭제 시도 → 거부
+            if source_type == 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="원본 지문(passages)은 삭제할 수 없습니다. 커스텀 지문(passage_custom)만 삭제 가능합니다."
+                )
+            
+            # source_type이 2이거나 None인 경우: 커스텀 지문 삭제 시도
             sql = """
                 UPDATE passage_custom
                 SET is_use = 0
@@ -885,14 +974,15 @@ async def delete_passage(passage_id: int, current_user_id: str = Depends(get_cur
             updated = cursor.rowcount > 0
 
             if not updated:
-                # 원본 지문(passages)인 경우는 삭제 불가
-                check_sql = "SELECT passage_id FROM passages WHERE passage_id = %s"
-                cursor.execute(check_sql, (passage_id,))
-                if cursor.fetchone():
-                    raise HTTPException(
-                        status_code=400,
-                        detail="원본 지문(passages)은 소프트 삭제 대상이 아닙니다. 커스텀 지문(passage_custom)만 is_use=0 처리합니다."
-                    )
+                # source_type이 None이고 커스텀 지문에 없으면 원본 지문인지 확인
+                if source_type is None:
+                    check_sql = "SELECT passage_id FROM passages WHERE passage_id = %s"
+                    cursor.execute(check_sql, (passage_id,))
+                    if cursor.fetchone():
+                        raise HTTPException(
+                            status_code=400,
+                            detail="원본 지문(passages)은 삭제할 수 없습니다. 커스텀 지문(passage_custom)만 삭제 가능합니다."
+                        )
                 raise HTTPException(
                     status_code=404,
                     detail=f"커스텀 지문 ID {passage_id}를 찾을 수 없습니다."
