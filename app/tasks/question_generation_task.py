@@ -190,7 +190,9 @@ class QuestionGenerationTask:
                 )
                 
                 # 프로젝트 이름 가져오기 (첫 번째 요청에서)
-                project_name = requests[0].project_name if requests else "알 수 없는 프로젝트"
+                project_name = getattr(requests[0], 'project_name', None) if requests else None
+                if not project_name:
+                    project_name = "알 수 없는 프로젝트"
                 
                 # 사용자 이메일 가져오기
                 user_email = self._get_user_email(user_id)
@@ -200,7 +202,7 @@ class QuestionGenerationTask:
                     email_sent = email_client.send_success_email(
                         to_address=user_email,
                         project_name=project_name,
-                        success_count=success_count,
+                        success_count=success_count,    
                         total_count=total_count,
                         total_questions=total_questions
                     )
@@ -249,25 +251,19 @@ class QuestionGenerationTask:
             Optional[str]: 사용자 이메일 (없으면 None)
         """
         try:
-            from app.db.database import get_db_connection
+            from app.db.database import select_one
             
-            conn = get_db_connection()
-            if not conn:
-                print(f"⚠️ DB 연결 실패")
-                return None
+            print(f"🔍 사용자 이메일 조회: user_id={user_id}")
             
-            cursor = conn.cursor()
+            # select_one 사용 (훨씬 간단!)
+            user = select_one(
+                table="users",
+                where={"user_id": user_id, "is_active": 1},
+                columns="email"
+            )
             
-            # users 테이블에서 이메일 조회
-            query = "SELECT email FROM users WHERE id = %s"
-            cursor.execute(query, (user_id,))
-            result = cursor.fetchone()
-            
-            cursor.close()
-            conn.close()
-            
-            if result and result[0]:
-                return result[0]
+            if user and user.get('email'):
+                return user['email']
             else:
                 print(f"⚠️ 사용자를 찾을 수 없음: user_id={user_id}")
                 return None

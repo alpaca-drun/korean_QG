@@ -185,3 +185,9 @@ class ProjectResponse(BaseModel):
     message: str = Field(default="프로젝트 정보 조회 성공", description="메시지")
     project_id: int = Field(..., description="프로젝트 ID")
     status: str = Field(..., description="상태")
+
+
+class SuccessResponse(BaseModel):
+    """성공 응답"""
+    success: bool = Field(default=True, description="성공 여부")
+    message: str = Field(default="요청이 성공적으로 처리되었습니다.", description="메시지")

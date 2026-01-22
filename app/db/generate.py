@@ -76,6 +76,7 @@ def get_generation_config(project_id: int):
     query = """
         SELECT 
             psc.config_id,
+            pr.project_name,
             COALESCE(cp.context, p.context) AS passage,
             COALESCE(cp.title, p.title) AS title,
             COALESCE(cp.auth, p.auth) AS auth,
@@ -336,50 +337,110 @@ def save_questions_batch_to_db(
 # ===========================
 
 def get_project_all_questions(project_id: int):
-    """프로젝트의 모든 문항 조회 (객관식, OX, 단답형 통합)"""
-    # 객관식 문항
+    """프로젝트의 모든 문항 조회 (객관식, OX, 단답형 통합) - 지문 정보 포함"""
+    # 객관식 문항 (추가 필드 포함)
     mc_query = """
         SELECT 
             'multiple_choice' as question_type,
-            question_id as id,
-            question,
-            answer,
-            answer_explain,
-            feedback_score,
-            is_used,
-            created_at
-        FROM multiple_choice_questions
-        WHERE project_id = %s AND IFNULL(is_used, 1) = 1
+            mcq.question_id as id,
+            mcq.question,
+            mcq.answer,
+            mcq.answer_explain,
+            mcq.feedback_score,
+            mcq.is_used,
+            mcq.created_at,
+            mcq.box_content,
+            mcq.option1,
+            mcq.option2,
+            mcq.option3,
+            mcq.option4,
+            mcq.option5,
+            mcq.llm_difficulty,
+            mcq.modified_difficulty,
+            mcq.modified_passage,
+            -- 지문 정보
+            COALESCE(p.context, pc.context) as passage_content,
+            COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
+            CASE 
+                WHEN psc.passage_id IS NOT NULL THEN 0
+                WHEN psc.custom_passage_id IS NOT NULL THEN 1
+                ELSE NULL
+            END as passage_is_custom
+        FROM multiple_choice_questions mcq
+        LEFT JOIN project_source_config psc ON mcq.project_id = psc.project_id
+        LEFT JOIN passages p ON psc.passage_id = p.passage_id
+        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
+        WHERE mcq.project_id = %s AND IFNULL(mcq.is_used, 1) = 1
     """
     
     # OX 문항
     tf_query = """
         SELECT 
             'true_false' as question_type,
-            ox_question_id as id,
-            question,
-            answer,
-            answer_explain,
-            feedback_score,
-            is_used,
-            created_at
-        FROM true_false_questions
-        WHERE project_id = %s AND IFNULL(is_used, 1) = 1
+            tfq.ox_question_id as id,
+            tfq.question,
+            tfq.answer,
+            tfq.answer_explain,
+            tfq.feedback_score,
+            tfq.is_used,
+            tfq.created_at,
+            NULL as box_content,
+            NULL as option1,
+            NULL as option2,
+            NULL as option3,
+            NULL as option4,
+            NULL as option5,
+            NULL as llm_difficulty,
+            NULL as modified_difficulty,
+            NULL as modified_passage,
+            -- 지문 정보
+            COALESCE(p.context, pc.context) as passage_content,
+            COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
+            CASE 
+                WHEN psc.passage_id IS NOT NULL THEN 0
+                WHEN psc.custom_passage_id IS NOT NULL THEN 1
+                ELSE NULL
+            END as passage_is_custom
+        FROM true_false_questions tfq
+        LEFT JOIN project_source_config psc ON tfq.project_id = psc.project_id
+        LEFT JOIN passages p ON psc.passage_id = p.passage_id
+        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
+        WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
     
     # 단답형 문항
     sa_query = """
         SELECT 
             'short_answer' as question_type,
-            short_question_id as id,
-            question,
-            answer,
-            answer_explain,
-            feedback_score,
-            is_used,
-            created_at
-        FROM short_answer_questions
-        WHERE project_id = %s AND IFNULL(is_used, 1) = 1
+            saq.short_question_id as id,
+            saq.question,
+            saq.answer,
+            saq.answer_explain,
+            saq.feedback_score,
+            saq.is_used,
+            saq.created_at,
+            NULL as box_content,
+            NULL as option1,
+            NULL as option2,
+            NULL as option3,
+            NULL as option4,
+            NULL as option5,
+            NULL as llm_difficulty,
+            NULL as modified_difficulty,
+            NULL as modified_passage,
+            -- 지문 정보
+            COALESCE(p.context, pc.context) as passage_content,
+            COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
+            CASE 
+                WHEN psc.passage_id IS NOT NULL THEN 0
+                WHEN psc.custom_passage_id IS NOT NULL THEN 1
+                ELSE NULL
+            END as passage_is_custom
+        FROM short_answer_questions saq
+        LEFT JOIN project_source_config psc ON saq.project_id = psc.project_id
+        LEFT JOIN passages p ON psc.passage_id = p.passage_id
+        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
+        WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
     """
     
     # UNION으로 통합

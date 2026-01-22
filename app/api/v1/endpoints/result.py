@@ -4,14 +4,15 @@ from pathlib import Path
 import tempfile
 
 from app.download.dev import fill_table_from_list, get_question_data_from_db
-from app.db.database import select_one, update
+from app.db.database import select_one, update, select_with_query
 from app.db.generate import get_project_all_questions
 from app.schemas.curriculum import (
     ListResponse, 
     SelectSaveResultRequest,
     SelectSaveResultResponse,
     QuestionMetaUpdateRequest,
-    QuestionMetaUpdateResponse
+    QuestionMetaUpdateResponse,
+    QuestionMetaBatchUpdateRequest
 )
 from app.utils.dependencies import get_current_user
 router = APIRouter()
@@ -54,13 +55,160 @@ async def get_result(
 @router.post(
     "/save",
     response_model=QuestionMetaUpdateResponse,
-    summary="문항 메타데이터 저장(=업데이트)",
-    description="save와 update는 동일 기능입니다. feedback_score/is_used/modified_difficulty/modified_passage를 업데이트합니다.",
+    summary="문항 메타데이터 일괄 저장(=업데이트)",
+    description="여러 문항의 메타데이터를 한 번에 업데이트합니다. feedback_score/is_used/modified_difficulty를 업데이트합니다.",
     tags=["결과 관리"]
 )
-async def save_selected_results(request: QuestionMetaUpdateRequest, current_user_id: str = Depends(get_current_user)):
-    # save는 update의 별칭
-    return await update_selected_results(request, current_user_id)
+async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current_user_id: str = Depends(get_current_user)):
+    """
+    여러 문항의 메타데이터를 한 번에 업데이트합니다.
+    
+    **요청 형식:**
+    ```json
+    {
+      "items": [
+        {
+          "project_id": 1,
+          "question_type": "multiple_choice",
+          "question_id": 123,
+          "feedback_score": 8.5,
+          "is_used": 1,
+          "modified_difficulty": "상"
+        },
+        {
+          "project_id": 1,
+          "question_type": "true_false",
+          "question_id": 456,
+          "feedback_score": 7.0,
+          "is_used": 1
+        }
+      ]
+    }
+    ```
+    """
+    user_id = int(current_user_id)
+    
+    if not request.items:
+        return QuestionMetaUpdateResponse(
+            success=False,
+            message="업데이트할 문항이 없습니다.",
+            updated_count=0,
+            failed_count=0,
+            results=[]
+        )
+    
+    # 프로젝트 소유권 확인 (모든 문항이 같은 project_id를 가져야 함)
+    project_ids = set(item.project_id for item in request.items)
+    if len(project_ids) > 1:
+        return QuestionMetaUpdateResponse(
+            success=False,
+            message="모든 문항은 같은 project_id를 가져야 합니다.",
+            updated_count=0,
+            failed_count=len(request.items),
+            results=[]
+        )
+    
+    project_id = list(project_ids)[0]
+    project = select_one(
+        "projects",
+        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+        columns="project_id",
+    )
+    if not project:
+        return QuestionMetaUpdateResponse(
+            success=False,
+            message="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)",
+            updated_count=0,
+            failed_count=len(request.items),
+            results=[]
+        )
+    
+    # 테이블/PK 매핑
+    table_map = {
+        "multiple_choice": ("multiple_choice_questions", "question_id"),
+        "true_false": ("true_false_questions", "ox_question_id"),
+        "short_answer": ("short_answer_questions", "short_question_id"),
+    }
+    
+    # 각 문항 업데이트
+    results = []
+    updated_count = 0
+    failed_count = 0
+    
+    for item in request.items:
+        try:
+            # question_type 검증
+            if item.question_type not in table_map:
+                results.append({
+                    "question_type": item.question_type,
+                    "question_id": item.question_id,
+                    "success": False,
+                    "message": "question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다."
+                })
+                failed_count += 1
+                continue
+            
+            # 업데이트 데이터 구성 (전달된 값만)
+            data = {}
+            if item.feedback_score is not None:
+                data["feedback_score"] = item.feedback_score
+            if item.is_used is not None:
+                data["is_used"] = int(item.is_used)
+            if item.modified_difficulty is not None:
+                data["modified_difficulty"] = item.modified_difficulty
+            
+            if not data:
+                results.append({
+                    "question_type": item.question_type,
+                    "question_id": item.question_id,
+                    "success": False,
+                    "message": "업데이트할 값이 없습니다."
+                })
+                failed_count += 1
+                continue
+            
+            table, pk = table_map[item.question_type]
+            
+            # project_id까지 where에 포함해 타 프로젝트 문항 업데이트 방지
+            updated = update(
+                table=table,
+                data=data,
+                where={pk: item.question_id, "project_id": item.project_id},
+            )
+            
+            if updated <= 0:
+                results.append({
+                    "question_type": item.question_type,
+                    "question_id": item.question_id,
+                    "success": False,
+                    "message": "업데이트 대상 문항을 찾을 수 없습니다."
+                })
+                failed_count += 1
+            else:
+                results.append({
+                    "question_type": item.question_type,
+                    "question_id": item.question_id,
+                    "success": True,
+                    "message": "업데이트 완료"
+                })
+                updated_count += 1
+                
+        except Exception as e:
+            results.append({
+                "question_type": item.question_type,
+                "question_id": item.question_id,
+                "success": False,
+                "message": f"업데이트 중 오류 발생: {str(e)}"
+            })
+            failed_count += 1
+    
+    return QuestionMetaUpdateResponse(
+        success=updated_count > 0,
+        message=f"{updated_count}개 문항 업데이트 완료, {failed_count}개 실패",
+        updated_count=updated_count,
+        failed_count=failed_count,
+        results=results
+    )
 
 
 # @router.put(
@@ -123,27 +271,41 @@ async def update_selected_results(request: QuestionMetaUpdateRequest, current_us
 @router.get(
     "/download",
     summary="프로젝트 문항 DOCX 다운로드",
-    description="project_id 기준으로 문항을 조회하여 sample3.docx 양식으로 DOCX 파일을 생성/다운로드합니다.",
+    description="project_id 기준으로 문항을 조회하여 sample3.docx 양식으로 DOCX 파일을 생성/다운로드합니다. 카테고리는 DB에서 자동으로 조회합니다.",
     tags=["결과 관리"]
 )
 async def download_selected_results(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
-    category: str = Query("", description="문서 상단 {category} 치환 값", example="말하기듣기"),
     current_user_id: str = Depends(get_current_user)
 ):
     """
     project_id로 문항을 조회하여 docx 파일로 반환합니다.
+    카테고리는 project_scopes 테이블의 subject 필드에서 자동으로 조회합니다.
     """
     # 템플릿 경로 (app/download/sample3.docx)
     template_path = Path(__file__).resolve().parents[3] / "download" / "sample3.docx"
     if not template_path.exists():
         raise HTTPException(status_code=500, detail=f"템플릿 파일을 찾을 수 없습니다: {template_path}")
 
-    # ✅ 프로젝트 소유권 확인 (현재 로그인 사용자만 접근 가능)
+    # ✅ 프로젝트 소유권 확인 및 카테고리 조회
     user_id = int(current_user_id)
-    project = select_one("projects", where={"project_id": project_id, "user_id": user_id, "is_deleted": False}, columns="project_id")
-    if not project:
+    
+    # 프로젝트 정보와 카테고리(subject) 조회
+    project_query = """
+        SELECT 
+            p.project_id,
+            ps.subject as category
+        FROM projects p
+        LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+        WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
+    """
+    project_result = select_with_query(project_query, (project_id, user_id))
+    
+    if not project_result:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+    
+    project_info = project_result[0]
+    category = project_info.get("category") or ""  # subject가 없으면 빈 문자열
 
     # 데이터 조회
     try:
