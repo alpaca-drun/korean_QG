@@ -21,7 +21,7 @@ router = APIRouter()
 @router.post(
     "/batch",
     response_model=List[QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse],
-    summary="배치 문항 생성 (동기)",
+    summary="배치 문항 생성 (동기)(미사용)",
     description="여러 문항 생성 요청을 배치로 처리합니다. (결과를 즉시 반환)",
     tags=["문항 생성"]
 )
@@ -211,59 +211,6 @@ async def generate_questions_batch_async(
                 details=traceback.format_exc()
             )
         )
-
-
-
-@router.post(
-    "",
-    response_model=QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse,
-    summary="문항 생성",
-    description="LLM API를 사용하여 문항을 생성합니다.",
-    tags=["문항 생성"]
-)
-async def generate_questions(
-    request: QuestionGenerationRequest,
-    background_tasks: BackgroundTasks,
-    token: Optional[str] = Header(None, alias="token", description="인증 토큰"),
-    provider: Optional[str] = Query(None, description="LLM 제공자 (gemini, openai)", example="gemini"),
-    async_mode: bool = Query(False, description="비동기 모드 사용 여부"),
-    current_user_id: str = Depends(get_current_user)
-):
-    """
-    문항 생성 API
-    
-    - **passage**: 원본 지문 텍스트
-    - **learning_objective**: 학습목표
-    - **curriculum_info**: 교육과정 정보
-    - **generation_count**: 생성할 문항 수 (1-50)
-    
-    비동기 모드를 사용하면 백그라운드에서 처리됩니다.
-    """
-    # TODO: 토큰 검증 로직 추가
-    
-    service = QuestionGenerationService()
-    
-    if async_mode:
-        # 비동기 모드 (BackgroundTasks 사용)
-        task = QuestionGenerationTask()
-        background_tasks.add_task(
-            task.generate_async,
-            request=request,
-            user_id=current_user_id,
-            provider=provider
-        )
-        
-        # 즉시 응답 반환 (작업은 백그라운드에서 진행)
-        return QuestionGenerationSuccessResponse(
-            success=True,
-            total_questions=0,
-            questions=[],
-            message="문항 생성이 백그라운드에서 시작되었습니다."
-        )
-    else:
-        # 동기 모드
-        result = await service.generate_questions(request, current_user_id, provider)
-        return result
 
 
 @router.get(

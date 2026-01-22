@@ -37,6 +37,8 @@ class QuestionGenerationRequest(BaseModel):
     config_id: int = Field(..., description="설정 ID")
     project_id: int = Field(..., description="프로젝트 ID")
     passage: str = Field(..., description="원본 지문 텍스트")
+    passage_title: Optional[str] = Field(None, description="작품 이름")
+    passage_author: Optional[str] = Field(None, description="작품 저자")
     learning_objective: str = Field(..., description="학습목표")
     learning_activity: str = Field(default="", description="학습활동")
     learning_element: str = Field(default="", description="학습요소")

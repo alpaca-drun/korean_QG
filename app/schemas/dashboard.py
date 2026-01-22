@@ -174,3 +174,14 @@ class ProjectDetailResponse(BaseModel):
     success: bool = Field(default=True, description="성공 여부")
     message: str = Field(default="프로젝트 상세 통계 조회 성공", description="메시지")
     data: ProjectDetailStats = Field(..., description="프로젝트 상세 통계")
+
+
+
+
+
+class ProjectResponse(BaseModel):
+    """프로젝트 정보 API 응답"""
+    success: bool = Field(default=True, description="성공 여부")
+    message: str = Field(default="프로젝트 정보 조회 성공", description="메시지")
+    project_id: int = Field(..., description="프로젝트 ID")
+    status: str = Field(..., description="상태")

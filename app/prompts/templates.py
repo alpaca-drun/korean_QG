@@ -97,26 +97,6 @@ JSON 형식으로 출력해주세요:
         print("🟣🟣🟣")
         print(achievement_text)
 
-        # # 매체 타입에 따라 프롬프트 선택
-        # if system_prompt is None:
-        #     if request.study_area == "매체":
-        #         system_prompt_template = WRITING_SYSTEM_PROMPT
-        #     elif request.study_area == "말하기/듣기":
-        #         system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
-        #     else:
-        #         # 기본 프롬프트 (다른 매체 타입은 추후 추가)
-        #         system_prompt_template = cls.BASE_TEMPLATE
-        
-        # # media_type에 따라 프롬프트 템플릿 변경
-        # if user_prompt_template is None:
-        #     if request.study_area == "매체":
-        #         user_prompt_template = WRITING_USER_PROMPT_TEMPLATE
-        #     elif request.study_area == "말하기/듣기":
-        #         user_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
-        #     else:
-        #         # 기본 템플릿
-        #         user_prompt_template = cls.BASE_TEMPLATE
-
         if system_prompt is None:
             if request.question_type == "5지선다":
                 system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
@@ -139,11 +119,14 @@ JSON 형식으로 출력해주세요:
             semester=request.semester,
             large_unit_name=request.large_unit,
             small_unit_name=request.small_unit,
+            study_area=request.study_area if hasattr(request, 'study_area') else None,
             achievement_text=achievement_text,
             learning_objective=request.learning_objective,
             learning_activity=getattr(request, 'learning_activity', ''),
             learning_element=getattr(request, 'learning_element', ''),
-            passage=request.passage
+            passage=request.passage,
+            passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
+            passage_author=request.passage_author if hasattr(request, 'passage_author') else None
         )
         user_prompt = user_prompt_template.format(
             school_level=request.school_level if hasattr(request, 'school_level') else None,
