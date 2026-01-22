@@ -432,7 +432,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
             JOIN projects p3 ON p3.project_id = tfq.project_id
             WHERE tfq.project_id = %s
         )
-        ORDER BY created_at ASC
+        ORDER BY qid ASC
     """
     
     # DB 연결 설정 확인 (try 블록 밖에서 정의하여 except에서도 사용 가능)
@@ -469,9 +469,19 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
 
         filtered_query = (
             query
-            .replace("WHERE mcq.project_id = %s", f"WHERE mcq.project_id = %s{base_filters}")
-            .replace("WHERE saq.project_id = %s", f"WHERE saq.project_id = %s AND p2.user_id = %s AND p2.is_deleted = 0" if user_id is not None else "WHERE saq.project_id = %s")
-            .replace("WHERE tfq.project_id = %s", f"WHERE tfq.project_id = %s AND p3.user_id = %s AND p3.is_deleted = 0" if user_id is not None else "WHERE tfq.project_id = %s")
+            .replace("WHERE mcq.project_id = %s", f"WHERE mcq.project_id = %s{base_filters} AND IFNULL(mcq.is_used, 1) = 1")
+            .replace(
+                "WHERE saq.project_id = %s",
+                (f"WHERE saq.project_id = %s AND p2.user_id = %s AND p2.is_deleted = 0 AND IFNULL(saq.is_used, 1) = 1")
+                if user_id is not None
+                else "WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1"
+            )
+            .replace(
+                "WHERE tfq.project_id = %s",
+                (f"WHERE tfq.project_id = %s AND p3.user_id = %s AND p3.is_deleted = 0 AND IFNULL(tfq.is_used, 1) = 1")
+                if user_id is not None
+                else "WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1"
+            )
         )
 
         results = execute_query_via_app_db(filtered_query, params=params, fetch=True)
@@ -511,12 +521,11 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
         print(f"   {e}")
         print(f"\n💡 해결 방법:")
         print(f"   1. .env 파일 또는 환경변수에 다음을 설정하세요:")
-        print(f"      - {env_prefix}_host=데이터베이스_호스트")
-        print(f"      - {env_prefix}_port=데이터베이스_포트 (기본값: 3306)")
-        print(f"      - {env_prefix}_user=데이터베이스_사용자")
-        print(f"      - {env_prefix}_password=데이터베이스_비밀번호")
-        print(f"      - {env_prefix}_database=데이터베이스_이름 (또는 DB_DATABASE 환경변수)")
-        print(f"   2. 환경변수 접두사를 변경하려면 DB_ENV_PREFIX 환경변수를 설정하세요 (기본값: QG_db)")
+        print(f"      - DB_HOST=데이터베이스_호스트")
+        print(f"      - DB_PORT=데이터베이스_포트 (기본값: 3306)")
+        print(f"      - DB_USER=데이터베이스_사용자")
+        print(f"      - DB_PASSWORD=데이터베이스_비밀번호")
+        print(f"      - DB_DATABASE=데이터베이스_이름")
         print(f"   3. 데이터베이스 이름을 변경하려면 DB_DATABASE 환경변수를 설정하세요 (기본값: midtest)")
         raise
     except Exception as e:
