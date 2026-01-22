@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30  # 액세스 토큰 만료 시간 (분)
     jwt_refresh_token_expire_days: int = 7  # 리프레시 토큰 만료 시간 (일)
     
+    # AWS SES 이메일 설정
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    aws_ses_region: str = "ap-northeast-2"  # 서울 리전 (기본값)
+    aws_ses_sender_email: str = "no-reply@example.com"  # 발신자 이메일 (반드시 SES에서 인증된 이메일이어야 함)
+    aws_ses_bcc_email: Optional[str] = None  # BCC로 받을 이메일 (관리자/모니터링 용도, 콤마로 구분하여 여러 개 가능)
+    
     @field_validator('max_parallel_api_keys', 'max_batch_size', 'batch_timeout', 
                      'api_call_timeout', 'api_retry_timeout', 'db_port', mode='before')
     @classmethod
@@ -81,6 +88,14 @@ class Settings(BaseSettings):
                 return keys
         if self.gemini_api_key:
             return [self.gemini_api_key]
+        return []
+    
+    @property
+    def aws_ses_bcc_email_list(self) -> List[str]:
+        """AWS SES BCC 이메일 리스트 반환"""
+        if self.aws_ses_bcc_email:
+            emails = [email.strip() for email in self.aws_ses_bcc_email.split(",") if email.strip()]
+            return emails
         return []
     
     class Config:

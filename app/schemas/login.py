@@ -73,11 +73,13 @@ class RefreshTokenRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     """로그아웃 요청 스키마"""
+    access_token: Optional[str] = Field(None, description="액세스 토큰 (선택사항)")
     refresh_token: Optional[str] = Field(None, description="리프레시 토큰 (선택사항)")
 
     class Config:
         json_schema_extra = {
             "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
             }
         }
