@@ -1,5 +1,5 @@
-from typing import Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 
 
 class LargeUnitResponse(BaseModel):
@@ -184,7 +184,7 @@ class SelectSaveResultResponse(BaseModel):
 
 
 class QuestionMetaUpdateRequest(BaseModel):
-    """문항 메타데이터(피드백/사용여부/난이도/변형지문) 업데이트 요청"""
+    """문항 메타데이터(피드백/사용여부/난이도) 업데이트 요청"""
     project_id: int
     question_type: str  # "multiple_choice" | "true_false" | "short_answer"
     question_id: int
@@ -192,7 +192,6 @@ class QuestionMetaUpdateRequest(BaseModel):
     feedback_score: Optional[float] = None
     is_used: Optional[int] = None  # 1/0 (DB 호환)
     modified_difficulty: Optional[str] = None
-    modified_passage: Optional[str] = None
 
 
 class QuestionMetaUpdateResponse(BaseModel):
@@ -200,6 +199,36 @@ class QuestionMetaUpdateResponse(BaseModel):
     success: bool
     message: str
     updated_count: int = 0
+    failed_count: int = 0
+    results: Optional[List[Dict[str, Any]]] = None  # 각 문항별 업데이트 결과
+
+
+class QuestionMetaBatchUpdateRequest(BaseModel):
+    """문항 메타데이터 일괄 업데이트 요청"""
+    items: List[QuestionMetaUpdateRequest] = Field(..., description="업데이트할 문항 리스트", min_items=1)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "project_id": 1,
+                        "question_type": "multiple_choice",
+                        "question_id": 123,
+                        "feedback_score": 8.5,
+                        "is_used": 1,
+                        "modified_difficulty": "상"
+                    },
+                    {
+                        "project_id": 1,
+                        "question_type": "true_false",
+                        "question_id": 456,
+                        "feedback_score": 7.0,
+                        "is_used": 1
+                    }
+                ]
+            }
+        }
 
 
 
