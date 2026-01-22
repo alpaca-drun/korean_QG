@@ -8,6 +8,7 @@ from app.schemas.question_generation import (
 from app.services.question_generation_service import QuestionGenerationService
 from app.db.generate import save_batch_log, save_questions_batch_to_db
 from app.db.generate import update_project_status
+from app.clients.email import get_email_client
 class QuestionGenerationTask:
     """문항 생성 비동기 작업"""
     
@@ -174,11 +175,106 @@ class QuestionGenerationTask:
                     print(f"⚠️ 배치 {idx+1}은 생성 실패하여 DB 저장 생략")
             
             print(f"🎉 배치 문항 생성 및 DB 저장 완료!")
-            
+
+            # ✉️ 완료 메일 전송
+            try:
+                # 성공/실패 집계
+                success_count = sum(
+                    1 for r in results 
+                    if isinstance(r, QuestionGenerationSuccessResponse) and r.success
+                )
+                total_count = len(results)
+                total_questions = sum(
+                    r.total_questions for r in results 
+                    if isinstance(r, QuestionGenerationSuccessResponse) and r.success
+                )
+                
+                # 프로젝트 이름 가져오기 (첫 번째 요청에서)
+                project_name = requests[0].project_name if requests else "알 수 없는 프로젝트"
+                
+                # 사용자 이메일 가져오기
+                user_email = self._get_user_email(user_id)
+                
+                if user_email and success_count > 0:
+                    email_client = get_email_client()
+                    email_sent = email_client.send_success_email(
+                        to_address=user_email,
+                        project_name=project_name,
+                        success_count=success_count,
+                        total_count=total_count,
+                        total_questions=total_questions
+                    )
+                    
+                    if email_sent:
+                        print(f"📧 완료 메일 전송 성공: {user_email}")
+                    else:
+                        print(f"⚠️ 완료 메일 전송 실패: {user_email}")
+                elif not user_email:
+                    print(f"⚠️ 사용자 이메일을 찾을 수 없음: user_id={user_id}")
+                else:
+                    print(f"⚠️ 성공한 배치가 없어 메일을 전송하지 않음")
+                    
+            except Exception as e:
+                print(f"⚠️ 완료 메일 전송 중 오류 발생 (작업은 성공): {e}")
+
         except Exception as e:
             print(f"❌ 배치 백그라운드 작업 중 오류 발생: {e}")
             import traceback
             traceback.print_exc()
+            
+            # ✉️ 실패 메일 전송
+            try:
+                user_email = self._get_user_email(user_id)
+                project_name = requests[0].project_name if requests else "알 수 없는 프로젝트"
+                
+                if user_email:
+                    email_client = get_email_client()
+                    email_client.send_failure_email(
+                        to_address=user_email,
+                        project_name=project_name,
+                        error_message=str(e)
+                    )
+                    print(f"📧 실패 메일 전송 완료: {user_email}")
+            except Exception as email_error:
+                print(f"⚠️ 실패 메일 전송 중 오류 발생: {email_error}")
+    
+    def _get_user_email(self, user_id: str) -> Optional[str]:
+        """
+        사용자 ID로 이메일 주소 조회
+        
+        Args:
+            user_id: 사용자 ID
+            
+        Returns:
+            Optional[str]: 사용자 이메일 (없으면 None)
+        """
+        try:
+            from app.db.database import get_db_connection
+            
+            conn = get_db_connection()
+            if not conn:
+                print(f"⚠️ DB 연결 실패")
+                return None
+            
+            cursor = conn.cursor()
+            
+            # users 테이블에서 이메일 조회
+            query = "SELECT email FROM users WHERE id = %s"
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchone()
+            
+            cursor.close()
+            conn.close()
+            
+            if result and result[0]:
+                return result[0]
+            else:
+                print(f"⚠️ 사용자를 찾을 수 없음: user_id={user_id}")
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ 사용자 이메일 조회 실패: {e}")
+            return None
     
     async def generate_async(
         self,

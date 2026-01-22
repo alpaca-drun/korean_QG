@@ -10,6 +10,7 @@ from app.schemas.dashboard import (
     RecentProject,
     ProjectDetailResponse,
     ProjectDetailStats,
+    ProjectResponse,
     DashboardSummary,
     DashboardSummaryResponse,
     ProjectListItem,
@@ -585,3 +586,35 @@ async def get_project_detail_stats(
             status_code=500,
             detail=f"프로젝트 상세 통계 조회 중 오류가 발생했습니다: {str(e)}"
         )
+
+
+@router.get(
+    "/project",
+    response_model=ProjectResponse,
+    summary="프로젝트 조회",
+    description="특정 프로젝트의 정보를 조회합니다.",
+    tags=["대시보드"]
+)
+async def get_project_detail(
+    project_id: int, 
+    current_user_id: str = Depends(get_current_user)
+    ):
+
+    project = select_one(
+        table="projects",
+        where={"project_id": project_id, "user_id": current_user_id, "is_deleted": False}
+    )
+
+    if not project:
+        raise HTTPException(
+            success=False,
+            status_code=404,
+            detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
+        )
+
+    return ProjectResponse(
+        success=True,
+        project_id=project["project_id"],
+        status=project["status"]
+    )
+

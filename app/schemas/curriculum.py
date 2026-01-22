@@ -236,15 +236,14 @@ class PassageDBCreateRequest(BaseModel):
 
 class ScopeCreateResponse(BaseModel):
     """범위 생성 응답 스키마"""
+    project_id: int
     scope_id: int
 
 
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "새 지문 제목",
-                "context": "지문 내용입니다.",
-                "auth": "저자명",
+                "projetct_id": "1",
                 "scope_id": 1
             }
         }
