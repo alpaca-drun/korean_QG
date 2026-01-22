@@ -128,8 +128,7 @@ async def get_passages(
                     SELECT passage_id as id, title, context as content, 
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            1 as is_use,
-                           passage_id as origin_id,
-                           NULL as custom_id
+                           0 as is_custom
                     FROM passages
                     WHERE {where_clause}
                     ORDER BY passage_id DESC
@@ -144,8 +143,7 @@ async def get_passages(
                            context as content,
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            IFNULL(is_use, 1) as is_use,
-                           NULL as origin_id,
-                           custom_passage_id as custom_id
+                           1 as is_custom
                     FROM passage_custom
                     WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ORDER BY custom_passage_id DESC
@@ -174,8 +172,7 @@ async def get_passages(
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            1 as is_use,
                            1 as source_type,
-                           passage_id as origin_id,
-                           NULL as custom_id
+                           0 as is_custom
                     FROM passages
                     WHERE {where_clause}
                     
@@ -187,8 +184,7 @@ async def get_passages(
                            NULL as description, scope_id, NULL as achievement_standard_id,
                            IFNULL(is_use, 1) as is_use,
                            2 as source_type,
-                           NULL as origin_id,
-                           custom_passage_id as custom_id
+                           1 as is_custom
                     FROM passage_custom
                     WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
                     ORDER BY id DESC
@@ -247,15 +243,13 @@ async def get_passages(
                             item['is_use'] = int(item['is_use']) if item['is_use'] is not None else 1
                         except (ValueError, TypeError):
                             item['is_use'] = 1
-                    # origin_id, custom_id 설정 (source_type 기반)
+                    # is_custom 설정 (source_type 기반)
                     if item.get('source_type') == 1:
-                        # 원본 지문: origin_id는 id 값, custom_id는 None
-                        item['origin_id'] = item.get('id')
-                        item['custom_id'] = None
+                        # 원본 지문: is_custom = 0
+                        item['is_custom'] = 0
                     elif item.get('source_type') == 2:
-                        # 커스텀 지문: custom_id는 id 값, origin_id는 None
-                        item['origin_id'] = None
-                        item['custom_id'] = item.get('id')
+                        # 커스텀 지문: is_custom = 1
+                        item['is_custom'] = 1
                     # source_type 제거 (응답에 포함하지 않음)
                     item.pop('source_type', None)
                     items.append(item)
@@ -275,15 +269,13 @@ async def get_passages(
             items = []
             for passage in passages:
                 item = dict(passage)
-                # origin_id, custom_id가 SQL에서 이미 설정되어 있지만, None 값이 문자열로 올 수 있으므로 정리
+                # is_custom 설정 (SQL에서 이미 설정되어 있지만, 명시적으로 정리)
                 if text_type == 1:
-                    # 원본 지문만: origin_id는 id, custom_id는 None
-                    item['origin_id'] = item.get('id')
-                    item['custom_id'] = None
+                    # 원본 지문만: is_custom = 0
+                    item['is_custom'] = 0
                 elif text_type == 2:
-                    # 커스텀 지문만: custom_id는 id, origin_id는 None
-                    item['origin_id'] = None
-                    item['custom_id'] = item.get('id')
+                    # 커스텀 지문만: is_custom = 1
+                    item['is_custom'] = 1
                 # achievement_standard_id가 None이면 scope_id로 찾기
                 if item.get('achievement_standard_id') is None and item.get('scope_id'):
                     with connection.cursor() as inner_cursor:
