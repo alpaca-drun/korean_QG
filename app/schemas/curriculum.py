@@ -1,5 +1,5 @@
-from typing import Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 
 
 class LargeUnitResponse(BaseModel):
@@ -79,41 +79,35 @@ class PassageResponse(BaseModel):
 
 class PassageCreateRequest(BaseModel):
     """지문 생성 요청 스키마"""
-    # ✅ 필수
-    user_id: int  # 사용자 ID (필수, passage_custom 테이블용)
+    # ✅ 필수 필드
+    title: str  # 지문 제목 (필수)
+    content: str  # 지문 내용 (필수)
+    auth: Optional[str] = None  # 작성자 (선택)
 
-    # ✅ 둘 중 하나는 필수: scope_id(직접 지정) 또는 achievement_standard_id(매핑으로 scope 찾기)
-    achievement_standard_id: Optional[int] = None
+    # ✅ scope_id 또는 achievement_standard_id 중 하나는 필수 (둘 다 없으면 기본값 사용)
     scope_id: Optional[int] = None
+    achievement_standard_id: Optional[int] = None
 
-    # ✅ 저장 대상
-    title: str
-    content: str
-    description: Optional[str] = None
-    source_passage_id: Optional[int] = None  # 원본 지문 ID (선택사항)
-
-    # ✅ DB 컬럼에 직접 매핑되는 선택 입력
-    custom_title: Optional[str] = None
-    auth: Optional[str] = None
-    is_use: Optional[int] = 1
+    # ✅ 선택 필드
+    custom_title: Optional[str] = None  # 커스텀 제목
+    source_passage_id: Optional[int] = None  # 원본 지문 ID
+    is_use: Optional[int] = 1  # 사용 여부 (기본값: 1)
+    description: Optional[str] = None  # 설명 (호환용, 실제로는 사용 안 함)
 
     # ✅ 기존 요청 호환용(현재 API에서 실제로는 저장에 사용하지 않음)
+    user_id: Optional[int] = None  # 사용자 ID (자동으로 current_user_id 사용)
     large_unit_id: Optional[int] = None
     small_unit_id: Optional[int] = None
 
     class Config:
         json_schema_extra = {
             "example": {
-                "user_id": 1,
-                "achievement_standard_id": 1,
-                "scope_id": 10,
                 "title": "자연수의 곱셈 문제",
                 "content": "3 × 5 = ?",
-                "description": "자연수 곱셈 지문",
-                "custom_title": "내가 만든 지문",
                 "auth": "작성자",
-                "is_use": 1,
-                "source_passage_id": 123
+                "scope_id": 10,
+                "custom_title": "내가 만든 지문",
+                "is_use": 1
             }
         }
 
@@ -189,7 +183,7 @@ class SelectSaveResultResponse(BaseModel):
 
 
 class QuestionMetaUpdateRequest(BaseModel):
-    """문항 메타데이터(피드백/사용여부/난이도/변형지문) 업데이트 요청"""
+    """문항 메타데이터(피드백/사용여부/난이도) 업데이트 요청"""
     project_id: int
     question_type: str  # "multiple_choice" | "true_false" | "short_answer"
     question_id: int
@@ -197,7 +191,6 @@ class QuestionMetaUpdateRequest(BaseModel):
     feedback_score: Optional[float] = None
     is_used: Optional[int] = None  # 1/0 (DB 호환)
     modified_difficulty: Optional[str] = None
-    modified_passage: Optional[str] = None
 
 
 class QuestionMetaUpdateResponse(BaseModel):
@@ -205,6 +198,36 @@ class QuestionMetaUpdateResponse(BaseModel):
     success: bool
     message: str
     updated_count: int = 0
+    failed_count: int = 0
+    results: Optional[List[Dict[str, Any]]] = None  # 각 문항별 업데이트 결과
+
+
+class QuestionMetaBatchUpdateRequest(BaseModel):
+    """문항 메타데이터 일괄 업데이트 요청"""
+    items: List[QuestionMetaUpdateRequest] = Field(..., description="업데이트할 문항 리스트", min_items=1)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "project_id": 1,
+                        "question_type": "multiple_choice",
+                        "question_id": 123,
+                        "feedback_score": 8.5,
+                        "is_used": 1,
+                        "modified_difficulty": "상"
+                    },
+                    {
+                        "project_id": 1,
+                        "question_type": "true_false",
+                        "question_id": 456,
+                        "feedback_score": 7.0,
+                        "is_used": 1
+                    }
+                ]
+            }
+        }
 
 
 
