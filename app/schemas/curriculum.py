@@ -97,8 +97,9 @@ class PassageResponse(BaseModel):
                 "title": "자연수의 덧셈 문제",
                 "content": "3 + 5 = ?",
                 "is_use": 1,
+
             }
-        }
+        }       
 
 
 class PassageCreateRequest(BaseModel):
@@ -280,7 +281,7 @@ class ScopeCreateRequest(BaseModel):
             "example": {
                 "grade": 1,
                 "semester": 1,
-                "publisher_author": "천재교육/노미숙",
+                "publisher_author": "미래엔",
                 "large_unit_id": 1,
                 "large_unit_name": "1. 문학의 즐거움",
                 "small_unit_id": 1,
