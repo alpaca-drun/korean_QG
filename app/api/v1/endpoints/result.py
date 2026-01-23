@@ -12,7 +12,8 @@ from app.schemas.curriculum import (
     SelectSaveResultResponse,
     QuestionMetaUpdateRequest,
     QuestionMetaUpdateResponse,
-    QuestionMetaBatchUpdateRequest
+    QuestionMetaBatchUpdateRequest,
+    ProjectMetaResponse
 )
 from app.utils.dependencies import get_current_user
 router = APIRouter()
@@ -330,4 +331,60 @@ async def download_selected_results(
         path=str(out_path),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=f"output-project-{project_id}.docx",
+    )
+
+
+@router.get(
+    "/meta",
+    response_model=ProjectMetaResponse,
+    summary="프로젝트 메타정보 조회",
+    description="project_id를 기준으로 프로젝트의 설정 정보(학년, 학기, 교과목, 출판사, 대단원, 소단원)를 조회합니다.",
+    tags=["결과 관리"]
+)
+async def get_project_meta(
+    project_id: int = Query(..., description="프로젝트 ID", example=1),
+    current_user_id: str = Depends(get_current_user)
+):
+    """
+    project_id를 기반으로 프로젝트의 메타정보를 반환합니다.
+    
+    반환 정보:
+    - 학년 (grade)
+    - 학기 (semester)
+    - 교과목 (subject)
+    - 출판사/저자 (publisher_author)
+    - 대단원 (large_unit_name)
+    - 소단원 (small_unit_name)
+    """
+    user_id = int(current_user_id)
+    
+    # 프로젝트 소유권 확인 및 메타정보 조회
+    project_query = """
+        SELECT 
+            p.project_id,
+            ps.grade,
+            ps.semester,
+            ps.subject,
+            ps.publisher_author,
+            ps.large_unit_name,
+            ps.small_unit_name
+        FROM projects p
+        LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+        WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
+    """
+    project_result = select_with_query(project_query, (project_id, user_id))
+    
+    if not project_result:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+    
+    project_info = project_result[0]
+    
+    return ProjectMetaResponse(
+        project_id=project_info.get("project_id"),
+        grade=project_info.get("grade"),
+        semester=project_info.get("semester"),
+        subject=project_info.get("subject"),
+        publisher_author=project_info.get("publisher_author"),
+        large_unit_name=project_info.get("large_unit_name"),
+        small_unit_name=project_info.get("small_unit_name")
     )

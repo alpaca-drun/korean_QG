@@ -2,6 +2,30 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 
+class ProjectMetaResponse(BaseModel):
+    """프로젝트 메타정보 응답 스키마"""
+    project_id: int
+    grade: Optional[str] = None
+    semester: Optional[str] = None
+    subject: Optional[str] = None
+    publisher_author: Optional[str] = None
+    large_unit_name: Optional[str] = None
+    small_unit_name: Optional[str] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "project_id": 1,
+                "grade": "중학교",
+                "semester": "1학기",
+                "subject": "국어",
+                "publisher_author": "출판사/저자",
+                "large_unit_name": "1. 문학의 즐거움",
+                "small_unit_name": "(1) 시 감상하기"
+            }
+        }
+
+
 class LargeUnitResponse(BaseModel):
     """대단원 응답 스키마"""
     id: int
