@@ -16,10 +16,11 @@ from app.schemas.dashboard import (
     ProjectListItem,
     ProjectListResponse,
     FilterOption,
-    FilterOptionsResponse
+    FilterOptionsResponse,
+    SuccessResponse,
 )
 from app.utils.dependencies import get_current_user
-from app.db.database import select_all, search, count, select_with_query, select_one
+from app.db.database import select_all, search, count, select_with_query, select_one, update
 import math
 
 
@@ -607,7 +608,6 @@ async def get_project_detail(
 
     if not project:
         raise HTTPException(
-            success=False,
             status_code=404,
             detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
         )
@@ -618,3 +618,28 @@ async def get_project_detail(
         status=project["status"]
     )
 
+
+
+@router.get(
+    "/delete",
+    response_model=SuccessResponse,
+    summary="프로젝트 삭제",
+    description="특정 프로젝트를 삭제합니다.",
+    tags=["대시보드"]
+)
+async def project_delete(
+    project_id: int, 
+    current_user_id: str = Depends(get_current_user)
+    ):
+    user_id = int(current_user_id)
+
+    ## 프로젝트 아이디로 업데이트 is_deleted 를 True 로 변경
+    update(
+        table="projects",
+        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+        data={"is_deleted": True}
+    )
+    return SuccessResponse(
+        success=True,
+        message="프로젝트가 성공적으로 삭제되었습니다."
+    )
