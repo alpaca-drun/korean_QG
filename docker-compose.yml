@@ -24,8 +24,13 @@ services:
       # LLM API 설정
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-2.0-flash-exp}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-gemini}
+      
+      # API 타임아웃 설정 (초)
+      API_CALL_TIMEOUT: ${API_CALL_TIMEOUT:-120}
+      API_RETRY_TIMEOUT: ${API_RETRY_TIMEOUT:-60}
       
       # AWS SES 이메일 설정
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}

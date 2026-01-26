@@ -45,8 +45,10 @@ class GeminiClient(LLMClientBase):
             return False
         return len(self.api_keys) > 0
     
-    def _get_model(self, api_key: str, model_name: str = "gemini-2.0-flash-exp"):
+    def _get_model(self, api_key: str, model_name: Optional[str] = None):
         """특정 API 키로 모델 생성"""
+        if model_name is None:
+            model_name = settings.gemini_model_name
         genai.configure(api_key=api_key)
         return genai.GenerativeModel(model_name)
     
@@ -58,7 +60,7 @@ class GeminiClient(LLMClientBase):
         max_retries: int = 3,
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         return_metadata: bool = False,
         **kwargs
     ):
@@ -82,6 +84,10 @@ class GeminiClient(LLMClientBase):
         """
         if not self.api_key_manager:
             raise ValueError("Gemini API 키가 설정되지 않았습니다.")
+        
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
         
         # 빠른 실패 전환 활성화 시 여러 키를 동시에 시도
         if settings.enable_fast_failover and len(self.api_keys) > 1:
@@ -200,12 +206,16 @@ class GeminiClient(LLMClientBase):
         count: int,
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         **kwargs
     ) -> List[Question]:
         """
         빠른 실패 전환: 여러 API 키를 동시에 시도하고 가장 빠른 응답 사용
         """
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
+        
         available_keys = self.api_key_manager._get_available_keys()
         if not available_keys:
             raise ValueError("사용 가능한 API 키가 없습니다.")
@@ -325,7 +335,7 @@ class GeminiClient(LLMClientBase):
             batch_counts = counts[i:i+batch_size]
             batch_file_paths_list = file_paths_list[i:i+batch_size] if file_paths_list else [None] * len(batch_sys_prompts)
             batch_file_display_names_list = file_display_names_list[i:i+batch_size] if file_display_names_list else [None] * len(batch_sys_prompts)
-            batch_model_names = model_names[i:i+batch_size] if model_names else ["gemini-3-flash-preview"] * len(batch_sys_prompts)
+            batch_model_names = model_names[i:i+batch_size] if model_names else [settings.gemini_model_name] * len(batch_sys_prompts)
             
             # 이번 배치에 사용할 API 키 가져오기
             batch_api_keys = self.api_key_manager.get_keys_for_batch(len(batch_sys_prompts))
@@ -339,7 +349,7 @@ class GeminiClient(LLMClientBase):
                     api_key = batch_api_keys[j % len(batch_api_keys)]
                     file_paths = batch_file_paths_list[j] if j < len(batch_file_paths_list) else None
                     file_display_names = batch_file_display_names_list[j] if j < len(batch_file_display_names_list) else None
-                    model_name = batch_model_names[j] if j < len(batch_model_names) else "gemini-3-flash-preview"
+                    model_name = batch_model_names[j] if j < len(batch_model_names) else settings.gemini_model_name
                     
                     future = loop.run_in_executor(
                         executor,
@@ -404,7 +414,7 @@ class GeminiClient(LLMClientBase):
         count: int,
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -422,6 +432,9 @@ class GeminiClient(LLMClientBase):
                 }
             }
         """
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
         import time
         start_time = time.time()
         
@@ -567,7 +580,7 @@ class GeminiClient(LLMClientBase):
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
         count: int = 10,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         return_response_obj: bool = False,
         **kwargs
     ):
@@ -579,6 +592,10 @@ class GeminiClient(LLMClientBase):
         Returns:
             response 객체 또는 response.text
         """
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
+        
         import os
         from app.schemas.question_generation import MultipleQuestion
         
