@@ -2,6 +2,30 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 
+class ProjectMetaResponse(BaseModel):
+    """프로젝트 메타정보 응답 스키마"""
+    project_id: int
+    grade: Optional[str] = None
+    semester: Optional[str] = None
+    subject: Optional[str] = None
+    publisher_author: Optional[str] = None
+    large_unit_name: Optional[str] = None
+    small_unit_name: Optional[str] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "project_id": 1,
+                "grade": "중학교",
+                "semester": "1학기",
+                "subject": "국어",
+                "publisher_author": "출판사/저자",
+                "large_unit_name": "1. 문학의 즐거움",
+                "small_unit_name": "(1) 시 감상하기"
+            }
+        }
+
+
 class LargeUnitResponse(BaseModel):
     """대단원 응답 스키마"""
     id: int
@@ -73,8 +97,9 @@ class PassageResponse(BaseModel):
                 "title": "자연수의 덧셈 문제",
                 "content": "3 + 5 = ?",
                 "is_use": 1,
+
             }
-        }
+        }       
 
 
 class PassageCreateRequest(BaseModel):
@@ -151,6 +176,51 @@ class ListResponse(BaseModel):
     """리스트 응답 스키마"""
     items: List[dict]
     total: int
+
+
+class ProjectPassageItem(BaseModel):
+    """프로젝트에서 사용된 지문 항목 스키마"""
+    passage_id: Optional[int] = None
+    custom_passage_id: Optional[int] = None
+    title: str
+    content: str
+    auth: Optional[str] = None
+    is_custom: int  # 0: 원본, 1: 커스텀
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "passage_id": 1,
+                "custom_passage_id": None,
+                "title": "지문 제목",
+                "content": "지문 내용",
+                "auth": "저자명",
+                "is_custom": 0
+            }
+        }
+
+
+class ProjectPassageResponse(BaseModel):
+    """프로젝트에서 사용된 지문 목록 응답 스키마"""
+    items: List[ProjectPassageItem]
+    total: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "passage_id": 1,
+                        "custom_passage_id": None,
+                        "title": "지문 제목",
+                        "content": "지문 내용",
+                        "auth": "저자명",
+                        "is_custom": 0
+                    }
+                ],
+                "total": 1
+            }
+        }
 
 
 
@@ -256,7 +326,7 @@ class ScopeCreateRequest(BaseModel):
             "example": {
                 "grade": 1,
                 "semester": 1,
-                "publisher_author": "천재교육/노미숙",
+                "publisher_author": "미래엔",
                 "large_unit_id": 1,
                 "large_unit_name": "1. 문학의 즐거움",
                 "small_unit_id": 1,
