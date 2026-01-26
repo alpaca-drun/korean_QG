@@ -76,7 +76,6 @@ def get_generation_config(project_id: int):
     query = """
         SELECT 
             psc.config_id,
-            pr.project_name,
             COALESCE(cp.context, p.context) AS passage,
             COALESCE(cp.title, p.title) AS title,
             COALESCE(cp.auth, p.auth) AS auth,
