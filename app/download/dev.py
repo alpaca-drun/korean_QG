@@ -469,18 +469,18 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
 
         filtered_query = (
             query
-            .replace("WHERE mcq.project_id = %s", f"WHERE mcq.project_id = %s{base_filters} AND IFNULL(mcq.is_used, 1) = 1")
+            .replace("WHERE mcq.project_id = %s", f"WHERE mcq.project_id = %s{base_filters} AND IFNULL(mcq.is_checked, 0) = 1")
             .replace(
                 "WHERE saq.project_id = %s",
-                (f"WHERE saq.project_id = %s AND p2.user_id = %s AND p2.is_deleted = 0 AND IFNULL(saq.is_used, 1) = 1")
+                (f"WHERE saq.project_id = %s AND p2.user_id = %s AND p2.is_deleted = 0 AND IFNULL(saq.is_checked, 0) = 1")
                 if user_id is not None
-                else "WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1"
+                else "WHERE saq.project_id = %s AND IFNULL(saq.is_checked, 0) = 1"
             )
             .replace(
                 "WHERE tfq.project_id = %s",
-                (f"WHERE tfq.project_id = %s AND p3.user_id = %s AND p3.is_deleted = 0 AND IFNULL(tfq.is_used, 1) = 1")
+                (f"WHERE tfq.project_id = %s AND p3.user_id = %s AND p3.is_deleted = 0 AND IFNULL(tfq.is_checked, 0) = 1")
                 if user_id is not None
-                else "WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1"
+                else "WHERE tfq.project_id = %s AND IFNULL(tfq.is_checked, 0) = 1"
             )
         )
 
