@@ -747,7 +747,6 @@ async def create_passage(
     project_id: int = Body(..., description="프로젝트 ID", example=1),
     auth: Optional[str] = Body(None, description="작성자", example="작성자"),
     custom_title: Optional[str] = Body(None, description="커스텀 제목", example="내가 만든 지문"),
-    is_use: Optional[int] = Body(1, description="사용 여부", example=1),
     current_user_id: str = Depends(get_current_user)
 ):
     """
@@ -761,7 +760,6 @@ async def create_passage(
     **선택 필드:**
     - **auth**: 작성자
     - **custom_title**: 커스텀 제목
-    - **is_use**: 사용 여부 (기본값: 1)
     
     생성된 지문의 ID를 포함한 전체 정보를 반환합니다.
     """
@@ -830,9 +828,8 @@ async def create_passage(
             # passage_custom 테이블에 INSERT (source_passage_id는 NULL로 설정)
             sql = """
                 INSERT INTO passage_custom (user_id, scope_id, custom_title, title, auth, context, passage_id, is_use)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
             """
-            is_use_value = is_use if is_use is not None else 1
             cursor.execute(sql, (
                 user_id,
                 final_scope_id,
@@ -841,7 +838,6 @@ async def create_passage(
                 auth,   # auth (None 가능)
                 content,  # context
                 None,  # passage_id는 NULL (완전 새로운 지문)
-                is_use_value  # is_use
             ))
             # INSERT 직후에 생성된 ID를 먼저 확보
             custom_passage_id = cursor.lastrowid
@@ -889,7 +885,6 @@ async def update_passage(
     source_passage_id: Optional[int] = Body(None, description="원본 지문 ID (기본값: passage_id)", example=123),
     auth: Optional[str] = Body(None, description="작성자", example="작성자"),
     custom_title: Optional[str] = Body(None, description="커스텀 제목", example="내가 수정한 지문"),
-    is_use: Optional[int] = Body(1, description="사용 여부", example=1),
     current_user_id: str = Depends(get_current_user)
 ):
     """
@@ -905,7 +900,6 @@ async def update_passage(
     - **source_passage_id**: 원본 지문 ID (기본값: passage_id)
     - **auth**: 작성자
     - **custom_title**: 커스텀 제목
-    - **is_use**: 사용 여부 (기본값: 1)
     
     생성된 지문의 ID를 포함한 전체 정보를 반환합니다.
     """
@@ -994,9 +988,8 @@ async def update_passage(
             # passage_custom 테이블에 INSERT (source_passage_id를 passage_id로 저장)
             insert_sql = """
                 INSERT INTO passage_custom (user_id, scope_id, custom_title, title, auth, context, passage_id, is_use)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
             """
-            is_use_value = is_use if is_use is not None else 1
             cursor.execute(insert_sql, (
                 user_id,
                 final_scope_id,
@@ -1005,7 +998,6 @@ async def update_passage(
                 auth,   # auth (None 가능)
                 content,  # context
                 final_source_passage_id,  # 원본 지문 ID (source_passage_id)
-                is_use_value  # is_use
             ))
             connection.commit()
             new_custom_passage_id = cursor.lastrowid
