@@ -74,16 +74,17 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
       "items": [
         {
           "project_id": 1,
-          "question_id": 123,
-          "feedback_score": 8.5,
+          "question_id": 2,
+          "feedback_score": 4.5,
           "is_checked": 1,
           "modified_difficulty": "상"
         },
         {
           "project_id": 1,
-          "question_id": 456,
-          "feedback_score": 7.0,
-          "is_checked": 1
+          "question_id": 4,
+          "feedback_score": 3.0,
+          "is_checked": 1,
+          "modified_difficulty": "중"
         }
       ]
     }
