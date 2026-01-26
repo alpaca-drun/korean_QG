@@ -612,11 +612,23 @@ async def get_project_detail(
             detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
         )
 
-    return ProjectResponse(
-        success=True,
-        project_id=project["project_id"],
-        status=project["status"]
-    )
+    
+    config = select_one("project_source_config", {"project_id": project_id})
+    
+    if config['is_modified'] is not None:
+        return ProjectResponse(
+            success=True,
+            project_id=project["project_id"],
+            status=project["status"],
+            config_id=config["config_id"]
+        )
+
+    else:
+        return ProjectResponse(
+            success=True,
+            project_id=project["project_id"],
+            status=project["status"]
+        )
 
 
 

@@ -7,6 +7,7 @@ from app.schemas.curriculum import (
 )
 from app.schemas.passage import PassageListResponse
 from app.db.storage import get_db_connection
+from app.db.database import select_one
 import json
 from app.utils.dependencies import get_current_user
 
@@ -1248,15 +1249,100 @@ async def delete_passage(
 @router.get(
     "/original_used",
     summary="원본 지문 그대로 사용",
-    response_model=bool,
     description="원본 지문 그대로 사용",
     tags=["지문"]
 )
-async def get_original_used(
-    project_id: int,
+async def original_used_response(
+    project_id: int = Query(..., description="프로젝트 ID", example=1),
+    passage_id: int = Query(..., description="지문 ID", example=1),
+    is_original: bool = Query(..., description="원본 지문인지 수정본인지 여부", example=True),
     current_user_id: str = Depends(get_current_user)
 ):
     """
     원본 지문 그대로 사용 여부를 조회합니다.
     """
-    return {"original_used": False}
+    try:
+        if is_original:
+            config_id = select_one(
+                "project_source_config", 
+                {
+                    "project_id": project_id, 
+                    "is_modified": 0,
+                    "passage_id": passage_id,
+                }
+            )
+        else:
+            config_id = select_one(
+                "project_source_config", 
+                {
+                    "project_id": project_id, 
+                    "is_modified": 0,
+                    "custom_passage_id": passage_id,
+                }
+                )
+        return {
+            "success": True,
+            "message": "요청이 정상적으로 처리되었습니다.",
+            "config_id": config_id
+            }
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {
+            "success": False,
+            "message": "요청 처리 중 오류가 발생했습니다.",
+            "detail": str(e)
+            }
+
+
+
+
+
+@router.get(
+    "/modified_used",
+    summary="지문 수정해서 사용",
+    description="지문 수정해서 사용",
+    tags=["지문"]
+)
+async def original_used_response(
+    project_id: int = Query(..., description="프로젝트 ID", example=1),
+    passage_id: int = Query(..., description="지문 ID", example=1),
+    is_original: bool = Query(..., description="원본 지문인지 수정본인지 여부", example=True),
+    current_user_id: str = Depends(get_current_user)
+):
+    """
+    원본 지문 그대로 사용 여부를 조회합니다.
+    """
+    try:
+        if is_original:
+            config_id = select_one(
+                "project_source_config", 
+                {
+                    "project_id": project_id, 
+                    "is_modified": 1,
+                    "passage_id": passage_id,
+                }
+            )
+        else:
+            config_id = select_one(
+                "project_source_config", 
+                {
+                    "project_id": project_id, 
+                    "is_modified": 1,
+                    "custom_passage_id": passage_id,
+                }
+                )
+        return {
+            "success": True,
+            "message": "요청이 정상적으로 처리되었습니다.",
+            "config_id": config_id
+            }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {
+            "success": False,
+            "message": "요청 처리 중 오류가 발생했습니다.",
+            "detail": str(e)
+            }
