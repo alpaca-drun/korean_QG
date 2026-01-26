@@ -14,7 +14,9 @@ from app.schemas.curriculum import (
     QuestionMetaUpdateRequest,
     QuestionMetaUpdateResponse,
     QuestionMetaBatchUpdateRequest,
-    ProjectMetaResponse
+    ProjectMetaResponse,
+    ProjectPassageResponse,
+    ProjectPassageItem
 )
 from app.utils.dependencies import get_current_user
 router = APIRouter()
@@ -49,8 +51,15 @@ async def get_result(
     # question_type이 제공된 경우에만 필터링
     if question_type:
         items = [q for q in items if q.get("question_type") == question_type]
+    
+    # 지문 정보 필드 제거 (passage_content, passage_title, passage_is_custom)
+    filtered_items = []
+    for item in items:
+        filtered_item = {k: v for k, v in item.items() 
+                        if k not in ['passage_content', 'passage_title', 'passage_is_custom']}
+        filtered_items.append(filtered_item)
 
-    return ListResponse(items=items or [], total=len(items or []))
+    return ListResponse(items=filtered_items or [], total=len(filtered_items or []))
 
 
 
@@ -400,3 +409,86 @@ async def get_project_meta(
         large_unit_name=project_info.get("large_unit_name"),
         small_unit_name=project_info.get("small_unit_name")
     )
+
+
+@router.get(
+    "/passage",
+    response_model=ProjectPassageResponse,
+    summary="프로젝트에서 사용된 지문 목록 조회",
+    description="project_id를 기준으로 해당 프로젝트에서 사용된 지문 목록을 조회합니다.",
+    tags=["결과 관리"]
+)
+async def get_project_passages(
+    project_id: int = Query(..., description="프로젝트 ID", example=1),
+    current_user_id: str = Depends(get_current_user)
+):
+    """
+    project_id를 기반으로 해당 프로젝트에서 사용된 지문 목록을 반환합니다.
+    
+    반환 정보:
+    - passage_id: 원본 지문 ID (원본인 경우)
+    - custom_passage_id: 커스텀 지문 ID (커스텀인 경우)
+    - title: 지문 제목
+    - content: 지문 내용
+    - auth: 저자
+    - is_custom: 0(원본) 또는 1(커스텀)
+    """
+    user_id = int(current_user_id)
+    
+    # 프로젝트 소유권 확인
+    project = select_one(
+        "projects",
+        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+        columns="project_id",
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+    
+    # 프로젝트에서 사용된 지문 조회
+    passage_query = """
+        SELECT 
+            psc.passage_id,
+            psc.custom_passage_id,
+            COALESCE(p.title, pc.custom_title, pc.title) as title,
+            COALESCE(p.context, pc.context) as content,
+            COALESCE(p.auth, pc.auth) as auth,
+            CASE 
+                WHEN psc.passage_id IS NOT NULL THEN 0
+                WHEN psc.custom_passage_id IS NOT NULL THEN 1
+                ELSE NULL
+            END as is_custom
+        FROM project_source_config psc
+        LEFT JOIN passages p ON psc.passage_id = p.passage_id
+        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
+        WHERE psc.project_id = %s
+        AND (psc.passage_id IS NOT NULL OR psc.custom_passage_id IS NOT NULL)
+    """
+    passage_results = select_with_query(passage_query, (project_id,))
+    
+    if not passage_results:
+        return ProjectPassageResponse(items=[], total=0)
+    
+    # 중복 제거 (같은 지문이 여러 번 사용될 수 있으므로)
+    seen = set()
+    unique_passages = []
+    for passage in passage_results:
+        # passage_id 또는 custom_passage_id를 기준으로 중복 제거
+        key = (passage.get("passage_id"), passage.get("custom_passage_id"))
+        if key not in seen:
+            seen.add(key)
+            unique_passages.append(passage)
+    
+    # 스키마에 맞게 변환
+    items = [
+        ProjectPassageItem(
+            passage_id=passage.get("passage_id"),
+            custom_passage_id=passage.get("custom_passage_id"),
+            title=passage.get("title") or "",
+            content=passage.get("content") or "",
+            auth=passage.get("auth"),
+            is_custom=passage.get("is_custom") or 0
+        )
+        for passage in unique_passages
+    ]
+    
+    return ProjectPassageResponse(items=items, total=len(items))

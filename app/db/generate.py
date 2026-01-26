@@ -114,9 +114,6 @@ def get_generation_config(project_id: int):
     """
     results = select_with_query(query, (project_id,))
     return results[0] if results else None
-import json
-print("tett")
-print(json.dumps(get_generation_config(1), ensure_ascii=False, indent=4))
 
 # ===========================
 # 프로젝트 관련 조회
@@ -336,7 +333,7 @@ def save_questions_batch_to_db(
 # ===========================
 
 def get_project_all_questions(project_id: int):
-    """프로젝트의 모든 문항 조회 (객관식, OX, 단답형 통합) - 지문 정보 포함"""
+    """프로젝트의 모든 문항 조회 (객관식, OX, 단답형 통합)"""
     # 객관식 문항 (추가 필드 포함)
     mc_query = """
         SELECT 
@@ -357,7 +354,7 @@ def get_project_all_questions(project_id: int):
             mcq.llm_difficulty,
             mcq.modified_difficulty,
             mcq.modified_passage,
-            -- 지문 정보
+            -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
             COALESCE(p.context, pc.context) as passage_content,
             COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
             CASE 
@@ -392,7 +389,7 @@ def get_project_all_questions(project_id: int):
             NULL as llm_difficulty,
             NULL as modified_difficulty,
             NULL as modified_passage,
-            -- 지문 정보
+            -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
             COALESCE(p.context, pc.context) as passage_content,
             COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
             CASE 
@@ -427,7 +424,7 @@ def get_project_all_questions(project_id: int):
             NULL as llm_difficulty,
             NULL as modified_difficulty,
             NULL as modified_passage,
-            -- 지문 정보
+            -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
             COALESCE(p.context, pc.context) as passage_content,
             COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
             CASE 
