@@ -178,51 +178,6 @@ class ListResponse(BaseModel):
     total: int
 
 
-class ProjectPassageItem(BaseModel):
-    """프로젝트에서 사용된 지문 항목 스키마"""
-    passage_id: Optional[int] = None
-    custom_passage_id: Optional[int] = None
-    title: str
-    content: str
-    auth: Optional[str] = None
-    is_custom: int  # 0: 원본, 1: 커스텀
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "passage_id": 1,
-                "custom_passage_id": None,
-                "title": "지문 제목",
-                "content": "지문 내용",
-                "auth": "저자명",
-                "is_custom": 0
-            }
-        }
-
-
-class ProjectPassageResponse(BaseModel):
-    """프로젝트에서 사용된 지문 목록 응답 스키마"""
-    items: List[ProjectPassageItem]
-    total: int
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "items": [
-                    {
-                        "passage_id": 1,
-                        "custom_passage_id": None,
-                        "title": "지문 제목",
-                        "content": "지문 내용",
-                        "auth": "저자명",
-                        "is_custom": 0
-                    }
-                ],
-                "total": 1
-            }
-        }
-
-
 
 class SelectSaveResultRequest(BaseModel):
     """결과 저장 요청 스키마"""
@@ -253,13 +208,12 @@ class SelectSaveResultResponse(BaseModel):
 
 
 class QuestionMetaUpdateRequest(BaseModel):
-    """문항 메타데이터(피드백/사용여부/난이도) 업데이트 요청"""
+    """문항 메타데이터(피드백/선택여부/난이도) 업데이트 요청"""
     project_id: int
-    question_type: str  # "multiple_choice" | "true_false" | "short_answer"
     question_id: int
 
     feedback_score: Optional[float] = None
-    is_used: Optional[int] = None  # 1/0 (DB 호환)
+    is_checked: Optional[int] = None  # 1/0 (선택 여부)
     modified_difficulty: Optional[str] = None
 
 
@@ -282,18 +236,16 @@ class QuestionMetaBatchUpdateRequest(BaseModel):
                 "items": [
                     {
                         "project_id": 1,
-                        "question_type": "multiple_choice",
                         "question_id": 123,
                         "feedback_score": 8.5,
-                        "is_used": 1,
+                        "is_checked": 1,
                         "modified_difficulty": "상"
                     },
                     {
                         "project_id": 1,
-                        "question_type": "true_false",
                         "question_id": 456,
                         "feedback_score": 7.0,
-                        "is_used": 1
+                        "is_checked": 1
                     }
                 ]
             }
@@ -326,7 +278,7 @@ class ScopeCreateRequest(BaseModel):
             "example": {
                 "grade": 1,
                 "semester": 1,
-                "publisher_author": "천재교육/노미숙",
+                "publisher_author": "미래엔",
                 "large_unit_id": 1,
                 "large_unit_name": "1. 문학의 즐거움",
                 "small_unit_id": 1,

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Query, Depends
+from typing import Optional
 from fastapi.responses import FileResponse
 from pathlib import Path
 import tempfile
@@ -13,9 +14,7 @@ from app.schemas.curriculum import (
     QuestionMetaUpdateRequest,
     QuestionMetaUpdateResponse,
     QuestionMetaBatchUpdateRequest,
-    ProjectMetaResponse,
-    ProjectPassageResponse,
-    ProjectPassageItem
+    ProjectMetaResponse
 )
 from app.utils.dependencies import get_current_user
 router = APIRouter()
@@ -30,11 +29,12 @@ router = APIRouter()
 )
 async def get_result(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
-    question_type: str = Query("all", description="문항 타입 필터 (multiple_choice/true_false/short_answer/all)"),
+    question_type: Optional[str] = Query(None, description="문항 타입 필터 (multiple_choice/true_false/short_answer). 제공하지 않으면 모든 타입을 반환합니다."),
     current_user_id: str = Depends(get_current_user)
 ):
     """
     project_id를 기반으로 문항 리스트를 반환합니다.
+    question_type을 제공하지 않으면 모든 타입의 문항을 반환합니다.
     """
     user_id = int(current_user_id)
     project = select_one(
@@ -46,7 +46,8 @@ async def get_result(
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
 
     items = get_project_all_questions(project_id)
-    if question_type and question_type != "all":
+    # question_type이 제공된 경우에만 필터링
+    if question_type:
         items = [q for q in items if q.get("question_type") == question_type]
 
     return ListResponse(items=items or [], total=len(items or []))
@@ -59,12 +60,13 @@ async def get_result(
     "/save",
     response_model=QuestionMetaUpdateResponse,
     summary="문항 메타데이터 일괄 저장(=업데이트)",
-    description="여러 문항의 메타데이터를 한 번에 업데이트합니다. feedback_score/is_used/modified_difficulty를 업데이트합니다.",
+    description="여러 문항의 메타데이터를 한 번에 업데이트합니다. feedback_score/is_checked/modified_difficulty를 업데이트합니다. question_type은 자동으로 판단됩니다.",
     tags=["결과 관리"]
 )
 async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current_user_id: str = Depends(get_current_user)):
     """
     여러 문항의 메타데이터를 한 번에 업데이트합니다.
+    question_type은 자동으로 판단됩니다.
     
     **요청 형식:**
     ```json
@@ -72,18 +74,16 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
       "items": [
         {
           "project_id": 1,
-          "question_type": "multiple_choice",
           "question_id": 123,
           "feedback_score": 8.5,
-          "is_used": 1,
+          "is_checked": 1,
           "modified_difficulty": "상"
         },
         {
           "project_id": 1,
-          "question_type": "true_false",
           "question_id": 456,
           "feedback_score": 7.0,
-          "is_used": 1
+          "is_checked": 1
         }
       ]
     }
@@ -126,12 +126,12 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
             results=[]
         )
     
-    # 테이블/PK 매핑
-    table_map = {
-        "multiple_choice": ("multiple_choice_questions", "question_id"),
-        "true_false": ("true_false_questions", "ox_question_id"),
-        "short_answer": ("short_answer_questions", "short_question_id"),
-    }
+    # 테이블/PK 매핑 (question_id로 테이블 자동 판단)
+    table_configs = [
+        ("multiple_choice_questions", "question_id", "multiple_choice"),
+        ("true_false_questions", "ox_question_id", "true_false"),
+        ("short_answer_questions", "short_question_id", "short_answer"),
+    ]
     
     # 각 문항 업데이트
     results = []
@@ -140,13 +140,26 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
     
     for item in request.items:
         try:
-            # question_type 검증
-            if item.question_type not in table_map:
+            # project_id와 question_id로 어떤 테이블에 있는지 찾기
+            found_table = None
+            found_pk = None
+            found_question_type = None
+            
+            for table, pk, question_type in table_configs:
+                # 각 테이블에서 question_id로 조회
+                check_query = f"SELECT {pk} FROM {table} WHERE {pk} = %s AND project_id = %s LIMIT 1"
+                check_result = select_with_query(check_query, (item.question_id, item.project_id))
+                if check_result:
+                    found_table = table
+                    found_pk = pk
+                    found_question_type = question_type
+                    break
+            
+            if not found_table:
                 results.append({
-                    "question_type": item.question_type,
                     "question_id": item.question_id,
                     "success": False,
-                    "message": "question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다."
+                    "message": "해당 question_id를 가진 문항을 찾을 수 없습니다."
                 })
                 failed_count += 1
                 continue
@@ -155,14 +168,13 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
             data = {}
             if item.feedback_score is not None:
                 data["feedback_score"] = item.feedback_score
-            if item.is_used is not None:
-                data["is_used"] = int(item.is_used)
+            if item.is_checked is not None:
+                data["is_checked"] = int(item.is_checked)
             if item.modified_difficulty is not None:
                 data["modified_difficulty"] = item.modified_difficulty
             
             if not data:
                 results.append({
-                    "question_type": item.question_type,
                     "question_id": item.question_id,
                     "success": False,
                     "message": "업데이트할 값이 없습니다."
@@ -170,27 +182,25 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
                 failed_count += 1
                 continue
             
-            table, pk = table_map[item.question_type]
-            
             # project_id까지 where에 포함해 타 프로젝트 문항 업데이트 방지
             updated = update(
-                table=table,
+                table=found_table,
                 data=data,
-                where={pk: item.question_id, "project_id": item.project_id},
+                where={found_pk: item.question_id, "project_id": item.project_id},
             )
             
             if updated <= 0:
                 results.append({
-                    "question_type": item.question_type,
                     "question_id": item.question_id,
+                    "question_type": found_question_type,
                     "success": False,
                     "message": "업데이트 대상 문항을 찾을 수 없습니다."
                 })
                 failed_count += 1
             else:
                 results.append({
-                    "question_type": item.question_type,
                     "question_id": item.question_id,
+                    "question_type": found_question_type,
                     "success": True,
                     "message": "업데이트 완료"
                 })
@@ -198,7 +208,6 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
                 
         except Exception as e:
             results.append({
-                "question_type": item.question_type,
                 "question_id": item.question_id,
                 "success": False,
                 "message": f"업데이트 중 오류 발생: {str(e)}"
@@ -390,86 +399,3 @@ async def get_project_meta(
         large_unit_name=project_info.get("large_unit_name"),
         small_unit_name=project_info.get("small_unit_name")
     )
-
-
-@router.get(
-    "/passage",
-    response_model=ProjectPassageResponse,
-    summary="프로젝트에서 사용된 지문 목록 조회",
-    description="project_id를 기준으로 해당 프로젝트에서 사용된 지문 목록을 조회합니다.",
-    tags=["결과 관리"]
-)
-async def get_project_passages(
-    project_id: int = Query(..., description="프로젝트 ID", example=1),
-    current_user_id: str = Depends(get_current_user)
-):
-    """
-    project_id를 기반으로 해당 프로젝트에서 사용된 지문 목록을 반환합니다.
-    
-    반환 정보:
-    - passage_id: 원본 지문 ID (원본인 경우)
-    - custom_passage_id: 커스텀 지문 ID (커스텀인 경우)
-    - title: 지문 제목
-    - content: 지문 내용
-    - auth: 저자
-    - is_custom: 0(원본) 또는 1(커스텀)
-    """
-    user_id = int(current_user_id)
-    
-    # 프로젝트 소유권 확인
-    project = select_one(
-        "projects",
-        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
-        columns="project_id",
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
-    
-    # 프로젝트에서 사용된 지문 조회
-    passage_query = """
-        SELECT 
-            psc.passage_id,
-            psc.custom_passage_id,
-            COALESCE(p.title, pc.custom_title, pc.title) as title,
-            COALESCE(p.context, pc.context) as content,
-            COALESCE(p.auth, pc.auth) as auth,
-            CASE 
-                WHEN psc.passage_id IS NOT NULL THEN 0
-                WHEN psc.custom_passage_id IS NOT NULL THEN 1
-                ELSE NULL
-            END as is_custom
-        FROM project_source_config psc
-        LEFT JOIN passages p ON psc.passage_id = p.passage_id
-        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
-        WHERE psc.project_id = %s
-        AND (psc.passage_id IS NOT NULL OR psc.custom_passage_id IS NOT NULL)
-    """
-    passage_results = select_with_query(passage_query, (project_id,))
-    
-    if not passage_results:
-        return ProjectPassageResponse(items=[], total=0)
-    
-    # 중복 제거 (같은 지문이 여러 번 사용될 수 있으므로)
-    seen = set()
-    unique_passages = []
-    for passage in passage_results:
-        # passage_id 또는 custom_passage_id를 기준으로 중복 제거
-        key = (passage.get("passage_id"), passage.get("custom_passage_id"))
-        if key not in seen:
-            seen.add(key)
-            unique_passages.append(passage)
-    
-    # 스키마에 맞게 변환
-    items = [
-        ProjectPassageItem(
-            passage_id=passage.get("passage_id"),
-            custom_passage_id=passage.get("custom_passage_id"),
-            title=passage.get("title") or "",
-            content=passage.get("content") or "",
-            auth=passage.get("auth"),
-            is_custom=passage.get("is_custom") or 0
-        )
-        for passage in unique_passages
-    ]
-    
-    return ProjectPassageResponse(items=items, total=len(items))
