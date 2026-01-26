@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # LLM API 설정
     gemini_api_key: Optional[str] = None
     gemini_api_keys: Optional[str] = None  # 콤마로 구분된 여러 키 (예: "key1,key2,key3")
+    gemini_model_name: str = "gemini-3-flash-preview"  # 사용할 Gemini 모델 이름
     openai_api_key: Optional[str] = None
     default_llm_provider: str = "gemini"  # gemini, openai
     
