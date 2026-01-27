@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional, Tuple
-from app.db.database import select_one, select_all, count, select_with_query, insert_one
+from app.db.database import select_one, select_all, count, select_with_query, insert_one, update_with_query
 
 
 def get_project_scope_id(project_id: int, user_id: int) -> Optional[int]:
@@ -75,3 +75,64 @@ def get_custom_passages_paginated(scope_id: int, user_id: int) -> Tuple[List[Dic
     items = select_with_query(query, (scope_id, user_id))
 
     return items, len(items)
+
+
+
+
+def update_passage_use(project_id: int, is_modified: int, passage_id: int = None):
+    """
+    프로젝트 소스 구성에서 지문 사용 상태(is_modified, passage_id) 업데이트
+    passage_id가 주어지면 passage_id까지 수정, 아니면 is_modified만 수정
+    """
+    try:
+        if passage_id is not None and is_modified == 1:
+            query = """
+                UPDATE project_source_config 
+                SET 
+                    is_modified = %s,
+                    custom_passage_id = %s,
+                    updated_at = NOW()
+                WHERE project_id = %s
+            """
+            params = (is_modified, passage_id, project_id)
+        elif passage_id is not None and is_modified == 0:
+            query = """
+                UPDATE project_source_config 
+                SET 
+                    is_modified = %s,
+                    passage_id = %s,
+                    updated_at = NOW()
+                WHERE project_id = %s
+            """
+            params = (is_modified, passage_id, project_id)
+        else:
+            query = """
+                UPDATE project_source_config 
+                SET 
+                    is_modified = %s,
+                    updated_at = NOW()
+                WHERE project_id = %s
+            """
+            params = (is_modified, project_id)
+        return update_with_query(query, params)
+    except Exception as e:
+        print(f"Error updating passage use: {e}")
+        return False
+
+
+def update_project_config_status(project_id: int, is_modified: int, custom_passage_id: int):
+    """프로젝트 설정 상태 업데이트 (KST 기준)"""
+    try:
+        query = """
+            UPDATE project_source_config 
+            SET 
+                is_modified = %s, 
+                custom_passage_id = %s,
+                updated_at = NOW() 
+            WHERE 
+            project_id = %s
+        """
+        return update_with_query(query, (is_modified, custom_passage_id, project_id))
+    except Exception as e:
+        print(f"Error updating project config status: {e}")
+        return False

@@ -85,4 +85,18 @@ class PassageUpdateResponse(BaseModel):
                 "passage_id": 1,
                 "is_custom": 1
             }
-        }      
+        }    
+
+class PassageUseRequest(BaseModel):
+    project_id: int = Field(..., description="프로젝트 ID")
+    passage_id: int = Field(..., description="지문 ID")
+    is_custom: int = Field(..., description="커스텀 지문 여부")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "project_id": 1,
+                "passage_id": 1,
+                "is_custom": 1
+            }
+        }

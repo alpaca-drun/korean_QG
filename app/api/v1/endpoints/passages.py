@@ -13,11 +13,17 @@ from app.db.passages import (
     get_passage_info,
     create_custom_passage,
     get_project_scope_id,
-    
+    update_project_config_status,
+    update_passage_use
 )
 import json
 from app.utils.dependencies import get_current_user
-from app.schemas.passage import PassageListResponse, PassageUpdateRequest, PassageUpdateResponse
+from app.schemas.passage import (
+    PassageListResponse, 
+    PassageUpdateRequest, 
+    PassageUpdateResponse, 
+    PassageUseRequest
+)
 router = APIRouter()
 
 # 리스트 조회 시 content 미리보기 최대 길이
@@ -1014,6 +1020,7 @@ async def update_passage(
             "is_use": 1
         })
 
+        update_project_config_status(request.project_id, 1, new_custom_id)
         # 메시지 설정
         if title_auto_modified:
             message = f"기존 제목과 중복되어 '{custom_title}'로 자동 변경되어 저장되었습니다."
@@ -1121,40 +1128,30 @@ async def delete_passage(
 
 
 
-@router.get(
+@router.post(
     "/original_used",
     summary="원본 지문 그대로 사용",
     description="원본 지문 그대로 사용",
     tags=["지문"]
 )
 async def original_used_response(
-    project_id: int = Query(..., description="프로젝트 ID", example=1),
-    passage_id: int = Query(..., description="지문 ID", example=1),
-    is_original: bool = Query(..., description="원본 지문인지 수정본인지 여부", example=True),
+    request: PassageUseRequest,
     current_user_id: str = Depends(get_current_user)
 ):
     """
     원본 지문 그대로 사용 여부를 조회합니다.
     """
     try:
-        if is_original:
-            config_id = select_one(
-                "project_source_config", 
-                {
-                    "project_id": project_id, 
-                    "is_modified": 0,
-                    "passage_id": passage_id,
-                }
-            )
+        if request.is_custom == 0:
+            config_id = update_passage_use(request.project_id, 0, request.passage_id)
+        elif request.is_custom == 1:
+            config_id = update_passage_use(request.project_id, 1, request.passage_id)
         else:
-            config_id = select_one(
-                "project_source_config", 
-                {
-                    "project_id": project_id, 
-                    "is_modified": 1,
-                    "custom_passage_id": passage_id,
-                }
-                )
+            return {
+                "success": False,
+                "message": "요청 처리 중 오류가 발생했습니다.",
+                "detail": "커스텀 지문 또는 원본 지문을 선택해주세요."
+            }
         return {
             "success": True,
             "message": "요청이 정상적으로 처리되었습니다.",
@@ -1174,50 +1171,34 @@ async def original_used_response(
 
 
 
-# @router.get(
-#     "/modified_used",
-#     summary="지문 수정해서 사용",
-#     description="지문 수정해서 사용",
-#     tags=["지문"]
-# )
-# async def original_used_response(
-#     project_id: int = Query(..., description="프로젝트 ID", example=1),
-#     passage_id: int = Query(..., description="지문 ID", example=1),
-#     is_original: bool = Query(..., description="원본 지문인지 수정본인지 여부", example=True),
-#     current_user_id: str = Depends(get_current_user)
-# ):
-#     """
-#     원본 지문 그대로 사용 여부를 조회합니다.
-#     """
-#     try:
-#         if is_original:
-#             config_id = select_one(
-#                 "project_source_config", 
-#                 {
-#                     "project_id": project_id, 
-#                     "is_modified": 4,
-#                     "passage_id": passage_id,
-#                 }
-#             )
-#         else:
-#             config_id = select_one(
-#                 "project_source_config", 
-#                 {
-#                     "project_id": project_id, 
-#                     "is_modified": 4,
-#                     "custom_passage_id": passage_id,
-#                 }
-#                 )
-#         return {
-#             "success": True,
-#             "message": "요청이 정상적으로 처리되었습니다.",
-#             "config_id": config_id
-#             }
-#     except Exception as e:
-#         import traceback
-#         print(traceback.format_exc())
-#         return {
-#             "success": False,
-#             "message": "요청 처리 중 오류가 발생했습니다.",
-#             "detail": str(e)
-#             }
+@router.post(
+    "/modified_used",
+    summary="지문 수정해서 사용",
+    description="지문 수정해서 사용",
+    tags=["지문"]
+)
+async def modified_used_response(
+    request: PassageUseRequest,
+    current_user_id: str = Depends(get_current_user)
+):
+    """
+    원본 지문 그대로 사용 여부를 조회합니다.
+    """
+    print(f"request: {request}")
+    try:
+        if request.is_custom == 0:
+            update_passage_use(request.project_id, 4)
+        else:
+            update_passage_use(request.project_id, 4)
+        return {
+            "success": True,
+            "message": "요청이 정상적으로 처리되었습니다.",
+            }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {
+            "success": False,
+            "message": "요청 처리 중 오류가 발생했습니다.",
+            "detail": str(e)
+            }
