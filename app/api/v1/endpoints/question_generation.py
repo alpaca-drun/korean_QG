@@ -82,8 +82,8 @@ async def generate_questions_batch(
         obj_dict["small_unit"] = generation_configs.get("small_unit_name") or ""
         obj_dict["generation_count"] = request.target_count
         obj_dict["study_area"] = generation_configs.get("study_area")
-        obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
-        obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
+        # obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
+        # obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
 
 
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
@@ -174,8 +174,8 @@ async def generate_questions_batch_async(
         obj_dict["small_unit"] = generation_configs.get("small_unit_name") or ""
         obj_dict["generation_count"] = requests.target_count
         obj_dict["study_area"] = generation_configs.get("study_area")
-        obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
-        obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
+        # obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
+        # obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
 
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
 
