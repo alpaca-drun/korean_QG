@@ -51,8 +51,15 @@ async def get_result(
     # question_type이 제공된 경우에만 필터링
     if question_type:
         items = [q for q in items if q.get("question_type") == question_type]
+    
+    # 지문 정보 필드 제거 (passage_content, passage_title, passage_is_custom)
+    filtered_items = []
+    for item in items:
+        filtered_item = {k: v for k, v in item.items() 
+                        if k not in ['passage_content', 'passage_title', 'passage_is_custom']}
+        filtered_items.append(filtered_item)
 
-    return ListResponse(items=items or [], total=len(items or []))
+    return ListResponse(items=filtered_items or [], total=len(filtered_items or []))
 
 
 
