@@ -88,6 +88,8 @@ class PassageResponse(BaseModel):
     content: str
     description: Optional[str] = None
     is_use: Optional[int] = 1
+    success: bool = True
+    message: Optional[str] = None
 
     class Config:
         json_schema_extra = {

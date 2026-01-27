@@ -1,5 +1,34 @@
 from typing import List, Dict, Any, Optional, Tuple
-from app.db.database import select_one, select_all, count, select_with_query
+from app.db.database import select_one, select_all, count, select_with_query, insert_one
+
+
+def get_project_scope_id(project_id: int, user_id: int) -> Optional[int]:
+    """프로젝트 ID로 scope_id 조회"""
+    result = select_one(
+        table="projects",
+        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+        columns="scope_id"
+    )
+    return result.get("scope_id") if result else None
+
+
+def get_passage_info(passage_id: int, is_custom: bool, user_id: int = None) -> Optional[Dict[str, Any]]:
+    """지문 정보 조회 (원본 또는 커스텀)"""
+    if is_custom:
+        return select_one(
+            table="passage_custom",
+            where={"custom_passage_id": passage_id, "user_id": user_id, "is_deleted": False}
+        )
+    else:
+        return select_one(
+            table="passages",
+            where={"passage_id": passage_id}
+        )
+
+
+def create_custom_passage(data: Dict[str, Any]) -> int:
+    """커스텀 지문 생성"""
+    return insert_one("passage_custom", data)
 
 
 def get_original_passages_paginated(scope_id: int) -> Tuple[List[Dict[str, Any]], int]:
