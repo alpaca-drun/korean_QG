@@ -764,4 +764,3 @@ def get_download_history(project_id: int):
     """
     results = select_with_query(query, (project_id,))
     return results
-
