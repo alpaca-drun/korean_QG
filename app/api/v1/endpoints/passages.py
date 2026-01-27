@@ -6,7 +6,11 @@ from app.schemas.curriculum import (
     PassageUpdateRequest
 )
 from app.db.storage import get_db_connection
-from app.db.database import select_one
+from app.db.database import select_one, select_all
+from app.db.passages import (
+    get_original_passages_paginated,
+    get_custom_passages_paginated
+)
 import json
 from app.utils.dependencies import get_current_user
 from app.schemas.passage import PassageListResponse
@@ -59,6 +63,7 @@ def get_scope_ids_by_achievement(achievement_standard_id: int, connection) -> li
         import traceback
         print(traceback.format_exc())
         return []
+
 @router.get(
     "/list-by-project",
     response_model=PassageListResponse,
@@ -68,124 +73,59 @@ def get_scope_ids_by_achievement(achievement_standard_id: int, connection) -> li
 )
 async def get_passages_by_project(
     project_id: int = Query(..., description="프로젝트 ID (필수)", example=1),
-    limit: int = Query(100, description="각 타입별 조회 개수 제한", ge=1, le=1000),
-    offset: int = Query(0, description="조회 시작 위치", ge=0),
     current_user_id: str = Depends(get_current_user)
 ):
     """
     프로젝트 ID로 지문을 조회합니다.
-    
-    - **project_id**: 프로젝트 ID (필수)
-    - **limit**: 각 타입별 조회 개수 제한
-    - **offset**: 조회 시작 위치
-    
-    **응답**:
-    - **original**: 원본 지문 리스트 (passages 테이블)
-    - **custom**: 커스텀 지문 리스트 (passage_custom 테이블)
-    - **total_original**: 원본 지문 총 개수
-    - **total_custom**: 커스텀 지문 총 개수
     """
-    connection = get_db_connection()
-    if not connection:
-        raise HTTPException(
-            status_code=500,
-            detail="데이터베이스 연결에 실패했습니다."
-        )
-    
     try:
         user_id = int(current_user_id)
         
-        with connection.cursor() as cursor:
-            # 1. project_id로 scope_id 찾기
-            cursor.execute("""
-                SELECT scope_id 
-                FROM projects 
-                WHERE project_id = %s AND user_id = %s AND is_deleted = FALSE
-            """, (project_id, user_id))
-            
-            project = cursor.fetchone()
-            if not project or not project.get('scope_id'):
-                raise HTTPException(
-                    status_code=404,
-                    detail="프로젝트를 찾을 수 없거나 범위가 설정되지 않았습니다."
-                )
-            
-            scope_id = project['scope_id']
-            
-            # 2. 원본 지문 조회 (passages 테이블)
-            cursor.execute("""
-                SELECT 
-                    passage_id as id,
-                    title,
-                    context as content,
-                    scope_id,
-                    0 as is_custom
-                FROM passages
-                WHERE scope_id = %s
-                ORDER BY passage_id DESC
-                LIMIT %s OFFSET %s
-            """, (scope_id, limit, offset))
-            
-            original_passages = cursor.fetchall()
-            
-            # 원본 지문 총 개수
-            cursor.execute("""
-                SELECT COUNT(*) as total
-                FROM passages
-                WHERE scope_id = %s
-            """, (scope_id,))
-            
-            total_original = cursor.fetchone()['total']
-            
-            # 3. 커스텀 지문 조회 (passage_custom 테이블)
-            cursor.execute("""
-                SELECT 
-                    custom_passage_id as id,
-                    COALESCE(custom_title, title) as title,
-                    context as content,
-                    scope_id,
-                    1 as is_custom
-                FROM passage_custom
-                WHERE scope_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
-                ORDER BY custom_passage_id DESC
-                LIMIT %s OFFSET %s
-            """, (scope_id, user_id, limit, offset))
-            
-            custom_passages = cursor.fetchall()
-            
-            # 커스텀 지문 총 개수
-            cursor.execute("""
-                SELECT COUNT(*) as total
-                FROM passage_custom
-                WHERE scope_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
-            """, (scope_id, user_id))
-            
-            total_custom = cursor.fetchone()['total']
-            
-            # 4. content를 50자로 제한
-            original_list = [truncate_passage_content(dict(p)) for p in original_passages]
-            custom_list = [truncate_passage_content(dict(p)) for p in custom_passages]
-            
-            return PassageListResponse(
-                original=original_list,
-                custom=custom_list,
-                total_original=total_original,
-                total_custom=total_custom
+        # 1. project_id로 scope_id 찾기
+        scope_id = select_one(
+            table="projects",
+            where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+            columns="scope_id"
+        ).get("scope_id")
+
+        if not scope_id:
+            raise HTTPException(
+                status_code=404,
+                detail="프로젝트를 찾을 수 없거나 범위가 설정되지 않았습니다."
             )
+        
+        # 2. 원본/커스텀 지문 목록과 개수 가져오기 (SQL에서 이미 50자 절삭 처리됨)
+        original_list, total_original = get_original_passages_paginated(scope_id)
+        custom_list, total_custom = get_custom_passages_paginated(scope_id, user_id)
+        
+        return PassageListResponse(
+            success=True,
+            message="지문 리스트 조회 성공",
+            original=original_list,
+            custom=custom_list,
+            total_original=total_original,
+            total_custom=total_custom
+        )
             
     except HTTPException:
-        raise
+        return PassageListResponse(
+            success=False,
+            message="프로젝트를 찾을 수 없거나 범위가 설정되지 않았습니다.",
+            original=[],
+            custom=[],
+            total_original=0,
+            total_custom=0
+        )
     except Exception as e:
         import traceback
-        error_detail = f"지문 조회 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
-        raise HTTPException(
-            status_code=500,
-            detail=error_detail
+        return PassageListResponse(
+            success=False,
+            message=f"지문 리스트 조회 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}",
+            original=[],
+            custom=[],
+            total_original=0,
+            total_custom=0
         )
-    finally:
-        if connection:
-            connection.close()
-
 
 @router.get(
     "/list",
