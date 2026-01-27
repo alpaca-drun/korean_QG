@@ -1,11 +1,3 @@
-from pathlib import Path
-
-current_dir = Path(__file__).parent
-difficulty_path = current_dir / "difficulty.md"
-
-with open(difficulty_path, "r", encoding="utf-8") as f:
-    difficulty_content = f.read()
-
 # 공통 시스템 프롬프트 (영역 구분 없음, 모든 영역에 적용 가능하게 작성하였습니다 / 26년 1월 26일 권홍준 작성)
 COMMON_SYSTEM_PROMPT = """
 당신은 대한민국 {school_level} {grade_level}학년 {semester}학기 국어 **{study_area}** 영역에 대한 고품질 평가 문항을 작성하는 시험 출제 전문가이다.
@@ -330,7 +322,6 @@ SNS 게시물을 제작하려고 한다. 다음은 홍보 담당
 - [ ] 정답 위치가 무작위인가?
 
 """
-
 # 공통 유저 프롬프트 (영역 구분 없음, 모든 영역에 적용 가능하게 작성하였습니다 / 26년 1월 26일 권홍준 작성)
 COMMON_USER_PROMPT = """
 ## 생성 조건

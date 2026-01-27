@@ -16,7 +16,7 @@ from app.schemas.curriculum import (
     QuestionMetaBatchUpdateRequest,
     ProjectMetaResponse,
     ProjectPassageResponse,
-    ProjectPassageItem
+    ProjectPassageItem,
 )
 from app.utils.dependencies import get_current_user
 router = APIRouter()
