@@ -185,6 +185,10 @@ class ProjectResponse(BaseModel):
     message: str = Field(default="프로젝트 정보 조회 성공", description="메시지")
     project_id: int = Field(..., description="프로젝트 ID")
     status: str = Field(..., description="상태")
+    
+    config_id: Optional[int] = Field(None, description="설정 ID")
+    is_custom: Optional[int] = Field(None, description="지문 변형 여부 (0: 원본, 1: 변형, 2: 지문없음)")
+    passage_id: Optional[int] = Field(None, description="사용된 지문 ID")
 
 
 class SuccessResponse(BaseModel):
