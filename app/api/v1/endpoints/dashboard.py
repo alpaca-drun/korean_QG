@@ -617,7 +617,7 @@ async def get_project_detail(
     
     # 더 깔끔하게 정리해서 쓸 수 있는 방법 예시입니다.
 
-    is_modified = config.get("is_modified")
+    is_modified = config.get("is_modified", None)
     resp_kwargs = dict(
         success=True,
         project_id=project["project_id"],
@@ -646,6 +646,12 @@ async def get_project_detail(
     elif is_modified is None or is_modified == 4:
         resp_kwargs.update(
             message="지문 수정중 중단했거나 지문을 선택하지 않았습니다.",
+            is_custom=None,
+            passage_id=None,
+        )
+    else:
+        resp_kwargs.update(
+            message="프로젝트 설정까지만 진행되었습니다.",
             is_custom=None,
             passage_id=None,
         )
