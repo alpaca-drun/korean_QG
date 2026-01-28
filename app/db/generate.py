@@ -265,26 +265,35 @@ def save_question_to_db(
                 """
                 batch_id = question_data.get("batch_index", None)
                 question_text = question_data.get("question_text", {})
+                
+                # 'null' 문자열이나 빈 값을 None(NULL)으로 처리하는 헬퍼 함수
+                def clean_val(v):
+                    if v is None or str(v).lower() == 'null' or v == '':
+                        return None
+                    return v
+
                 # Question 스키마의 필드명에 맞춤: "text"
-                question = question_text.get("text", "")
-                modified_passage = question_text.get("modified_passage", "")
-                box_content = question_text.get("box_content", "")
+                question = clean_val(question_text.get("text"))
+                modified_passage = clean_val(question_text.get("modified_passage"))
+                box_content = clean_val(question_text.get("box_content"))
                 
                 options = question_data.get("choices", [])
-                option1 = options[0]["text"] if len(options) > 0 and "text" in options[0] else ""
-                option2 = options[1]["text"] if len(options) > 1 and "text" in options[1] else ""
-                option3 = options[2]["text"] if len(options) > 2 and "text" in options[2] else ""
-                option4 = options[3]["text"] if len(options) > 3 and "text" in options[3] else ""
-                option5 = options[4]["text"] if len(options) > 4 and "text" in options[4] else ""
+                option1 = clean_val(options[0]["text"]) if len(options) > 0 and "text" in options[0] else None
+                option2 = clean_val(options[1]["text"]) if len(options) > 1 and "text" in options[1] else None
+                option3 = clean_val(options[2]["text"]) if len(options) > 2 and "text" in options[2] else None
+                option4 = clean_val(options[3]["text"]) if len(options) > 3 and "text" in options[3] else None
+                option5 = clean_val(options[4]["text"]) if len(options) > 4 and "text" in options[4] else None
+                
                 # Question 스키마의 필드명에 맞춤: "correct_answer", "explanation"
-                answer = question_data.get("correct_answer", "")
-                answer_explain = question_data.get("explanation", "")
+                answer = clean_val(question_data.get("correct_answer"))
+                answer_explain = clean_val(question_data.get("explanation"))
                 is_used = question_data.get("is_used", 1)  # 기본값 1 (사용)
                 
                 # llm_difficulty 변환: 1 -> "쉬움", 2 -> "보통", 3 -> "어려움"
                 llm_difficulty_raw = question_data.get("llm_difficulty", None)
                 llm_difficulty_map = {1: "쉬움", 2: "보통", 3: "어려움"}
                 llm_difficulty = llm_difficulty_map.get(llm_difficulty_raw, None) if llm_difficulty_raw else None
+                llm_difficulty = clean_val(llm_difficulty)
 
                 cursor.execute(
                     sql,
@@ -339,25 +348,25 @@ def get_project_all_questions(project_id: int):
         SELECT 
             'multiple_choice' as question_type,
             mcq.question_id as id,
-            mcq.question,
-            mcq.answer,
-            mcq.answer_explain,
+            NULLIF(mcq.question, 'null') as question,
+            NULLIF(mcq.answer, 'null') as answer,
+            NULLIF(mcq.answer_explain, 'null') as answer_explain,
             mcq.feedback_score,
             mcq.is_used,
             mcq.is_checked,
             mcq.created_at,
-            mcq.box_content,
-            mcq.option1,
-            mcq.option2,
-            mcq.option3,
-            mcq.option4,
-            mcq.option5,
-            mcq.llm_difficulty,
-            mcq.modified_difficulty,
-            mcq.modified_passage,
+            NULLIF(mcq.box_content, 'null') as box_content,
+            NULLIF(mcq.option1, 'null') as option1,
+            NULLIF(mcq.option2, 'null') as option2,
+            NULLIF(mcq.option3, 'null') as option3,
+            NULLIF(mcq.option4, 'null') as option4,
+            NULLIF(mcq.option5, 'null') as option5,
+            NULLIF(mcq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(mcq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(mcq.modified_passage, 'null') as modified_passage,
             -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
-            COALESCE(p.context, pc.context) as passage_content,
-            COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
+            NULLIF(COALESCE(p.context, pc.context), 'null') as passage_content,
+            NULLIF(COALESCE(p.title, pc.custom_title, pc.title), 'null') as passage_title,
             CASE 
                 WHEN psc.passage_id IS NOT NULL THEN 0
                 WHEN psc.custom_passage_id IS NOT NULL THEN 1
@@ -375,9 +384,9 @@ def get_project_all_questions(project_id: int):
         SELECT 
             'true_false' as question_type,
             tfq.ox_question_id as id,
-            tfq.question,
-            tfq.answer,
-            tfq.answer_explain,
+            NULLIF(tfq.question, 'null') as question,
+            NULLIF(tfq.answer, 'null') as answer,
+            NULLIF(tfq.answer_explain, 'null') as answer_explain,
             tfq.feedback_score,
             tfq.is_used,
             tfq.is_checked,
@@ -392,8 +401,8 @@ def get_project_all_questions(project_id: int):
             NULL as modified_difficulty,
             NULL as modified_passage,
             -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
-            COALESCE(p.context, pc.context) as passage_content,
-            COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
+            NULLIF(COALESCE(p.context, pc.context), 'null') as passage_content,
+            NULLIF(COALESCE(p.title, pc.custom_title, pc.title), 'null') as passage_title,
             CASE 
                 WHEN psc.passage_id IS NOT NULL THEN 0
                 WHEN psc.custom_passage_id IS NOT NULL THEN 1
@@ -411,9 +420,9 @@ def get_project_all_questions(project_id: int):
         SELECT 
             'short_answer' as question_type,
             saq.short_question_id as id,
-            saq.question,
-            saq.answer,
-            saq.answer_explain,
+            NULLIF(saq.question, 'null') as question,
+            NULLIF(saq.answer, 'null') as answer,
+            NULLIF(saq.answer_explain, 'null') as answer_explain,
             saq.feedback_score,
             saq.is_used,
             saq.is_checked,
@@ -428,8 +437,8 @@ def get_project_all_questions(project_id: int):
             NULL as modified_difficulty,
             NULL as modified_passage,
             -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
-            COALESCE(p.context, pc.context) as passage_content,
-            COALESCE(p.title, pc.custom_title, pc.title) as passage_title,
+            NULLIF(COALESCE(p.context, pc.context), 'null') as passage_content,
+            NULLIF(COALESCE(p.title, pc.custom_title, pc.title), 'null') as passage_title,
             CASE 
                 WHEN psc.passage_id IS NOT NULL THEN 0
                 WHEN psc.custom_passage_id IS NOT NULL THEN 1
