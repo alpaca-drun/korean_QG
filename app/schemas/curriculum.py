@@ -183,7 +183,6 @@ class ListResponse(BaseModel):
 class ProjectPassageItem(BaseModel):
     """프로젝트에서 사용된 지문 항목 스키마"""
     passage_id: Optional[int] = None
-    custom_passage_id: Optional[int] = None
     title: str
     content: str
     auth: Optional[str] = None
@@ -193,7 +192,6 @@ class ProjectPassageItem(BaseModel):
         json_schema_extra = {
             "example": {
                 "passage_id": 1,
-                "custom_passage_id": None,
                 "title": "지문 제목",
                 "content": "지문 내용",
                 "auth": "저자명",
@@ -204,16 +202,19 @@ class ProjectPassageItem(BaseModel):
 
 class ProjectPassageResponse(BaseModel):
     """프로젝트에서 사용된 지문 목록 응답 스키마"""
+    success: Optional[bool] = None
+    message: Optional[str] = None
     items: List[ProjectPassageItem]
     total: int
 
     class Config:
         json_schema_extra = {
             "example": {
+                "success": True,
+                "message": "프로젝트에서 사용된 지문 목록 조회 성공",
                 "items": [
                     {
                         "passage_id": 1,
-                        "custom_passage_id": None,
                         "title": "지문 제목",
                         "content": "지문 내용",
                         "auth": "저자명",
@@ -445,51 +446,5 @@ class PassageCustomUpdateRequest(BaseModel):
                 "title": "수정된 제목",
                 "context": "수정된 내용",
                 "scope_id": 123
-            }
-        }
-
-
-
-class ProjectPassageItem(BaseModel):
-    """프로젝트에서 사용된 지문 항목 스키마"""
-    passage_id: Optional[int] = None
-    custom_passage_id: Optional[int] = None
-    title: str
-    content: str
-    auth: Optional[str] = None
-    is_custom: int  # 0: 원본, 1: 커스텀
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "passage_id": 1,
-                "custom_passage_id": None,
-                "title": "지문 제목",
-                "content": "지문 내용",
-                "auth": "저자명",
-                "is_custom": 0
-            }
-        }
-
-
-class ProjectPassageResponse(BaseModel):
-    """프로젝트에서 사용된 지문 목록 응답 스키마"""
-    items: List[ProjectPassageItem]
-    total: int
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "items": [
-                    {
-                        "passage_id": 1,
-                        "custom_passage_id": None,
-                        "title": "지문 제목",
-                        "content": "지문 내용",
-                        "auth": "저자명",
-                        "is_custom": 0
-                    }
-                ],
-                "total": 1
             }
         }
