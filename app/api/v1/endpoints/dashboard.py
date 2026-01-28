@@ -612,11 +612,12 @@ async def get_project_detail(
             detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
         )
 
-    
+    config = {}
     config = select_one("project_source_config", {"project_id": project_id})
     
     # 더 깔끔하게 정리해서 쓸 수 있는 방법 예시입니다.
 
+    
     is_modified = config.get("is_modified", None)
     resp_kwargs = dict(
         success=True,
