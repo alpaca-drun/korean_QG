@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 
 class ProjectMetaResponse(BaseModel):
     """프로젝트 메타정보 응답 스키마"""
+    success: bool = True
+    message: str = "프로젝트 메타정보 조회 성공"
     project_id: int
     grade: Optional[str] = None
     semester: Optional[str] = None
@@ -11,17 +13,24 @@ class ProjectMetaResponse(BaseModel):
     publisher_author: Optional[str] = None
     large_unit_name: Optional[str] = None
     small_unit_name: Optional[str] = None
-
+    target_count: Optional[int] = None
+    additional_prompt: Optional[str] = None
+    stem_directive: Optional[str] = None
     class Config:
         json_schema_extra = {
             "example": {
+                "success": True,
+                "message": "프로젝트 메타정보 조회 성공",
                 "project_id": 1,
                 "grade": "중학교",
                 "semester": "1학기",
                 "subject": "국어",
                 "publisher_author": "출판사/저자",
                 "large_unit_name": "1. 문학의 즐거움",
-                "small_unit_name": "(1) 시 감상하기"
+                "small_unit_name": "(1) 시 감상하기",
+                "target_count": 10,
+                "additional_prompt": "추가 프롬프트",
+                "stem_directive": "주제 지시문"
             }
         }
 

@@ -612,12 +612,13 @@ async def get_project_detail(
             detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
         )
 
-    
+
     config = select_one("project_source_config", {"project_id": project_id})
     
     # 더 깔끔하게 정리해서 쓸 수 있는 방법 예시입니다.
 
-    is_modified = config.get("is_modified")
+    
+    is_modified = config.get("is_modified", None) if config else None
     resp_kwargs = dict(
         success=True,
         project_id=project["project_id"],
@@ -643,10 +644,16 @@ async def get_project_detail(
             is_custom=2,
             passage_id=None,
         )
-    elif is_modified is None or is_modified == 4:
+    elif is_modified == 4:
         resp_kwargs.update(
             message="지문 수정중 중단했거나 지문을 선택하지 않았습니다.",
-            is_custom=None,
+            is_custom=999,
+            passage_id=None,
+        )
+    else:
+        resp_kwargs.update(
+            message="프로젝트 설정까지만 진행되었습니다.",
+            is_custom=999,
             passage_id=None,
         )
     return ProjectResponse(**resp_kwargs)
