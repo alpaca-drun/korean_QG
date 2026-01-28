@@ -389,26 +389,37 @@ async def get_project_meta(
             ps.subject,
             ps.publisher_author,
             ps.large_unit_name,
-            ps.small_unit_name
+            ps.small_unit_name,
+
+            IFNULL(psc.target_count, 0) as target_count,
+            IFNULL(psc.additional_prompt, "") as additional_prompt,
+            IFNULL(psc.stem_directive, "") as stem_directive
+
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+        LEFT JOIN project_source_config psc ON p.project_id = psc.project_id
         WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
     """
     project_result = select_with_query(project_query, (project_id, user_id))
     
     if not project_result:
-        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+        return ProjectMetaResponse(success=False, message="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)", project_id=0, grade=None, semester=None, subject=None, publisher_author=None, large_unit_name=None, small_unit_name=None, target_count=None, additional_prompt=None, stem_directive=None)
     
     project_info = project_result[0]
     
     return ProjectMetaResponse(
+        success=True,
+        message="프로젝트 메타정보 조회 성공",
         project_id=project_info.get("project_id"),
-        grade=project_info.get("grade"),
-        semester=project_info.get("semester"),
+        grade=str(project_info.get("grade")) if project_info.get("grade") is not None else None,
+        semester=str(project_info.get("semester")) if project_info.get("semester") is not None else None,
         subject=project_info.get("subject"),
         publisher_author=project_info.get("publisher_author"),
         large_unit_name=project_info.get("large_unit_name"),
-        small_unit_name=project_info.get("small_unit_name")
+        small_unit_name=project_info.get("small_unit_name"),
+        target_count=project_info.get("target_count"),
+        additional_prompt=project_info.get("additional_prompt"),
+        stem_directive=project_info.get("stem_directive")
     )
 
 

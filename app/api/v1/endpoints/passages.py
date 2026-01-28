@@ -14,7 +14,8 @@ from app.db.passages import (
     create_custom_passage,
     get_project_scope_id,
     update_project_config_status,
-    update_passage_use
+    update_passage_use,
+    search_passages_keyword
 )
 import json
 from app.utils.dependencies import get_current_user
@@ -431,14 +432,14 @@ async def get_passages(
 )
 async def get_passage(
     passage_id: int,
-    source_type: Optional[int] = Query(None, description="지문 소스 타입 (1: 원본 지문, 2: 커스텀 지문, None: 자동 검색)", example=1),
+    source_type: Optional[int] = Query(None, description="지문 소스 타입 (0: 원본 지문, 1: 커스텀 지문, None: 자동 검색)", example=1),
     current_user_id: str = Depends(get_current_user)
 ):
     """
     지문 ID로 특정 지문의 상세 정보를 반환합니다.
     
     - **passage_id**: 지문 ID
-    - **source_type**: 지문 소스 타입 (1: passages 테이블, 2: passage_custom 테이블, None: 둘 다 검색)
+    - **source_type**: 지문 소스 타입 (0: passages 테이블, 1: passage_custom 테이블, None: 둘 다 검색)
     """
     connection = get_db_connection()
     if not connection:
@@ -453,7 +454,7 @@ async def get_passage(
             passage = None
             
             # source_type에 따라 조회
-            if source_type == 1:  # 원본 지문만
+            if source_type == 0:  # 원본 지문만
                 sql = """
                     SELECT passage_id as id, title, context as content, 
                            NULL as description, scope_id,
@@ -463,7 +464,7 @@ async def get_passage(
                 """
                 cursor.execute(sql, (passage_id,))
                 passage = cursor.fetchone()
-            elif source_type == 2:  # 커스텀 지문만
+            elif source_type == 1:  # 커스텀 지문만
                 sql = """
                     SELECT custom_passage_id as id, 
                            COALESCE(custom_title, title) as title, 
@@ -577,101 +578,54 @@ async def get_passage(
 
 @router.get(
     "/search_keyword/{keyword}",
-    response_model=ListResponse,
+    response_model=PassageListResponse,
     summary="키워드를 통한 지문 검색",
     description="특정 키워드를 포함하는 지문을 검색합니다.",
     tags=["지문"]
 )
 async def search_passages_by_keyword(
     keyword: str,
-    source_type: Optional[int] = Query(None, description="지문 소스 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)", example=1),
+    source_type: Optional[int] = Query(None, description="지문 소스 타입 (0: 원본 지문, 1: 커스텀 지문, None: 전체)", example=None),
     current_user_id: str = Depends(get_current_user)
 ):
     """
     키워드를 포함하는 지문을 반환합니다.
     
     - **keyword**: 검색할 키워드
-    - **source_type**: 지문 소스 타입 (1: passages 테이블만, 2: passage_custom 테이블만, None: 둘 다)
+    - **source_type**: 지문 소스 타입 (0: passages 테이블만, 1: passage_custom 테이블만, None: 둘 다)
     
     지문의 제목(title), 내용(context)에서 키워드를 검색합니다.
     
     **참고**: 리스트 조회에서는 content가 50자로 제한됩니다.
     전체 내용이 필요한 경우 `/passages/{passage_id}` 또는 `/passages/full_content`를 사용하세요.
     """
-    connection = get_db_connection()
-    if not connection:
-        raise HTTPException(
-            status_code=500,
-            detail="데이터베이스 연결에 실패했습니다."
-        )
-    
     try:
         user_id = int(current_user_id)
-        with connection.cursor() as cursor:
-            search_pattern = f"%{keyword}%"
+        
+        # DB 로직을 app/db/passages.py의 함수로 대체
+        passages = search_passages_keyword(keyword, user_id, source_type)
+        
+        # 원본과 커스텀 분리
+        original_items = []
+        custom_items = []
+        
+        for passage in passages:
+            item = dict(passage)
             
-            # source_type에 따라 다른 쿼리 실행
-            if source_type == 1:  # 원본 지문만
-                sql = """
-                    SELECT passage_id as id, title, context as content, 
-                           NULL as description, scope_id, NULL as achievement_standard_id
-                    FROM passages
-                    WHERE title LIKE %s OR context LIKE %s
-                    ORDER BY id DESC
-                """
-                cursor.execute(sql, (search_pattern, search_pattern))
-            elif source_type == 2:  # 커스텀 지문만
-                sql = """
-                    SELECT custom_passage_id as id, 
-                           COALESCE(custom_title, title) as title, 
-                           context as content,
-                           NULL as description, scope_id, NULL as achievement_standard_id
-                    FROM passage_custom
-                    WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
-                    ORDER BY id DESC
-                """
-                cursor.execute(sql, (user_id, search_pattern, search_pattern, search_pattern))
-            else:  # None: 전체 (원본 + 커스텀)
-                sql = """
-                    SELECT passage_id as id, title, context as content, 
-                           NULL as description, scope_id, NULL as achievement_standard_id
-                    FROM passages
-                    WHERE title LIKE %s OR context LIKE %s
-                    
-                    UNION ALL
-                    
-                    SELECT custom_passage_id as id, 
-                           COALESCE(custom_title, title) as title, 
-                           context as content,
-                           NULL as description, scope_id, NULL as achievement_standard_id
-                    FROM passage_custom
-                    WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
-                    ORDER BY id DESC
-                """
-                cursor.execute(sql, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))
-            
-            passages = cursor.fetchall()
-            
-            if not passages:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"키워드 '{keyword}'를 포함하는 지문을 찾을 수 없습니다."
-                )
-            
-            # 형식 변환
-            items = []
-            for passage in passages:
-                item = dict(passage)
-                if item.get('description') is None:
-                    item['description'] = ""
-                if item.get('achievement_standard_id') is None:
-                    item['achievement_standard_id'] = 0
-                items.append(item)
-            
-            # 리스트 조회에서는 content를 50자로 제한
-            truncated_passages = [truncate_passage_content(p) for p in items]
-            
-            return ListResponse(items=truncated_passages, total=len(truncated_passages))
+            # DB 조회 단계에서 이미 50자로 절삭되었으므로 그대로 사용
+            if item.get('is_custom') == 1:
+                custom_items.append(item)
+            else:
+                original_items.append(item)
+        
+        return PassageListResponse(
+            success=True,
+            message=f"키워드 '{keyword}' 검색 결과",
+            original=original_items,
+            custom=custom_items,
+            total_original=len(original_items),
+            total_custom=len(custom_items)
+        )
             
     except HTTPException:
         raise
@@ -682,132 +636,6 @@ async def search_passages_by_keyword(
             status_code=500,
             detail=error_detail
         )
-    finally:
-        if connection:
-            connection.close()
-
-
-# @router.get(
-#     "/full_content",
-#     response_model=PassageResponse,
-#     summary="지문 전문",
-#     description="특정 지문의 전문을 조회합니다.",
-#     tags=["지문"]
-# )
-# async def get_passage_content(
-#     passage_id: int = Query(..., description="지문 ID", example=1)
-# ):
-#     """
-#     지문 ID를 기반으로 지문의 전문을 조회합니다.
-    
-#     - **passage_id**: 지문 ID
-#     """
-#     connection = get_db_connection()
-#     if not connection:
-#         raise HTTPException(
-#             status_code=500,
-#             detail="데이터베이스 연결에 실패했습니다."
-#         )
-    
-#     try:
-#         with connection.cursor() as cursor:
-#             # 원본 지문에서 먼저 조회
-#             sql = """
-#                 SELECT passage_id as id, title, context as content, 
-#                        NULL as description, scope_id,
-#                        1 as is_use
-#                 FROM passages
-#                 WHERE passage_id = %s
-#             """
-#             cursor.execute(sql, (passage_id,))
-#             passage = cursor.fetchone()
-            
-#             # 원본 지문에 없으면 커스텀 지문에서 조회
-#             if not passage:
-#                 sql = """
-#                     SELECT custom_passage_id as id, 
-#                            COALESCE(custom_title, title) as title, 
-#                            context as content,
-#                            NULL as description, scope_id,
-#                            IFNULL(is_use, 1) as is_use
-#                     FROM passage_custom
-#                     WHERE custom_passage_id = %s
-#                 """
-#                 cursor.execute(sql, (passage_id,))
-#                 passage = cursor.fetchone()
-            
-#             if not passage:
-#                 raise HTTPException(
-#                     status_code=404,
-#                     detail=f"지문 ID {passage_id}의 전문을 찾을 수 없습니다."
-#                 )
-            
-#             # scope_id로 achievement_standard_id 찾기
-#             scope_id = passage.get('scope_id')
-#             achievement_standard_id = 0
-#             if scope_id:
-#                 with connection.cursor() as inner_cursor:
-#                     inner_sql = """
-#                         SELECT achievement_ids
-#                         FROM project_scopes
-#                         WHERE scope_id = %s
-#                         LIMIT 1
-#                     """
-#                     inner_cursor.execute(inner_sql, (scope_id,))
-#                     scope_result = inner_cursor.fetchone()
-#                     if scope_result and scope_result.get('achievement_ids'):
-#                         try:
-#                             achievement_ids_raw = scope_result['achievement_ids']
-#                             # JSON 문자열인 경우 파싱
-#                             if isinstance(achievement_ids_raw, str):
-#                                 achievement_ids = json.loads(achievement_ids_raw)
-#                             # 이미 리스트인 경우
-#                             elif isinstance(achievement_ids_raw, list):
-#                                 achievement_ids = achievement_ids_raw
-#                             else:
-#                                 achievement_ids = []
-                            
-#                             # achievement_ids가 리스트이고 비어있지 않으면 첫 번째 값 사용
-#                             if isinstance(achievement_ids, list) and len(achievement_ids) > 0:
-#                                 first_id = achievement_ids[0]
-#                                 # 정수로 변환 가능한지 확인
-#                                 if isinstance(first_id, int):
-#                                     achievement_standard_id = first_id
-#                                 elif isinstance(first_id, str) and first_id.isdigit():
-#                                     achievement_standard_id = int(first_id)
-#                         except (json.JSONDecodeError, ValueError, TypeError) as e:
-#                             print(f"achievement_ids 파싱 오류: {e}, 값: {scope_result.get('achievement_ids')}")
-#                             achievement_standard_id = 0
-            
-#             # 응답 형식 변환
-#             item = dict(passage)
-#             # achievement_standard_id가 정수인지 확인
-#             if not isinstance(achievement_standard_id, int):
-#                 try:
-#                     achievement_standard_id = int(achievement_standard_id) if achievement_standard_id else 0
-#                 except (ValueError, TypeError):
-#                     achievement_standard_id = 0
-            
-#             item['achievement_standard_id'] = achievement_standard_id
-#             if item.get('description') is None:
-#                 item['description'] = ""
-#             if item.get('is_use') is None:
-#                 item['is_use'] = 1
-            
-#             return PassageResponse(**item)
-            
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         import traceback
-#         error_detail = f"지문 조회 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
-#         raise HTTPException(
-#             status_code=500,
-#             detail=error_detail
-#         )
-#     finally:
-#         if connection:
-#             connection.close()
 
 
 @router.post(
@@ -1055,7 +883,7 @@ async def update_passage(
 )
 async def delete_passage(
     passage_id: int,
-    is_custom: Optional[int] = Query(None, description="지문 소스 타입 (1: 원본 지문, 2: 커스텀 지문, None: 자동 판단)", example=2),
+    is_custom: Optional[int] = Query(None, description="지문 소스 타입 (0: 원본 지문, 1: 커스텀 지문, None: 자동 판단)", example=2),
     current_user_id: str = Depends(get_current_user)
 ):
     """
@@ -1076,7 +904,7 @@ async def delete_passage(
     try:
         user_id = int(current_user_id)
         with connection.cursor() as cursor:
-            # source_type이 1이면 원본 지문 삭제 시도 → 거부
+            # source_type이 0이면 원본 지문 삭제 시도 → 거부
             if is_custom == 0:
                 raise HTTPException(
                     status_code=400,
