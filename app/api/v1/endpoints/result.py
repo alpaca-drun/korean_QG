@@ -18,6 +18,7 @@ from app.schemas.curriculum import (
     ProjectPassageResponse,
     ProjectPassageItem,
 )
+
 from app.utils.dependencies import get_current_user
 router = APIRouter()
 
@@ -429,7 +430,7 @@ async def get_project_passages(
     - passage_id: 원본 지문 ID (원본인 경우)
     - custom_passage_id: 커스텀 지문 ID (커스텀인 경우)
     - title: 지문 제목
-    - content: 지문 내용
+    - content: 지문 내용W
     - auth: 저자
     - is_custom: 0(원본) 또는 1(커스텀)
     """
@@ -444,19 +445,46 @@ async def get_project_passages(
     if not project:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
     
+    config_data = select_one(
+        "project_source_config",
+        where={"project_id": project_id},
+        columns="config_id, is_modified, passage_id, custom_passage_id",
+    )
+
+
+    if not config_data:
+        return ProjectPassageResponse(success=False, message="프로젝트에서 사용된 지문 목록 조회 실패", items=[], total=0)
+    
+
     # 프로젝트에서 사용된 지문 조회
     passage_query = """
         SELECT 
-            psc.passage_id,
-            psc.custom_passage_id,
-            COALESCE(p.title, pc.custom_title, pc.title) as title,
-            COALESCE(p.context, pc.context) as content,
-            COALESCE(p.auth, pc.auth) as auth,
+            CASE
+                WHEN psc.is_modified = 0 THEN psc.passage_id
+                WHEN psc.is_modified = 1 THEN psc.custom_passage_id
+                ELSE NULL
+            END as passage_id,
+            CASE
+                WHEN psc.is_modified = 0 THEN p.title
+                WHEN psc.is_modified = 1 THEN pc.title
+                ELSE NULL
+            END as title,
+            CASE
+                WHEN psc.is_modified = 0 THEN p.context
+                WHEN psc.is_modified = 1 THEN pc.context
+                ELSE NULL
+            END as content,
+            CASE
+                WHEN psc.is_modified = 0 THEN p.auth
+                WHEN psc.is_modified = 1 THEN pc.auth
+                ELSE NULL
+            END as auth,
             CASE 
-                WHEN psc.passage_id IS NOT NULL THEN 0
-                WHEN psc.custom_passage_id IS NOT NULL THEN 1
+                WHEN psc.is_modified = 0 THEN 0
+                WHEN psc.is_modified = 1 THEN 1
                 ELSE NULL
             END as is_custom
+            
         FROM project_source_config psc
         LEFT JOIN passages p ON psc.passage_id = p.passage_id
         LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
@@ -466,7 +494,7 @@ async def get_project_passages(
     passage_results = select_with_query(passage_query, (project_id,))
     
     if not passage_results:
-        return ProjectPassageResponse(items=[], total=0)
+        return ProjectPassageResponse(success=False, message="프로젝트에서 사용된 지문 목록 조회 실패", items=[], total=0)
     
     # 중복 제거 (같은 지문이 여러 번 사용될 수 있으므로)
     seen = set()
@@ -482,7 +510,6 @@ async def get_project_passages(
     items = [
         ProjectPassageItem(
             passage_id=passage.get("passage_id"),
-            custom_passage_id=passage.get("custom_passage_id"),
             title=passage.get("title") or "",
             content=passage.get("content") or "",
             auth=passage.get("auth"),
@@ -491,4 +518,9 @@ async def get_project_passages(
         for passage in unique_passages
     ]
     
-    return ProjectPassageResponse(items=items, total=len(items))
+    return ProjectPassageResponse(
+        success=True, 
+        message="프로젝트에서 사용된 지문 목록 조회 성공", 
+        items=items, 
+        total=len(items)
+        )
