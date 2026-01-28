@@ -615,20 +615,41 @@ async def get_project_detail(
     
     config = select_one("project_source_config", {"project_id": project_id})
     
-    if config['is_modified'] is not None:
-        return ProjectResponse(
-            success=True,
-            project_id=project["project_id"],
-            status=project["status"],
-            config_id=config["config_id"]
-        )
+    # 더 깔끔하게 정리해서 쓸 수 있는 방법 예시입니다.
 
-    else:
-        return ProjectResponse(
-            success=True,
-            project_id=project["project_id"],
-            status=project["status"]
+    is_modified = config.get("is_modified")
+    resp_kwargs = dict(
+        success=True,
+        project_id=project["project_id"],
+        status=project["status"]
+    )
+
+    # 각 상태에 따라 메시지/필드 정리
+    if is_modified == 0:
+        resp_kwargs.update(
+            message="원본 지문을 사용하여 생성 중입니다.",
+            is_custom=0,
+            passage_id=config.get("passage_id"),
         )
+    elif is_modified == 1:
+        resp_kwargs.update(
+            message="커스텀 지문을 사용하여 생성 중입니다.",
+            is_custom=1,
+            passage_id=config.get("custom_passage_id"),
+        )
+    elif is_modified == 2:
+        resp_kwargs.update(
+            message="지문 없이 생성 중입니다.",
+            is_custom=2,
+            passage_id=None,
+        )
+    elif is_modified is None or is_modified == 4:
+        resp_kwargs.update(
+            message="지문 수정중 중단했거나 지문을 선택하지 않았습니다.",
+            is_custom=None,
+            passage_id=None,
+        )
+    return ProjectResponse(**resp_kwargs)
 
 
 

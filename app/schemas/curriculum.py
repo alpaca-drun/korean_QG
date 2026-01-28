@@ -88,6 +88,8 @@ class PassageResponse(BaseModel):
     content: str
     description: Optional[str] = None
     is_use: Optional[int] = 1
+    success: bool = True
+    message: Optional[str] = None
 
     class Config:
         json_schema_extra = {
@@ -176,6 +178,51 @@ class ListResponse(BaseModel):
     """리스트 응답 스키마"""
     items: List[dict]
     total: int
+
+
+class ProjectPassageItem(BaseModel):
+    """프로젝트에서 사용된 지문 항목 스키마"""
+    passage_id: Optional[int] = None
+    custom_passage_id: Optional[int] = None
+    title: str
+    content: str
+    auth: Optional[str] = None
+    is_custom: int  # 0: 원본, 1: 커스텀
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "passage_id": 1,
+                "custom_passage_id": None,
+                "title": "지문 제목",
+                "content": "지문 내용",
+                "auth": "저자명",
+                "is_custom": 0
+            }
+        }
+
+
+class ProjectPassageResponse(BaseModel):
+    """프로젝트에서 사용된 지문 목록 응답 스키마"""
+    items: List[ProjectPassageItem]
+    total: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "passage_id": 1,
+                        "custom_passage_id": None,
+                        "title": "지문 제목",
+                        "content": "지문 내용",
+                        "auth": "저자명",
+                        "is_custom": 0
+                    }
+                ],
+                "total": 1
+            }
+        }
 
 
 
