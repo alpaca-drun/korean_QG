@@ -653,7 +653,7 @@ async def get_project_detail(
     else:
         resp_kwargs.update(
             message="프로젝트 설정까지만 진행되었습니다.",
-            is_custom=None,
+            is_custom=999,
             passage_id=None,
         )
     return ProjectResponse(**resp_kwargs)
