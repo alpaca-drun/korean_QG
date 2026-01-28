@@ -83,38 +83,57 @@ def update_passage_use(project_id: int, is_modified: int, passage_id: int = None
     """
     프로젝트 소스 구성에서 지문 사용 상태(is_modified, passage_id) 업데이트
     passage_id가 주어지면 passage_id까지 수정, 아니면 is_modified만 수정
+    기존 데이터가 없으면 insert_one을 수행함
     """
     try:
-        if passage_id is not None and is_modified == 1:
-            query = """
-                UPDATE project_source_config 
-                SET 
-                    is_modified = %s,
-                    custom_passage_id = %s,
-                    updated_at = NOW()
-                WHERE project_id = %s
-            """
-            params = (is_modified, passage_id, project_id)
-        elif passage_id is not None and is_modified == 0:
-            query = """
-                UPDATE project_source_config 
-                SET 
-                    is_modified = %s,
-                    passage_id = %s,
-                    updated_at = NOW()
-                WHERE project_id = %s
-            """
-            params = (is_modified, passage_id, project_id)
+        # 기존 데이터 존재 여부 확인
+        config = select_one("project_source_config", where={"project_id": project_id})
+        
+        if not config:
+            # 존재하지 않으면 INSERT
+            data = {
+                "project_id": project_id,
+                "is_modified": is_modified
+            }
+            if passage_id is not None:
+                if is_modified == 1:
+                    data["custom_passage_id"] = passage_id
+                else:
+                    data["passage_id"] = passage_id
+            
+            return insert_one("project_source_config", data)
         else:
-            query = """
-                UPDATE project_source_config 
-                SET 
-                    is_modified = %s,
-                    updated_at = NOW()
-                WHERE project_id = %s
-            """
-            params = (is_modified, project_id)
-        return update_with_query(query, params)
+            # 존재하면 UPDATE
+            if passage_id is not None and is_modified == 1:
+                query = """
+                    UPDATE project_source_config 
+                    SET 
+                        is_modified = %s,
+                        custom_passage_id = %s,
+                        updated_at = NOW()
+                    WHERE project_id = %s
+                """
+                params = (is_modified, passage_id, project_id)
+            elif passage_id is not None and is_modified == 0:
+                query = """
+                    UPDATE project_source_config 
+                    SET 
+                        is_modified = %s,
+                        passage_id = %s,
+                        updated_at = NOW()
+                    WHERE project_id = %s
+                """
+                params = (is_modified, passage_id, project_id)
+            else:
+                query = """
+                    UPDATE project_source_config 
+                    SET 
+                        is_modified = %s,
+                        updated_at = NOW()
+                    WHERE project_id = %s
+                """
+                params = (is_modified, project_id)
+            return update_with_query(query, params)
     except Exception as e:
         print(f"Error updating passage use: {e}")
         return False
@@ -136,3 +155,78 @@ def update_project_config_status(project_id: int, is_modified: int, custom_passa
     except Exception as e:
         print(f"Error updating project config status: {e}")
         return False
+
+
+def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[int] = None) -> List[Dict[str, Any]]:
+    """키워드를 통한 지문 검색 (원본 및 커스텀)"""
+    search_pattern = f"%{keyword}%"
+    
+    if source_type == 0:  # 원본 지문만
+        query = """
+            SELECT passage_id as id, title, auth as auth, 
+                   CASE 
+                       WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(SUBSTRING(context, 1, 50), '...')
+                       ELSE context
+                   END as content,
+                   NULL as description, scope_id, NULL as achievement_standard_id,
+                   0 as is_custom
+            FROM passages
+            WHERE title LIKE %s OR context LIKE %s
+            ORDER BY id DESC
+        """
+        return select_with_query(query, (search_pattern, search_pattern))
+        
+    elif source_type == 1:  # 커스텀 지문만
+        query = """
+            SELECT custom_passage_id as id, 
+                   COALESCE(custom_title, title) as title, 
+                   auth as auth,
+                   CASE 
+                       WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(SUBSTRING(context, 1, 50), '...')
+                       ELSE context
+                   END as content,
+                   NULL as description, scope_id, NULL as achievement_standard_id,
+                   1 as is_custom
+            FROM passage_custom
+            WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+            ORDER BY id DESC
+        """
+        return select_with_query(query, (user_id, search_pattern, search_pattern, search_pattern))
+        
+    else:  # 전체 (원본 + 커스텀)
+        query = """
+            SELECT 
+                passage_id as id, 
+                title, 
+                auth as auth,
+                CASE 
+                    WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(SUBSTRING(context, 1, 50), '...')
+                    ELSE context
+                END as content, 
+
+                scope_id, 
+
+                0 as is_custom,
+                NULL as created_at
+            FROM passages
+            WHERE title LIKE %s OR context LIKE %s
+            UNION ALL
+            
+            SELECT 
+                custom_passage_id as id, 
+                title as title, 
+                auth as auth,
+                CASE 
+                    WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(SUBSTRING(context, 1, 50), '...')
+                    ELSE context
+                END as content,
+
+                scope_id, 
+
+                1 as is_custom,
+                created_at
+            FROM passage_custom
+            WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+            ORDER BY is_custom ASC, created_at ASC
+        """
+        return select_with_query(query, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))

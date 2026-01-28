@@ -20,8 +20,8 @@ class PassageListResponse(BaseModel):
                     {
                         "id": 1,
                         "title": "원본 지문",
+                        "auth": "저자명",
                         "content": "원본 내용...",
-                        "auth": "작성자",
                         "scope_id": 10,
                         "is_custom": 0,
                         
@@ -31,8 +31,8 @@ class PassageListResponse(BaseModel):
                     {
                         "id": 2,
                         "title": "커스텀 지문",
-                        "content": "커스텀 내용...",
                         "auth": "작성자",
+                        "content": "커스텀 내용...",
                         "scope_id": 10,
                         "is_custom": 1
                     }
