@@ -232,3 +232,23 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
             ORDER BY is_custom ASC, created_at ASC
         """
         return select_with_query(query, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))
+
+
+
+
+
+
+def insert_without_passage(project_id: int):
+    """
+    지문없이 생성 시 프로젝트 소스 구성에 저장
+    """
+    try:
+            data = {
+                "project_id": project_id,
+                "is_modified": 2
+            }
+            return insert_one("project_source_config", data)
+
+    except Exception as e:
+        logger.error("Error inserting without passage: %s", e)
+        return False
