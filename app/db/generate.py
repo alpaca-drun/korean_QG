@@ -77,9 +77,9 @@ def get_generation_config(project_id: int):
     query = """
         SELECT 
             psc.config_id,
-            COALESCE(cp.context, p.context) AS passage,
-            COALESCE(cp.title, p.title) AS title,
-            COALESCE(cp.auth, p.auth) AS auth,
+            COALESCE(NULLIF(cp.context, ''), NULLIF(p.context, ''), '-') AS passage,
+            COALESCE(NULLIF(cp.title, ''), NULLIF(p.title, ''), '-') AS title,
+            COALESCE(NULLIF(cp.auth, ''), NULLIF(p.auth, ''), '-') AS auth,
             ps.school_level,
             ps.grade,
             ps.semester,

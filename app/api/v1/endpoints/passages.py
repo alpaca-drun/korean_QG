@@ -13,6 +13,7 @@ from app.db.passages import (
     get_passage_info,
     create_custom_passage,
     get_project_scope_id,
+    insert_without_passage,
     update_project_config_status,
     update_passage_use,
     search_passages_keyword
@@ -25,7 +26,8 @@ from app.schemas.passage import (
     PassageListResponse, 
     PassageUpdateRequest, 
     PassageUpdateResponse, 
-    PassageUseRequest
+    PassageUseRequest,
+    PassageGenerateWithoutPassageRequest
 )
 router = APIRouter()
 
@@ -1031,3 +1033,40 @@ async def modified_used_response(
             "message": "요청 처리 중 오류가 발생했습니다.",
             "detail": str(e)
             }
+
+
+@router.post(
+    "/generate_without_passage",
+    summary="지문없이 생성",
+    description="지문없이 생성",
+    tags=["지문"]
+)
+async def generate_without_passage(
+    request: PassageGenerateWithoutPassageRequest,
+    current_user_id: str = Depends(get_current_user)
+):
+    """
+    지문없이 생성
+    """
+    try:
+        project_id = request.project_id
+        project = select_one(
+            table="projects",
+            where={"project_id": project_id},
+            columns="project_id"
+        )
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail="프로젝트를 찾을 수 없습니다."
+            )
+
+        config_id = insert_without_passage(project_id)
+        if not config_id:
+            return {"success": False, "message": "요청이 정상적으로 처리되지 않았습니다.", "detail": "지문없이 생성 시 프로젝트 소스 구성에 저장에 실패했습니다."}
+
+
+        return {"success": True, "message": "요청이 정상적으로 처리되었습니다.", "config_id": config_id}
+    except Exception as e:
+        logger.exception("요청 처리 중 오류")
+        return {"success": False, "message": "요청 처리 중 오류가 발생했습니다.", "detail": str(e)}
