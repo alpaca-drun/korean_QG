@@ -49,19 +49,24 @@ async def get_result(
     if not project:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
 
-    items = get_project_all_questions(project_id)
+    config = select_one(
+        "project_source_config",
+        where={"project_id": project_id},
+        columns="is_modified",
+    )
+    if not config:
+        raise HTTPException(status_code=404, detail="프로젝트 설정을 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
+
+
+
+    items = get_project_all_questions(project_id=project_id)
     # question_type이 제공된 경우에만 필터링
     if question_type:
         items = [q for q in items if q.get("question_type") == question_type]
     
-    # 지문 정보 필드 제거 (passage_content, passage_title, passage_is_custom)
-    filtered_items = []
-    for item in items:
-        filtered_item = {k: v for k, v in item.items() 
-                        if k not in ['passage_content', 'passage_title', 'passage_is_custom']}
-        filtered_items.append(filtered_item)
 
-    return ListResponse(items=filtered_items or [], total=len(filtered_items or []))
+
+    return ListResponse(items=items or [], total=len(items or []))
 
 
 
