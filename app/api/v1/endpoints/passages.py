@@ -467,7 +467,8 @@ async def get_passage(
             elif source_type == 1:  # 커스텀 지문만
                 sql = """
                     SELECT custom_passage_id as id, 
-                           COALESCE(custom_title, title) as title, 
+                           title as title, 
+                           custom_title as custom_title,
                            context as content,
                            NULL as description, scope_id,
                            IFNULL(is_use, 1) as is_use
@@ -492,7 +493,8 @@ async def get_passage(
             if not passage:
                 sql = """
                     SELECT custom_passage_id as id, 
-                           COALESCE(custom_title, title) as title, 
+                           title as title, 
+                           custom_title as custom_title,
                            context as content,
                            NULL as description, scope_id,
                            IFNULL(is_use, 1) as is_use
@@ -559,6 +561,8 @@ async def get_passage(
                 item['description'] = ""
             if item.get('is_use') is None:
                 item['is_use'] = 1
+            
+            item["message"] = "지문 전문 조회 성공"
             
             return PassageResponse(**item)
             
