@@ -400,20 +400,9 @@ def get_project_all_questions(project_id: int):
             NULLIF(mcq.option5, 'null') as option5,
             NULLIF(mcq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(mcq.modified_difficulty, 'null') as modified_difficulty,
-            NULLIF(mcq.modified_passage, 'null') as modified_passage,
-            -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
-            NULLIF(COALESCE(p.context, pc.context), 'null') as passage_content,
-            NULLIF(COALESCE(p.title, pc.custom_title, pc.title), 'null') as passage_title,
-            CASE 
-                WHEN psc.passage_id IS NOT NULL THEN 0
-                WHEN psc.custom_passage_id IS NOT NULL THEN 1
-                ELSE NULL
-            END as passage_is_custom
+            NULLIF(mcq.modified_passage, 'null') as modified_passage
         FROM multiple_choice_questions mcq
-        LEFT JOIN project_source_config psc ON mcq.project_id = psc.project_id
-        LEFT JOIN passages p ON psc.passage_id = p.passage_id
-        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
-        WHERE mcq.project_id = %s AND IFNULL(mcq.is_used, 1) = 1
+        WHERE mcq.project_id = 47 AND IFNULL(mcq.is_used, 1) = 1
     """
     
     # OX 문항
@@ -437,18 +426,10 @@ def get_project_all_questions(project_id: int):
             NULL as llm_difficulty,
             NULL as modified_difficulty,
             NULL as modified_passage,
-            -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
-            NULLIF(COALESCE(p.context, pc.context), 'null') as passage_content,
-            NULLIF(COALESCE(p.title, pc.custom_title, pc.title), 'null') as passage_title,
-            CASE 
-                WHEN psc.passage_id IS NOT NULL THEN 0
-                WHEN psc.custom_passage_id IS NOT NULL THEN 1
-                ELSE NULL
-            END as passage_is_custom
+            NULL as passage_content,
+            NULL as passage_title,
+            NULL as passage_is_custom
         FROM true_false_questions tfq
-        LEFT JOIN project_source_config psc ON tfq.project_id = psc.project_id
-        LEFT JOIN passages p ON psc.passage_id = p.passage_id
-        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
         WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
     
@@ -473,18 +454,10 @@ def get_project_all_questions(project_id: int):
             NULL as llm_difficulty,
             NULL as modified_difficulty,
             NULL as modified_passage,
-            -- 지문 정보 (주석 처리 - /list에서는 사용하지 않지만 코드는 유지)
-            NULLIF(COALESCE(p.context, pc.context), 'null') as passage_content,
-            NULLIF(COALESCE(p.title, pc.custom_title, pc.title), 'null') as passage_title,
-            CASE 
-                WHEN psc.passage_id IS NOT NULL THEN 0
-                WHEN psc.custom_passage_id IS NOT NULL THEN 1
-                ELSE NULL
-            END as passage_is_custom
+            NULL as passage_content,
+            NULL as passage_title,
+            NULL as passage_is_custom
         FROM short_answer_questions saq
-        LEFT JOIN project_source_config psc ON saq.project_id = psc.project_id
-        LEFT JOIN passages p ON psc.passage_id = p.passage_id
-        LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
         WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
     """
     
@@ -495,7 +468,7 @@ def get_project_all_questions(project_id: int):
         {tf_query}
         UNION ALL
         {sa_query}
-        ORDER BY id ASC
+        ORDER BY created_at ASC, id ASC
     """
     
     results = select_with_query(union_query, (project_id, project_id, project_id))
