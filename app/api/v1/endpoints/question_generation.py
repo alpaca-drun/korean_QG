@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends
+from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends, status
 from typing import Optional, List
 import json
 from app.schemas.question_generation import (
@@ -97,7 +97,7 @@ async def generate_questions_batch(
 
 @router.post(
     "/batch-async",
-    response_model=BatchJobStartResponse | BatchJobErrorResponse,
+    response_model=BatchJobStartResponse,
     summary="배치 문항 생성 (비동기)",
     description="여러 문항 생성 요청을 백그라운드에서 처리합니다. 완료 후 자동으로 DB에 저장됩니다.",
     tags=["문항 생성"]
@@ -120,13 +120,16 @@ async def generate_questions_batch_async(
     try:
         # 요청 검증
         if requests.target_count > 30:
-            return BatchJobErrorResponse(
-                success=False,
-                message="요청 문항수는 최대 30개까지 가능합니다.",
-                error=ErrorDetail(
-                    code="VALIDATION_ERROR",
-                    message="요청 문항수는 최대 30개까지 가능합니다."
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "message": "요청 문항수는 최대 30개까지 가능합니다.",
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "요청 문항수는 최대 30개까지 가능합니다."
+                    }
+                }
             )
         
         # QuestionGeneration 객체를 QuestionGenerationRequest로 변환
@@ -136,14 +139,17 @@ async def generate_questions_batch_async(
         
         # generation_configs가 None인 경우 처리
         if not generation_configs:
-            return BatchJobErrorResponse(
-                success=False,
-                message=f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
-                error=ErrorDetail(
-                    code="PROJECT_NOT_FOUND",
-                    message=f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
-                    details="프로젝트가 존재하지 않거나 설정이 완료되지 않았습니다."
-                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "success": False,
+                    "message": f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                    "error": {
+                        "code": "PROJECT_NOT_FOUND",
+                        "message": f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                        "details": "프로젝트가 존재하지 않거나 설정이 완료되지 않았습니다."
+                    }
+                }
             )
         
         obj_dict = requests.model_dump()
@@ -214,14 +220,17 @@ async def generate_questions_batch_async(
     except Exception as e:
         # 예외 발생 시 FAIL 응답
         logger.exception("배치 문항 생성 시작 실패")
-        return BatchJobErrorResponse(
-            success=False,
-            message="배치 작업 시작 중 오류가 발생했습니다.",
-            error=ErrorDetail(
-                code="INTERNAL_ERROR",
-                message=str(e),
-                details="배치 문항 생성 시작 실패"
-            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "message": "배치 작업 시작 중 오류가 발생했습니다.",
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(e),
+                    "details": "배치 문항 생성 시작 실패"
+                }
+            }
         )
 
 
