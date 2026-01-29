@@ -15,9 +15,10 @@ def get_project_scope_id(project_id: int, user_id: int) -> Optional[int]:
 def get_passage_info(passage_id: int, is_custom: bool, user_id: int = None) -> Optional[Dict[str, Any]]:
     """지문 정보 조회 (원본 또는 커스텀)"""
     if is_custom:
+        # passage_custom 테이블은 is_deleted 대신 is_use 필드를 사용함 (또는 필터링 없음)
         return select_one(
             table="passage_custom",
-            where={"custom_passage_id": passage_id, "user_id": user_id, "is_deleted": False}
+            where={"custom_passage_id": passage_id, "user_id": user_id, "is_use": True}
         )
     else:
         return select_one(
