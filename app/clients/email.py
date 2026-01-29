@@ -5,6 +5,7 @@ import boto3
 from typing import Optional
 from botocore.exceptions import ClientError
 from app.core.config import settings
+from app.core.logger import logger
 
 
 class EmailClient:
@@ -84,7 +85,7 @@ class EmailClient:
             
             if bcc_addresses:
                 destination['BccAddresses'] = bcc_addresses
-                print(f"📧 BCC 수신자: {', '.join(bcc_addresses)}")
+                logger.info("BCC 수신자: %s", ", ".join(bcc_addresses))
             
             # 이메일 전송
             response = self.ses.send_email(
@@ -93,16 +94,16 @@ class EmailClient:
                 Message=message
             )
             
-            print(f"✅ 이메일 전송 성공: {to_address} (MessageId: {response['MessageId']})")
+            logger.info("이메일 전송 성공: %s (MessageId: %s)", to_address, response['MessageId'])
             return True
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            print(f"❌ 이메일 전송 실패: {error_code} - {error_message}")
+            logger.error("이메일 전송 실패: %s - %s", error_code, error_message)
             return False
         except Exception as e:
-            print(f"❌ 이메일 전송 중 예외 발생: {e}")
+            logger.exception("이메일 전송 중 예외 발생: %s", e)
             return False
     
     def send_success_email(

@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
+from app.core.logger import logger
 from fastapi import Header, HTTPException, status
 
 # 비밀번호 해싱 컨텍스트
@@ -135,6 +136,6 @@ def create_temp_token_for_user_1() -> str:
     """
     return create_refresh_token(data={"sub": "1"})
 
-# 테스트용 토큰 생성
+# 테스트용 토큰 생성 (모듈 로드 시 실행 - 필요시 logger로 확인)
 token = create_temp_token_for_user_1()
-print(f"Token: {token}")
+logger.debug("Token: %s", token)

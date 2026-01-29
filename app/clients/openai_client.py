@@ -3,6 +3,7 @@ from openai import AsyncOpenAI
 from app.clients.base import LLMClientBase
 from app.schemas.question_generation import Question
 from app.core.config import settings
+from app.core.logger import logger
 
 
 class OpenAIClient(LLMClientBase):
@@ -52,6 +53,7 @@ class OpenAIClient(LLMClientBase):
             return questions
             
         except Exception as e:
+            logger.exception("OpenAI API 호출 중 오류")
             raise Exception(f"OpenAI API 호출 중 오류가 발생했습니다: {str(e)}")
     
     async def generate_questions_batch(

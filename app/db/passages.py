@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Tuple
 from app.db.database import select_one, select_all, count, select_with_query, insert_one, update_with_query
+from app.core.logger import logger
 
 
 def get_project_scope_id(project_id: int, user_id: int) -> Optional[int]:
@@ -136,7 +137,7 @@ def update_passage_use(project_id: int, is_modified: int, passage_id: int = None
                 params = (is_modified, project_id)
             return update_with_query(query, params)
     except Exception as e:
-        print(f"Error updating passage use: {e}")
+        logger.error("Error updating passage use: %s", e)
         return False
 
 
@@ -154,7 +155,7 @@ def update_project_config_status(project_id: int, is_modified: int, custom_passa
         """
         return update_with_query(query, (is_modified, custom_passage_id, project_id))
     except Exception as e:
-        print(f"Error updating project config status: {e}")
+        logger.error("Error updating project config status: %s", e)
         return False
 
 

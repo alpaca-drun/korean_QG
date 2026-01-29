@@ -2,6 +2,7 @@ from typing import Optional
 from pathlib import Path
 from app.schemas.question_generation import QuestionGenerationRequest
 from app.prompts.common_templates import COMMON_SYSTEM_PROMPT, COMMON_USER_PROMPT
+from app.core.logger import logger
 
 # difficulty.md 파일 읽어오기
 current_dir = Path(__file__).parent
@@ -9,7 +10,7 @@ difficulty_path = current_dir / "difficulty.md"
 
 with open(difficulty_path, "r", encoding="utf-8") as f:
     difficulty_content = f.read()
-    print(difficulty_content)
+    logger.debug("difficulty_content: %s", difficulty_content)
 
 
 class PromptTemplate:
@@ -34,8 +35,7 @@ class PromptTemplate:
             (system_prompt, user_prompt) 튜플
         """
 
-        print("🟣🟣ss🟣question_type")
-        print(request.question_type)
+        logger.debug("question_type: %s", request.question_type)
         # 성취기준 정보 텍스트 생성 (여러 개일 수 있음)
         achievement_text = ""
         if request.curriculum_info and len(request.curriculum_info) > 0:
@@ -50,8 +50,7 @@ class PromptTemplate:
                 )
         else:
             achievement_text = "성취기준 정보 없음"
-        print("🟣🟣🟣")
-        print(achievement_text)
+        logger.debug("achievement_text: %s", achievement_text)
 
         if system_prompt is None:
             system_prompt_template = COMMON_SYSTEM_PROMPT

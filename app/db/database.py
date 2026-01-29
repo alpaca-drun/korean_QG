@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import pymysql
 from pymysql.cursors import DictCursor
 from app.core.config import settings
+from app.core.logger import logger
 
 
 @contextmanager
@@ -37,6 +38,7 @@ def get_db_connection():
     except Exception as e:
         if connection:
             connection.rollback()
+        logger.exception("DB 연결/컨텍스트 중 오류")
         raise e
     finally:
         if connection:
@@ -382,7 +384,7 @@ def execute_transaction(operations: List[callable]) -> bool:
                 operation()
         return True
     except Exception as e:
-        print(f"트랜잭션 실패: {e}")
+        logger.error("트랜잭션 실패: %s", e)
         return False
 
 

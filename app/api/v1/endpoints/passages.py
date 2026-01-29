@@ -18,7 +18,9 @@ from app.db.passages import (
     search_passages_keyword
 )
 import json
+import traceback
 from app.utils.dependencies import get_current_user
+from app.core.logger import logger
 from app.schemas.passage import (
     PassageListResponse, 
     PassageUpdateRequest, 
@@ -70,9 +72,7 @@ def get_scope_ids_by_achievement(achievement_standard_id: int, connection) -> li
             results = cursor.fetchall()
             return [row['scope_id'] for row in results] if results else []
     except Exception as e:
-        print(f"scope_id 조회 오류: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.warning("scope_id 조회 오류: %s", e, exc_info=True)
         return []
 
 @router.get(
@@ -128,7 +128,7 @@ async def get_passages_by_project(
             total_custom=0
         )
     except Exception as e:
-        import traceback
+        logger.exception("지문 리스트 조회 중 오류")
         return PassageListResponse(
             success=False,
             message=f"지문 리스트 조회 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}",
@@ -412,7 +412,7 @@ async def get_passages(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+        logger.exception("지문 조회 중 오류")
         error_detail = f"지문 조회 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
@@ -542,7 +542,7 @@ async def get_passage(
                                 elif isinstance(first_id, str) and first_id.isdigit():
                                     achievement_standard_id = int(first_id)
                         except (json.JSONDecodeError, ValueError, TypeError) as e:
-                            print(f"achievement_ids 파싱 오류: {e}, 값: {scope_result.get('achievement_ids')}")
+                            logger.warning("achievement_ids 파싱 오류: %s, 값: %s", e, scope_result.get('achievement_ids'))
                             achievement_standard_id = 0
             
             # 응답 형식 변환
@@ -565,7 +565,7 @@ async def get_passage(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+        logger.exception("지문 조회 중 오류")
         error_detail = f"지문 조회 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
@@ -630,7 +630,7 @@ async def search_passages_by_keyword(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+        logger.exception("지문 검색 중 오류")
         error_detail = f"지문 검색 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
@@ -763,7 +763,7 @@ async def create_passage(
     except Exception as e:
         if connection:
             connection.rollback()
-        import traceback
+        logger.exception("지문 생성 중 오류")
         error_detail = f"지문 생성 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
@@ -822,12 +822,11 @@ async def update_passage(
             where={"user_id": user_id, "is_use": True},
             columns="custom_title"
         )
-        print(f"custom_title_list: {custom_title_list}")
+        logger.debug("custom_title_list: %s", custom_title_list)
         
         # DB에 동일한 제목의 커스텀 지문이 이미 존재하는 경우 제목 변경
         if custom_title in [item.get("custom_title") for item in custom_title_list]:
-            print(f"custom_title: {custom_title}")
-            print(f"custom_title_list: {custom_title_list}")
+            logger.debug("custom_title: %s, custom_title_list: %s", custom_title, custom_title_list)
             import random, time
             random_suffix = f"_{int(time.time())}_{random.randint(1000, 9999)}"
             custom_title += random_suffix
@@ -865,7 +864,7 @@ async def update_passage(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+        logger.exception("지문 수정 중 오류")
         error_detail = f"지문 수정 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
@@ -943,7 +942,7 @@ async def delete_passage(
     except Exception as e:
         if connection:
             connection.rollback()
-        import traceback
+        logger.exception("지문 소프트 삭제 중 오류")
         error_detail = f"지문 소프트 삭제 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
@@ -987,8 +986,7 @@ async def original_used_response(
             }
 
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
+        logger.exception("요청 처리 중 오류")
         return {
             "success": False,
             "message": "요청 처리 중 오류가 발생했습니다.",
@@ -1012,7 +1010,7 @@ async def modified_used_response(
     """
     원본 지문 그대로 사용 여부를 조회합니다.
     """
-    print(f"request: {request}")
+    logger.debug("request: %s", request)
     try:
         if request.is_custom == 0:
             update_passage_use(request.project_id, 4)
@@ -1023,8 +1021,7 @@ async def modified_used_response(
             "message": "요청이 정상적으로 처리되었습니다.",
             }
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
+        logger.exception("요청 처리 중 오류")
         return {
             "success": False,
             "message": "요청 처리 중 오류가 발생했습니다.",

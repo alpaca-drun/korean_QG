@@ -13,6 +13,7 @@ from app.db.database import (
 from typing import Optional, Dict, Any
 from threading import Lock
 import json
+from app.core.logger import logger
 # ===========================
 # dong
 # ===========================
@@ -220,7 +221,7 @@ def save_batch_log(
                 duration_seconds = batch_log_data.get("duration_seconds", 0.0)
                 total_attempts = batch_log_data.get("requested_count", 0)
                 success_count = batch_log_data.get("generated_count", 0)
-                print(f"  🔹 배치 로그 저장 시도: tokens={total_tokens}")
+                logger.debug("배치 로그 저장 시도: tokens=%s", total_tokens)
                 
                 cursor.execute(
                     sql,
@@ -232,9 +233,7 @@ def save_batch_log(
                 return batch_id
             
     except Exception as e:
-        print(f"배치 로그 DB 저장 실패: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("배치 로그 DB 저장 실패: %s", e)
         return None
 
 ### 문항 데이터 저장
@@ -305,9 +304,7 @@ def save_question_to_db(
                 return question_id
             
     except Exception as e:
-        print(f"문항 DB 저장 실패: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("문항 DB 저장 실패: %s", e)
         return None
 
 
