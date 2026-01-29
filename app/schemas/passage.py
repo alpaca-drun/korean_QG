@@ -105,16 +105,11 @@ class PassageUseRequest(BaseModel):
 class PassageGenerateWithoutPassageRequest(BaseModel):
     """지문없이 생성 요청 스키마"""
     project_id: int = Field(..., description="프로젝트 ID")
-    additional_prompt: Optional[str] = Field(None, description="추가 지시사항")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
                 "project_id": 1,
-                "question_type": "5지선다",
-                "stem_directive": "~로 옳은것은",
-                "target_count": 10,
-                "use_negative_word": False,
-                "additional_prompt": "추가 지시사항"
+
             }
         }

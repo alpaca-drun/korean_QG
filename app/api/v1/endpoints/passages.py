@@ -1049,10 +1049,12 @@ async def generate_without_passage(
     지문없이 생성
     """
     try:
+        user_id = int(current_user_id)
+
         project_id = request.project_id
         project = select_one(
             table="projects",
-            where={"project_id": project_id},
+            where={"project_id": project_id, "user_id": user_id},
             columns="project_id"
         )
         if not project:
