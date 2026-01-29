@@ -384,9 +384,16 @@ def search(
         with get_db_connection() as conn:
             return _execute(conn)
 
-def update_with_query(query: str, params: tuple):
-    """커스텀 쿼리로 업데이트"""
-    with get_db_connection() as conn:
+def update_with_query(query: str, params: Union[tuple, list], connection=None):
+    """커스텀 쿼리로 업데이트 (DML: UPDATE, INSERT, DELETE)"""
+    def _execute(conn):
         with conn.cursor() as cursor:
             cursor.execute(query, params)
             return cursor.rowcount
+
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            res = _execute(conn)
+            return res

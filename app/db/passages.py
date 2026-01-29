@@ -226,7 +226,7 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
             WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
             ORDER BY id DESC
         """
-        return select_with_query(query, (user_id, search_pattern, search_pattern, search_pattern))
+        return select_with_query(query, (user_id, search_pattern, search_pattern, search_pattern), connection=connection)
         
     else:  # 전체 (원본 + 커스텀)
         query = """
