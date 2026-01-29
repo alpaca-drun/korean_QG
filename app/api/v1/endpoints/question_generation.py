@@ -13,7 +13,7 @@ from app.schemas.question_generation import (
 from app.services.question_generation_service import QuestionGenerationService
 from app.tasks.question_generation_task import QuestionGenerationTask
 from app.utils.dependencies import get_current_user
-
+from app.core.logger import logger
 from app.db.generate import get_generation_config, update_project_status, update_project_generation_config
 
 router = APIRouter()
@@ -87,8 +87,7 @@ async def generate_questions_batch(
 
 
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
-        print("🟣")
-        print(question_generation_requests)
+        logger.debug("question_generation_requests: %s", question_generation_requests)
 
     service = QuestionGenerationService()
     results = await service.generate_questions_batch(question_generation_requests, current_user_id, provider)
@@ -201,7 +200,7 @@ async def generate_questions_batch_async(
             use_ai_model
         )
 
-        print("🟣")
+        logger.debug("배치 문항 생성 백그라운드 시작")
         # 즉시 SUCCESS 응답 반환
         return BatchJobStartResponse(
             success=True,
@@ -211,16 +210,14 @@ async def generate_questions_batch_async(
         
     except Exception as e:
         # 예외 발생 시 FAIL 응답
-        import traceback
-        traceback.print_exc()
-        
+        logger.exception("배치 문항 생성 시작 실패")
         return BatchJobErrorResponse(
             success=False,
             message="배치 작업 시작 중 오류가 발생했습니다.",
             error=ErrorDetail(
                 code="INTERNAL_ERROR",
                 message=str(e),
-                details=traceback.format_exc()
+                details="배치 문항 생성 시작 실패"
             )
         )
 

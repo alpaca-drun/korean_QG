@@ -54,3 +54,6 @@ docker/mariadb/backups/*.sql
 
 # Storage - 생성된 질문 파일들
 storage/
+
+
+docker-compose.yml

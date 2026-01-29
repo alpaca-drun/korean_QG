@@ -12,6 +12,7 @@ if PROJECT_ROOT not in sys.path:
 
 # app/download/database.py 사용
 from app.db.storage import get_db_connection
+from app.core.logger import logger
 
 
 def execute_query_via_app_db(query: str, params: tuple | None = None, fetch: bool = True):
@@ -82,8 +83,8 @@ def find_table_in_cell(cell, tag, doc=None):
                 for nested_cell in row.cells:
                     cell_text = nested_cell.text
                     if tag in cell_text:
-                        print(f"✅ 중첩 표를 찾았습니다! (셀 안의 표)")
-                        print(f"   찾은 셀 내용: {cell_text[:100]}")
+                        logger.info("중첩 표를 찾았습니다! (셀 안의 표)")
+                        logger.debug("찾은 셀 내용: %s", cell_text[:100])
                         return nested_table
             
             # 중첩 표 안에 또 다른 표가 있을 수 있으므로 재귀적으로 검색
@@ -93,7 +94,7 @@ def find_table_in_cell(cell, tag, doc=None):
                     if result:
                         return result
         except Exception as e:
-            # 표 객체 생성 실패 시 다음 표로
+            logger.debug("표 객체 생성/검색 실패 (다음 표로): %s", e)
             continue
     
     return None
@@ -116,8 +117,8 @@ def find_career_table(doc, tag="{nu}"):
                 # 셀의 텍스트 직접 가져오기
                 cell_text = cell.text
                 if tag in cell_text:
-                    print(f"✅ 표를 찾았습니다! (표 인덱스: {table_idx}, 행: {row_idx}, 열: {col_idx})")
-                    print(f"   찾은 셀 내용: {cell_text[:100]}")
+                    logger.info("표를 찾았습니다! (표 인덱스: %s, 행: %s, 열: %s)", table_idx, row_idx, col_idx)
+                    logger.debug("찾은 셀 내용: %s", cell_text[:100])
                     return table
                 
                 # 셀 안에 중첩된 표가 있는지 확인
@@ -125,13 +126,13 @@ def find_career_table(doc, tag="{nu}"):
                 if nested_table:
                     return nested_table
     
-    print(f"❌ '{tag}' 태그를 포함한 표를 찾을 수 없습니다.")
-    # 디버깅: 모든 표의 첫 번째 셀 내용 출력
-    print("\n📋 디버깅 정보 - 모든 표의 첫 번째 셀 내용:")
+    logger.warning("'%s' 태그를 포함한 표를 찾을 수 없습니다.", tag)
+    # 디버깅: 모든 표의 첫 번째 셀 내용 로깅
+    logger.debug("디버깅 정보 - 모든 표의 첫 번째 셀 내용:")
     for table_idx, table in enumerate(doc.tables):
         if len(table.rows) > 0 and len(table.rows[0].cells) > 0:
             first_cell_text = table.rows[0].cells[0].text[:50]
-            print(f"   표 {table_idx}: {first_cell_text}...")
+            logger.debug("표 %s: %s...", table_idx, first_cell_text)
     return None
 def extract_category_from_info_id(info_id):
     """
@@ -145,16 +146,16 @@ def extract_category_from_info_id(info_id):
         카테고리 문자열 (없으면 빈 문자열)
     """
     if not info_id:
-        print("📝 [카테고리 추출] info_id가 없습니다.")
+        logger.debug("[카테고리 추출] info_id가 없습니다.")
         return ""
     
     # 언더스코어로 분리하여 첫 번째 부분 추출
     parts = str(info_id).split('_')
     if len(parts) > 0:
         category = parts[0]
-        print(f"📝 [카테고리 추출] '{info_id}' → '{category}'")
+        logger.debug("[카테고리 추출] '%s' → '%s'", info_id, category)
         return category
-    print(f"📝 [카테고리 추출] '{info_id}'에서 카테고리를 추출할 수 없습니다.")
+    logger.debug("[카테고리 추출] '%s'에서 카테고리를 추출할 수 없습니다.", info_id)
     return ""
 
 def replace_document_text(doc, replacements):
@@ -165,7 +166,7 @@ def replace_document_text(doc, replacements):
         doc: Document 객체
         replacements: 플레이스홀더와 값의 딕셔너리 (예: {'{category}': '말하기듣기'})
     """
-    print(f"📄 [문서 플레이스홀더 교체] 시작 (교체할 항목: {len(replacements)}개)")
+    logger.info("[문서 플레이스홀더 교체] 시작 (교체할 항목: %s개)", len(replacements))
     replaced_count = 0
     
     # 문서의 모든 단락에서 교체
@@ -201,7 +202,7 @@ def replace_document_text(doc, replacements):
                             if new_text:
                                 paragraph.add_run(new_text)
     
-    print(f"📄 [문서 플레이스홀더 교체] 완료 (총 {replaced_count}개 교체)")
+    logger.info("[문서 플레이스홀더 교체] 완료 (총 %s개 교체)", replaced_count)
 
 def fill_table_from_list(doc_path, output_path, data_list, category=""):
     """
@@ -214,56 +215,52 @@ def fill_table_from_list(doc_path, output_path, data_list, category=""):
                   예: [{'nu': 1, 'question': '질문1', 'select1': '선택1', ...}, ...]
         category: 카테고리 문자열 (예: "말하기듣기", "쓰기", "매체")
     """
-    print(f"\n{'='*60}")
-    print(f"📋 [문서 처리 시작]")
-    print(f"   입력 파일: {doc_path}")
-    print(f"   출력 파일: {output_path}")
-    print(f"   데이터 개수: {len(data_list)}개")
-    print(f"   카테고리: {category if category else '(없음)'}")
-    print(f"{'='*60}\n")
+    logger.info("=" * 60)
+    logger.info("[문서 처리 시작] 입력: %s, 출력: %s, 데이터: %s개, 카테고리: %s", doc_path, output_path, len(data_list), category or "(없음)")
+    logger.info("=" * 60)
     
     # 원본 문서 열기
-    print(f"📂 [1/5] 문서 열기 중...")
+    logger.info("[1/5] 문서 열기 중...")
     doc = Document(doc_path)
-    print(f"   ✅ 문서 열기 완료 (표 개수: {len(doc.tables)}개)")
+    logger.info("문서 열기 완료 (표 개수: %s개)", len(doc.tables))
     
     # 카테고리 플레이스홀더 교체 (문서 전체)
     if category:
-        print(f"\n📝 [2/5] 카테고리 플레이스홀더 교체 중...")
+        logger.info("[2/5] 카테고리 플레이스홀더 교체 중...")
         replace_document_text(doc, {'{category}': category})
     else:
-        print(f"\n📝 [2/5] 카테고리 플레이스홀더 교체 건너뜀 (카테고리 없음)")
+        logger.info("[2/5] 카테고리 플레이스홀더 교체 건너뜀 (카테고리 없음)")
     
     # 첫 번째 표 찾기 (원본 표)
-    print(f"\n🔍 [3/5] 표 찾기 중...")
+    logger.info("[3/5] 표 찾기 중...")
     if len(doc.tables) == 0:
-        print("   ❌ 표를 찾을 수 없습니다!")
+        logger.error("표를 찾을 수 없습니다!")
         return
     
     # {nu} 플레이스홀더가 포함된 표 찾기
     original_table = find_career_table(doc, "{nu}")
     if original_table is None:
-        print("   ❌ {nu} 태그가 포함된 표를 찾을 수 없습니다.")
+        logger.error("{nu} 태그가 포함된 표를 찾을 수 없습니다.")
         return
     
-    print(f"   ✅ 원본 표 찾기 완료")
+    logger.info("원본 표 찾기 완료")
 
     # 원본 표의 element를 저장 (플레이스홀더가 있는 원본 상태를 먼저 저장)
-    print(f"\n📊 [4/5] 표 데이터 채우기 중...")
+    logger.info("[4/5] 표 데이터 채우기 중...")
     original_table_elm = deepcopy(original_table._element)
     previous_table_elm = original_table._element
     
     num = 1
     # 첫 번째 데이터로 원본 표 채우기
     if data_list:
-        print(f"   📝 표 {num}/{len(data_list)} 채우는 중...", end="", flush=True)
+        logger.info("표 %s/%s 채우는 중...", num, len(data_list))
         replace_table_text(original_table, data_list[0], num)
-        print(f" ✅")
+        logger.debug("표 %s/%s 완료", num, len(data_list))
         
         # 나머지 데이터에 대해 표 복사 및 채우기
         for data in data_list[1:]:
             num += 1 
-            print(f"   📝 표 {num}/{len(data_list)} 채우는 중...", end="", flush=True)
+            logger.info("표 %s/%s 채우는 중...", num, len(data_list))
             
             # 원본 표 element 복사 (플레이스홀더가 있는 원본 상태로 복사)
             new_table_elm = deepcopy(original_table_elm)
@@ -288,15 +285,15 @@ def fill_table_from_list(doc_path, output_path, data_list, category=""):
             if new_table_obj:
                 replace_table_text(new_table_obj, data, num)
                 previous_table_elm = new_table_elm
-            print(f" ✅")
+            logger.debug("표 %s/%s 완료", num, len(data_list))
     
     # 결과 저장
-    print(f"\n💾 [5/5] 파일 저장 중...")
+    logger.info("[5/5] 파일 저장 중...")
     doc.save(output_path)
-    print(f"   ✅ 저장 완료!")
-    print(f"\n{'='*60}")
-    print(f"🎉 완료! {len(data_list)}개의 표가 생성되어 {output_path}에 저장되었습니다.")
-    print(f"{'='*60}\n")
+    logger.info("저장 완료!")
+    logger.info("=" * 60)
+    logger.info("완료! %s개의 표가 생성되어 %s에 저장되었습니다.", len(data_list), output_path)
+    logger.info("=" * 60)
 
 def get_project_id_from_env_or_arg(project_id: str | int | None = None) -> int:
     """
@@ -371,7 +368,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
     # project_id_int = get_project_id_from_env_or_arg(project_id)
     project_id_int = project_id
     passage_text = get_project_passage_text(project_id_int, user_id=user_id)
-    print(f"passage_text: {passage_text}")
+    logger.debug("passage_text: %s", passage_text)
     
     # ✅ 현재 DB 스키마 기반: multiple_choice_questions / short_answer_questions / true_false_questions
     # seq는 생성시간 기준으로 부여
@@ -487,13 +484,13 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
         results = execute_query_via_app_db(filtered_query, params=params, fetch=True)
         
         if not results:
-            print(f"   ⚠️ project_id={project_id_int}에 해당하는 문항 데이터가 없습니다.")
+            logger.warning("project_id=%s에 해당하는 문항 데이터가 없습니다.", project_id_int)
             return []
         
-        print(f"   ✅ DB 쿼리 완료 (조회된 행: {len(results)}개)")
+        logger.info("DB 쿼리 완료 (조회된 행: %s개)", len(results))
         
         # 결과를 딕셔너리 리스트로 변환
-        print(f"📦 [데이터 변환] 딕셔너리로 변환 중...")
+        logger.info("[데이터 변환] 딕셔너리로 변환 중...")
         data_list = []
         for idx, row in enumerate(results, 1):
             # 번호는 전체 문항 순서로 부여
@@ -511,35 +508,18 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 'passage': passage_text
             })
             if idx % 10 == 0 or idx == len(results):
-                print(f"   진행 중... {idx}/{len(results)}", end="\r", flush=True)
+                logger.debug("진행 중... %s/%s", idx, len(results))
         
-        print(f"\n   ✅ 변환 완료! 총 {len(data_list)}개의 질문 데이터를 가져왔습니다.")
+        logger.info("변환 완료! 총 %s개의 질문 데이터를 가져왔습니다.", len(data_list))
         return data_list
         
     except ValueError as e:
-        print(f"\n❌ [DB 연결 오류] 설정 오류 발생:")
-        print(f"   {e}")
-        print(f"\n💡 해결 방법:")
-        print(f"   1. .env 파일 또는 환경변수에 다음을 설정하세요:")
-        print(f"      - DB_HOST=데이터베이스_호스트")
-        print(f"      - DB_PORT=데이터베이스_포트 (기본값: 3306)")
-        print(f"      - DB_USER=데이터베이스_사용자")
-        print(f"      - DB_PASSWORD=데이터베이스_비밀번호")
-        print(f"      - DB_DATABASE=데이터베이스_이름")
-        print(f"   3. 데이터베이스 이름을 변경하려면 DB_DATABASE 환경변수를 설정하세요 (기본값: midtest)")
+        logger.error("[DB 연결 오류] 설정 오류 발생: %s", e)
+        logger.info("해결 방법: .env 또는 환경변수에 DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE 설정")
         raise
     except Exception as e:
-        print(f"\n❌ [DB 연결 오류] 예상치 못한 오류 발생:")
-        print(f"   오류 타입: {type(e).__name__}")
-        print(f"   오류 메시지: {e}")
-        print(f"\n💡 해결 방법:")
-        print(f"   1. 데이터베이스 서버가 실행 중인지 확인하세요")
-        print(f"   2. 네트워크 연결을 확인하세요")
-        print(f"   3. 방화벽 설정을 확인하세요")
-        print(f"   4. 환경변수 설정을 확인하세요")
-        import traceback
-        print(f"\n📋 상세 오류 정보:")
-        traceback.print_exc()
+        logger.exception("[DB 연결 오류] 예상치 못한 오류: %s - %s", type(e).__name__, e)
+        logger.info("해결 방법: DB 서버 실행 여부, 네트워크, 방화벽, 환경변수 확인")
         raise
 
 def copy_run_formatting(source_run, target_run):
@@ -651,15 +631,15 @@ def replace_table_text(table, data, num):
 if __name__ == "__main__":
     import sys
     
-    print("\n" + "="*60)
-    print("🚀 문서 생성 스크립트 시작")
-    print("="*60 + "\n")
+    logger.info("=" * 60)
+    logger.info("문서 생성 스크립트 시작")
+    logger.info("=" * 60)
     
     # 프로젝트 ID 결정
     project_id = os.getenv("PROJECT_ID") or os.getenv("CREATE_PROJECT_ID") or os.getenv("CREATE_INFO_ID")
-    print(f"📌 [환경변수 확인] PROJECT_ID/CREATE_PROJECT_ID/CREATE_INFO_ID = {project_id if project_id else '(설정되지 않음)'}")
+    logger.info("[환경변수 확인] PROJECT_ID/CREATE_PROJECT_ID/CREATE_INFO_ID = %s", project_id or "(설정되지 않음)")
     if not project_id:
-        print("❌ PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
+        logger.error("PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
         sys.exit(1)
 
     project_id_int = get_project_id_from_env_or_arg(project_id)
@@ -667,34 +647,28 @@ if __name__ == "__main__":
     
     # DB에서 데이터 가져오기
     try:
-        print(f"\n💾 [DB 데이터 조회] 시작...")
+        logger.info("[DB 데이터 조회] 시작...")
         data_list = get_question_data_from_db(project_id_int)
         
         if not data_list:
-            print("\n❌ 가져올 데이터가 없습니다.")
+            logger.error("가져올 데이터가 없습니다.")
             sys.exit(1)
         
         # 입력 파일과 출력 파일 경로 (환경변수에서 가져오거나 기본값 사용)
         input_file = os.getenv('INPUT_DOCX', 'sample3.docx')
         output_file = os.getenv('OUTPUT_DOCX', f'output-project-{project_id_int}.docx')
         
-        print(f"\n📁 [파일 경로]")
-        print(f"   입력: {input_file}")
-        print(f"   출력: {output_file}")
+        logger.info("[파일 경로] 입력: %s, 출력: %s", input_file, output_file)
         
         # 함수 실행 (카테고리 전달)
         fill_table_from_list(input_file, output_file, data_list, category=category)
         
     except ValueError as e:
-        print(f"❌ 오류: {e}")
-        print("\n사용법:")
-        print("  1. 환경변수 설정: export INFO_ID=123")
-        print("  2. 또는 명령줄 인자: python dev.py 123")
+        logger.error("오류: %s", e)
+        logger.info("사용법: 환경변수 설정 export INFO_ID=123 또는 명령줄 인자 python dev.py 123")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ 예상치 못한 오류 발생: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("예상치 못한 오류 발생: %s", e)
         sys.exit(1)
     
     # 기존 샘플 데이터 (사용 안 함)

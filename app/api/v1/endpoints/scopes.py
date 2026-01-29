@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from app.schemas.curriculum import ScopeCreateResponse
 from app.db.database import select_one, insert_one
 from app.utils.dependencies import get_current_user
+from app.core.logger import logger
 router = APIRouter()
 
 
@@ -62,6 +63,7 @@ async def get_scope(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("범위 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"범위 조회 중 오류가 발생했습니다: {str(e)}"

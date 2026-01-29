@@ -20,6 +20,7 @@ from app.schemas.curriculum import (
 )
 
 from app.utils.dependencies import get_current_user
+from app.core.logger import logger
 router = APIRouter()
 
 
@@ -218,6 +219,7 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
                 updated_count += 1
                 
         except Exception as e:
+            logger.exception("문항 메타 업데이트 중 오류 (question_id=%s)", item.question_id)
             results.append({
                 "question_id": item.question_id,
                 "success": False,
@@ -335,6 +337,7 @@ async def download_selected_results(
         # 내부에서도 user_id로 한번 더 검증/필터링
         data_list = get_question_data_from_db(project_id, user_id=user_id)
     except Exception as e:
+        logger.exception("문항 조회 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"문항 조회 실패: {str(e)}")
 
     if not data_list:
@@ -347,6 +350,7 @@ async def download_selected_results(
     try:
         fill_table_from_list(str(template_path), str(out_path), data_list, category=category)
     except Exception as e:
+        logger.exception("DOCX 생성 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"DOCX 생성 실패: {str(e)}")
 
     return FileResponse(

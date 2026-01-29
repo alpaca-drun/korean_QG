@@ -20,6 +20,7 @@ from app.schemas.dashboard import (
     SuccessResponse,
 )
 from app.utils.dependencies import get_current_user
+from app.core.logger import logger
 from app.db.database import select_all, search, count, select_with_query, select_one, update
 import math
 
@@ -223,6 +224,7 @@ async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)
         )
         
     except Exception as e:
+        logger.exception("대시보드 요약 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"대시보드 요약 조회 중 오류가 발생했습니다: {str(e)}"
@@ -362,6 +364,7 @@ async def get_project_list(
         )
         
     except Exception as e:
+        logger.exception("프로젝트 목록 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"프로젝트 목록 조회 중 오류가 발생했습니다: {str(e)}"
@@ -419,6 +422,7 @@ async def get_filter_options(current_user_id: str = Depends(get_current_user)):
         )
         
     except Exception as e:
+        logger.exception("필터 옵션 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"필터 옵션 조회 중 오류가 발생했습니다: {str(e)}"
@@ -521,6 +525,7 @@ async def get_dashboard_stats(current_user_id: str = Depends(get_current_user)):
         )
         
     except Exception as e:
+        logger.exception("대시보드 통계 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"대시보드 통계 조회 중 오류가 발생했습니다: {str(e)}"
@@ -583,6 +588,7 @@ async def get_project_detail_stats(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("프로젝트 상세 통계 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"프로젝트 상세 통계 조회 중 오류가 발생했습니다: {str(e)}"

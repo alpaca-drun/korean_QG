@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any
 from threading import Lock
 import pymysql
 from app.core.config import settings
+from app.core.logger import logger
 
 
 def get_db_connection():
@@ -21,7 +22,7 @@ def get_db_connection():
         )
         return connection
     except Exception as e:
-        print(f"데이터베이스 연결 실패: {e}")
+        logger.error("데이터베이스 연결 실패: %s", e)
         return None
 
 
@@ -88,7 +89,7 @@ def save_question_to_db(
             return question_id
             
     except Exception as e:
-        print(f"문항 DB 저장 실패: {e}")
+        logger.error("문항 DB 저장 실패: %s", e)
         if connection:
             connection.rollback()
         return None

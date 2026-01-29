@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import List, Optional
 from app.core.config import settings
+from app.core.logger import logger
 
 
 def parse_school_level_to_path(school_level: str) -> str:
@@ -88,7 +89,7 @@ def resolve_file_paths(
         if os.path.exists(resolved_path) and os.path.isfile(resolved_path):
             resolved_paths.append(resolved_path)
         else:
-            print(f"⚠️ 파일을 찾을 수 없습니다: {resolved_path}")
+            logger.warning("파일을 찾을 수 없습니다: %s", resolved_path)
     
     return resolved_paths
 
@@ -118,7 +119,7 @@ def ensure_storage_directory(school_level: Optional[str] = None):
     # 디렉토리가 없으면 생성
     if not os.path.exists(storage_path):
         os.makedirs(storage_path, exist_ok=True)
-        print(f"📁 파일 저장 디렉토리 생성: {storage_path}")
+        logger.info("파일 저장 디렉토리 생성: %s", storage_path)
     
     return storage_path
 
