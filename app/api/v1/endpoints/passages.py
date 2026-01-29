@@ -976,15 +976,22 @@ async def generate_without_passage(
         if not project:
             raise HTTPException(
                 status_code=404,
-                detail="프로젝트를 찾을 수 없습니다."
+                detail="프로젝트를 찾을 수 없습니다. 관리자에게 문의해주세요."
             )
 
         config_id = insert_without_passage(project_id)
         if not config_id:
-            return {"success": False, "message": "요청이 정상적으로 처리되지 않았습니다.", "detail": "지문없이 생성 시 프로젝트 소스 구성에 저장에 실패했습니다."}
+            raise HTTPException(
+                status_code=404,
+                detail="프로젝트 설정값이 확인되지 않습니다. 관리자에게 문의해주세요."
+            )
 
 
         return {"success": True, "message": "요청이 정상적으로 처리되었습니다.", "config_id": config_id}
     except Exception as e:
         logger.exception("요청 처리 중 오류")
-        return {"success": False, "message": "요청 처리 중 오류가 발생했습니다.", "detail": str(e)}
+        raise HTTPException(
+            status_code=500,
+            detail=f"요청 처리 중 오류가 발생했습니다: {str(e)}"
+        )
+
