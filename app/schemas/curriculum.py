@@ -94,6 +94,7 @@ class PassageResponse(BaseModel):
     id: int
     achievement_standard_id: int
     title: str
+    custom_title: Optional[str] = None
     content: str
     description: Optional[str] = None
     is_use: Optional[int] = 1

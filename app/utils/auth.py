@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
+from app.core.logger import logger
 from fastapi import Header, HTTPException, status
 
 # 비밀번호 해싱 컨텍스트
@@ -129,12 +130,4 @@ def verify_token(token: str, token_type: str = "access") -> Optional[str]:
 
 
 
-def create_temp_token_for_user_1() -> str:
-    """
-    임시 함수: user_id가 1인 액세스 토큰을 생성합니다.
-    """
-    return create_refresh_token(data={"sub": "1"})
-
-# 테스트용 토큰 생성
-token = create_temp_token_for_user_1()
-print(f"Token: {token}")
+# 테스트용 코드 제거됨 (프로덕션 보안 위험)

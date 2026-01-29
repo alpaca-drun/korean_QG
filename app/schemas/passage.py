@@ -100,3 +100,16 @@ class PassageUseRequest(BaseModel):
                 "is_custom": 1
             }
         }
+
+
+class PassageGenerateWithoutPassageRequest(BaseModel):
+    """지문없이 생성 요청 스키마"""
+    project_id: int = Field(..., description="프로젝트 ID")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "project_id": 1,
+
+            }
+        }

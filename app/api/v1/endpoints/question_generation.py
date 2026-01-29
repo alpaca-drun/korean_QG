@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends
+from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends, status
 from typing import Optional, List
 import json
 from app.schemas.question_generation import (
@@ -13,7 +13,7 @@ from app.schemas.question_generation import (
 from app.services.question_generation_service import QuestionGenerationService
 from app.tasks.question_generation_task import QuestionGenerationTask
 from app.utils.dependencies import get_current_user
-
+from app.core.logger import logger
 from app.db.generate import get_generation_config, update_project_status, update_project_generation_config
 
 router = APIRouter()
@@ -87,8 +87,7 @@ async def generate_questions_batch(
 
 
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
-        print("🟣")
-        print(question_generation_requests)
+        logger.debug("question_generation_requests: %s", question_generation_requests)
 
     service = QuestionGenerationService()
     results = await service.generate_questions_batch(question_generation_requests, current_user_id, provider)
@@ -98,7 +97,7 @@ async def generate_questions_batch(
 
 @router.post(
     "/batch-async",
-    response_model=BatchJobStartResponse | BatchJobErrorResponse,
+    response_model=BatchJobStartResponse,
     summary="배치 문항 생성 (비동기)",
     description="여러 문항 생성 요청을 백그라운드에서 처리합니다. 완료 후 자동으로 DB에 저장됩니다.",
     tags=["문항 생성"]
@@ -121,13 +120,16 @@ async def generate_questions_batch_async(
     try:
         # 요청 검증
         if requests.target_count > 30:
-            return BatchJobErrorResponse(
-                success=False,
-                message="요청 문항수는 최대 30개까지 가능합니다.",
-                error=ErrorDetail(
-                    code="VALIDATION_ERROR",
-                    message="요청 문항수는 최대 30개까지 가능합니다."
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "message": "요청 문항수는 최대 30개까지 가능합니다.",
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "요청 문항수는 최대 30개까지 가능합니다."
+                    }
+                }
             )
         
         # QuestionGeneration 객체를 QuestionGenerationRequest로 변환
@@ -137,14 +139,17 @@ async def generate_questions_batch_async(
         
         # generation_configs가 None인 경우 처리
         if not generation_configs:
-            return BatchJobErrorResponse(
-                success=False,
-                message=f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
-                error=ErrorDetail(
-                    code="PROJECT_NOT_FOUND",
-                    message=f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
-                    details="프로젝트가 존재하지 않거나 설정이 완료되지 않았습니다."
-                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "success": False,
+                    "message": f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                    "error": {
+                        "code": "PROJECT_NOT_FOUND",
+                        "message": f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                        "details": "프로젝트가 존재하지 않거나 설정이 완료되지 않았습니다."
+                    }
+                }
             )
         
         obj_dict = requests.model_dump()
@@ -188,20 +193,23 @@ async def generate_questions_batch_async(
             provider=provider
         )
         
-        ## ⌛프로젝트 상태 생성중으로 변경
-        update_project_status(requests.project_id, "GENERATING")
+        from app.db.database import get_db_connection
+        with get_db_connection() as connection:
+            ## ⌛프로젝트 상태 생성중으로 변경
+            update_project_status(requests.project_id, "GENERATING", connection=connection)
 
-        use_ai_model = 1
-        ## 📢생성 설정 데이터 업데이트
-        update_project_generation_config(
-            requests.project_id,
-            requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
-            requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
-            requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,
-            use_ai_model
-        )
+            use_ai_model = 1
+            ## 📢생성 설정 데이터 업데이트
+            update_project_generation_config(
+                requests.project_id,
+                requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
+                requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
+                requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,
+                use_ai_model,
+                connection=connection
+            )
 
-        print("🟣")
+        logger.debug("배치 문항 생성 백그라운드 시작")
         # 즉시 SUCCESS 응답 반환
         return BatchJobStartResponse(
             success=True,
@@ -211,17 +219,18 @@ async def generate_questions_batch_async(
         
     except Exception as e:
         # 예외 발생 시 FAIL 응답
-        import traceback
-        traceback.print_exc()
-        
-        return BatchJobErrorResponse(
-            success=False,
-            message="배치 작업 시작 중 오류가 발생했습니다.",
-            error=ErrorDetail(
-                code="INTERNAL_ERROR",
-                message=str(e),
-                details=traceback.format_exc()
-            )
+        logger.exception("배치 문항 생성 시작 실패")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "message": "배치 작업 시작 중 오류가 발생했습니다.",
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(e),
+                    "details": "배치 문항 생성 시작 실패"
+                }
+            }
         )
 
 
@@ -247,12 +256,21 @@ from app.clients.email import get_email_client
 @router.post(
     "/send-email",
     summary="이메일 전송",
-    description="이메일을 전송합니다.",
+    description="이메일을 전송합니다. (인증 필요)",
     tags=["이메일"]
 )
-async def send_email(to_address: str, project_name: str, success_count: int, total_count: int, total_questions: int):
+async def send_email(
+    to_address: str,
+    project_name: str,
+    success_count: int,
+    total_count: int,
+    total_questions: int,
+    current_user_id: str = Depends(get_current_user)  # 인증 추가
+):
+    """인증된 사용자만 이메일 전송 가능"""
     email_client = get_email_client()
     email_client.send_success_email(to_address, project_name, success_count, total_count, total_questions)
+    logger.info("이메일 전송 요청 (user_id=%s, to=%s)", current_user_id, to_address)
     return {
         "success": True,
         "message": "이메일 전송 성공"

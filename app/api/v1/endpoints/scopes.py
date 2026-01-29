@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from app.schemas.curriculum import ScopeCreateResponse
-from app.db.database import select_one, insert_one
+from app.db.database import select_one, insert_one, get_db_connection
 from app.utils.dependencies import get_current_user
+from app.core.logger import logger
 router = APIRouter()
 
 
@@ -34,34 +35,37 @@ async def get_scope(
         scope_id: 해당 조건의 범위 ID
     """
     try:
-        result = select_one("project_scopes", {
-            "grade": grade,
-            "semester": semester,
-            "publisher_author": publisher_author,
-            "large_unit_id": large_unit_id,
-            "small_unit_id": small_unit_id
-        })
+        # 단일 트랜잭션으로 scope 조회 + 프로젝트 생성 (데이터 일관성 보장)
+        with get_db_connection() as connection:
+            # 1. scope 조회
+            result = select_one("project_scopes", {
+                "grade": grade,
+                "semester": semester,
+                "publisher_author": publisher_author,
+                "large_unit_id": large_unit_id,
+                "small_unit_id": small_unit_id
+            }, connection=connection)
+            
+            if not result:
+                raise HTTPException(
+                    status_code=404,
+                    detail="해당 조건에 맞는 범위를 찾을 수 없습니다."
+                )
+            
+            # 2. 프로젝트 생성
+            project_id = insert_one("projects", {
+                "user_id": current_user_id,
+                "project_name": project_name,
+                "scope_id": result["scope_id"],
+                "status": "WRITING"
+            }, connection=connection)
         
-
-        project_id = insert_one("projects", {
-            "user_id": current_user_id,
-            "project_name": project_name,
-            "scope_id": result["scope_id"],
-            "status": "WRITING"
-        })
-        result["project_id"] = project_id
-
-        if not result:
-            raise HTTPException(
-                status_code=404,
-                detail="해당 조건에 맞는 범위를 찾을 수 없습니다."
-            )
-        
-        return ScopeCreateResponse(project_id=result["project_id"], scope_id=result["scope_id"])
+        return ScopeCreateResponse(project_id=project_id, scope_id=result["scope_id"])
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("범위 조회 중 오류")
         raise HTTPException(
             status_code=500,
             detail=f"범위 조회 중 오류가 발생했습니다: {str(e)}"

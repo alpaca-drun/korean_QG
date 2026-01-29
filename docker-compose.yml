@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: KG_app
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # 데이터베이스 설정 (컨테이너 내부에서는 서비스명으로 접근)
       DB_HOST: mariadb
@@ -24,9 +26,10 @@ services:
       # LLM API 설정
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
-      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-2.0-flash-exp}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3-flash-preview}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-gemini}
+      API_KEY_ROTATION_STRATEGY: ${API_KEY_ROTATION_STRATEGY:-random}
       
       # API 타임아웃 설정 (초)
       API_CALL_TIMEOUT: ${API_CALL_TIMEOUT:-120}
@@ -40,10 +43,11 @@ services:
       AWS_SES_BCC_EMAIL: ${AWS_SES_BCC_EMAIL:-}
       
       # 기타 설정
-      DEBUG: ${DEBUG:-True}
+      DEBUG: "True"
       TZ: Asia/Seoul
     ports:
       - "${APP_PORT:-8000}:8000"
+    # command: gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120 --keep-alive 5
     volumes:
       # 개발 모드: 코드 변경 시 자동 반영 (Hot Reload)
       - ./app:/app/app

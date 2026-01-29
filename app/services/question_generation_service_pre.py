@@ -13,6 +13,7 @@ from app.prompts.templates import PromptTemplate
 from app.db.storage import save_questions_batch_to_db
 from app.utils.file_path import resolve_file_paths, ensure_storage_directory
 from app.core.config import settings
+from app.core.logger import logger
 
 
 class QuestionGenerationService:
@@ -132,10 +133,10 @@ class QuestionGenerationService:
                         "questions": questions_data
                     }, f, ensure_ascii=False, indent=2)
                 
-                print(f"✅ JSON 파일 저장 완료: {filepath}")
+                logger.info("JSON 파일 저장 완료: %s", filepath)
                 
             except Exception as e:
-                print(f"⚠️ JSON 저장 실패: {e}")
+                logger.warning("JSON 저장 실패: %s", e)
             
             # # DB 저장 (설정된 경우) - 주석처리
             # if settings.db_host and settings.db_database:
@@ -165,6 +166,7 @@ class QuestionGenerationService:
             )
             
         except Exception as e:
+            logger.exception("LLM API 호출 중 오류")
             error_code = "API_ERROR"
             error_message = "LLM API 호출 중 오류가 발생했습니다."
             error_details = str(e)
@@ -325,10 +327,10 @@ class QuestionGenerationService:
                                 "questions": questions_data
                             }, f, ensure_ascii=False, indent=2)
                         
-                        print(f"✅ JSON 파일 저장 완료 (배치 {req_idx}): {filepath}")
+                        logger.info("JSON 파일 저장 완료 (배치 %s): %s", req_idx, filepath)
                         
                     except Exception as e:
-                        print(f"⚠️ JSON 저장 실패 (배치 {req_idx}): {e}")
+                        logger.warning("JSON 저장 실패 (배치 %s): %s", req_idx, e)
                     
                     # # DB 저장 (설정된 경우) - 주석처리
                     # if settings.db_host and settings.db_database:
@@ -375,6 +377,7 @@ class QuestionGenerationService:
             return responses
             
         except Exception as e:
+            logger.exception("배치 문항 생성 중 오류 (pre)")
             # 전체 실패 시 모든 요청에 대해 에러 응답 반환
             return [
                 QuestionGenerationErrorResponse(
