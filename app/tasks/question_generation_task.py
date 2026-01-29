@@ -105,23 +105,31 @@ class QuestionGenerationTask:
                                 if isinstance(batch_idx, int):
                                     valid_questions.append(question.model_dump())
                             
+                            saved_ids = []
                             if valid_questions:
-                                save_questions_batch_to_db(
+                                saved_ids = save_questions_batch_to_db(
                                     questions_data=valid_questions,
                                     project_id=project_id,
-                                    config_id=config_id
+                                    config_id=config_id,
+                                    connection=connection
                                 )
                             
                             connection.commit()
                             logger.info("✅ 모든 배치 로그 및 문항 저장 완료")
 
-                        ## 📢 project 테이블 상태값 업데이트
-                        update_project_status(project_id, "COMPLETED")
+                            ## 📢 project 테이블 상태값 업데이트
+                            update_project_status(project_id, "COMPLETED", connection=connection)
+                            logger.info(f"✅ 프로젝트 상태 업데이트 완료: {project_id} (COMPLETED)")
                         
                         # 반환된 DB ID를 문항 객체에 매핑
-                        for question, db_id in zip(result.questions, saved_ids):
-                            if db_id:
-                                question.db_question_id = db_id
+                        saved_idx = 0
+                        for question in result.questions:
+                            batch_idx = getattr(question, 'batch_index', None)
+                            if isinstance(batch_idx, int) and saved_idx < len(saved_ids):
+                                db_id = saved_ids[saved_idx]
+                                if db_id:
+                                    question.db_question_id = db_id
+                                saved_idx += 1
                         
                         logger.info(f"✅ 배치 {idx+1} 문항 저장 완료: {len(saved_ids)}개 (DB ID 샘플: {[id for id in saved_ids[:3] if id]})")
                         

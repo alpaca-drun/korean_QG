@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 
 from app.download.dev import fill_table_from_list, get_question_data_from_db
-from app.db.database import select_one, update, select_with_query
+from app.db.database import select_one, update, select_with_query, get_db_connection
 from app.db.generate import get_project_all_questions
 from app.schemas.curriculum import (
     ListResponse, 
@@ -145,87 +145,100 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
         ("short_answer_questions", "short_question_id", "short_answer"),
     ]
     
-    # 각 문항 업데이트
+    # 각 문항 업데이트 (단일 트랜잭션으로 처리)
     results = []
     updated_count = 0
     failed_count = 0
     
-    for item in request.items:
-        try:
-            # project_id와 question_id로 어떤 테이블에 있는지 찾기
-            found_table = None
-            found_pk = None
-            found_question_type = None
-            
-            for table, pk, question_type in table_configs:
-                # 각 테이블에서 question_id로 조회
-                check_query = f"SELECT {pk} FROM {table} WHERE {pk} = %s AND project_id = %s LIMIT 1"
-                check_result = select_with_query(check_query, (item.question_id, item.project_id))
-                if check_result:
-                    found_table = table
-                    found_pk = pk
-                    found_question_type = question_type
-                    break
-            
-            if not found_table:
-                results.append({
-                    "question_id": item.question_id,
-                    "success": False,
-                    "message": "해당 question_id를 가진 문항을 찾을 수 없습니다."
-                })
-                failed_count += 1
-                continue
-            
-            # 업데이트 데이터 구성 (전달된 값만)
-            data = {}
-            if item.feedback_score is not None:
-                data["feedback_score"] = item.feedback_score
-            if item.is_checked is not None:
-                data["is_checked"] = int(item.is_checked)
-            if item.modified_difficulty is not None:
-                data["modified_difficulty"] = item.modified_difficulty
-            
-            if not data:
-                results.append({
-                    "question_id": item.question_id,
-                    "success": False,
-                    "message": "업데이트할 값이 없습니다."
-                })
-                failed_count += 1
-                continue
-            
-            # project_id까지 where에 포함해 타 프로젝트 문항 업데이트 방지
-            updated = update(
-                table=found_table,
-                data=data,
-                where={found_pk: item.question_id, "project_id": item.project_id},
-            )
-            
-            if updated <= 0:
-                results.append({
-                    "question_id": item.question_id,
-                    "question_type": found_question_type,
-                    "success": False,
-                    "message": "업데이트 대상 문항을 찾을 수 없습니다."
-                })
-                failed_count += 1
-            else:
-                results.append({
-                    "question_id": item.question_id,
-                    "question_type": found_question_type,
-                    "success": True,
-                    "message": "업데이트 완료"
-                })
-                updated_count += 1
-                
-        except Exception as e:
-            logger.exception("문항 메타 업데이트 중 오류 (question_id=%s)", item.question_id)
-            results.append({
-                "question_id": item.question_id,
-                "success": False,
-                "message": f"업데이트 중 오류 발생: {str(e)}"
-            })
-            failed_count += 1
+    try:
+        with get_db_connection() as connection:
+            for item in request.items:
+                try:
+                    # project_id와 question_id로 어떤 테이블에 있는지 찾기
+                    found_table = None
+                    found_pk = None
+                    found_question_type = None
+                    
+                    for table, pk, question_type in table_configs:
+                        # 각 테이블에서 question_id로 조회
+                        check_query = f"SELECT {pk} FROM {table} WHERE {pk} = %s AND project_id = %s LIMIT 1"
+                        check_result = select_with_query(check_query, (item.question_id, item.project_id), connection=connection)
+                        if check_result:
+                            found_table = table
+                            found_pk = pk
+                            found_question_type = question_type
+                            break
+                    
+                    if not found_table:
+                        results.append({
+                            "question_id": item.question_id,
+                            "success": False,
+                            "message": "해당 question_id를 가진 문항을 찾을 수 없습니다."
+                        })
+                        failed_count += 1
+                        continue
+                    
+                    # 업데이트 데이터 구성 (전달된 값만)
+                    data = {}
+                    if item.feedback_score is not None:
+                        data["feedback_score"] = item.feedback_score
+                    if item.is_checked is not None:
+                        data["is_checked"] = int(item.is_checked)
+                    if item.modified_difficulty is not None:
+                        data["modified_difficulty"] = item.modified_difficulty
+                    
+                    if not data:
+                        results.append({
+                            "question_id": item.question_id,
+                            "success": False,
+                            "message": "업데이트할 값이 없습니다."
+                        })
+                        failed_count += 1
+                        continue
+                    
+                    # project_id까지 where에 포함해 타 프로젝트 문항 업데이트 방지
+                    updated = update(
+                        table=found_table,
+                        data=data,
+                        where={found_pk: item.question_id, "project_id": item.project_id},
+                        connection=connection
+                    )
+                    
+                    if updated <= 0:
+                        results.append({
+                            "question_id": item.question_id,
+                            "question_type": found_question_type,
+                            "success": False,
+                            "message": "업데이트 대상 문항을 찾을 수 없습니다."
+                        })
+                        failed_count += 1
+                    else:
+                        results.append({
+                            "question_id": item.question_id,
+                            "question_type": found_question_type,
+                            "success": True,
+                            "message": "업데이트 완료"
+                        })
+                        updated_count += 1
+                        
+                except Exception as e:
+                    logger.exception("문항 메타 업데이트 중 오류 (question_id=%s)", item.question_id)
+                    results.append({
+                        "question_id": item.question_id,
+                        "success": False,
+                        "message": f"업데이트 중 오류 발생: {str(e)}"
+                    })
+                    failed_count += 1
+            # 트랜잭션 성공 시 자동 commit (context manager에서 처리)
+    except Exception as e:
+        logger.exception("배치 업데이트 트랜잭션 실패")
+        return QuestionMetaUpdateResponse(
+            success=False,
+            message=f"배치 업데이트 실패: {str(e)}",
+            updated_count=0,
+            failed_count=len(request.items),
+            results=[]
+        )
     
     return QuestionMetaUpdateResponse(
         success=updated_count > 0,

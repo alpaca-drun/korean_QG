@@ -16,6 +16,7 @@ from app.utils.auth import (
     verify_token
 )
 from app.core.config import settings
+from app.core.logger import logger
 from app.db.auth import get_user_by_login_id, get_user_by_id
 
 router = APIRouter()
@@ -71,48 +72,62 @@ async def login(request: LoginRequest):
     
     성공 시 액세스 토큰과 리프레시 토큰을 반환합니다.
     """
-    # 1. DB에서 사용자 조회 (이메일 기준)
-    user = get_user_by_login_id(request.user_id)
-    
-    # 2. 사용자가 존재하지 않거나 비활성 상태인 경우
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="아이디 또는 비밀번호가 올바르지 않습니다."
+    try:
+        # 1. DB에서 사용자 조회 (이메일 기준)
+        user = get_user_by_login_id(request.user_id)
+        
+        # 2. 사용자가 존재하지 않거나 비활성 상태인 경우
+        if not user:
+            logger.warning("로그인 실패 - 사용자 없음: %s", request.user_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="아이디 또는 비밀번호가 올바르지 않습니다."
+            )
+        
+        # 사용자 비활성 상태 체크 (is_active 컬럼이 있는 경우)
+        if user.get("is_active") is False:
+            logger.warning("로그인 실패 - 비활성 계정: %s", request.user_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="비활성화된 계정입니다. 관리자에게 문의하세요."
+            )
+        
+        # 3. 평문 비밀번호와 DB의 해시된 비밀번호 비교
+        if not verify_password(request.password, user["password_hash"]):
+            logger.warning("로그인 실패 - 비밀번호 불일치: %s", request.user_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="아이디 또는 비밀번호가 올바르지 않습니다."
+            )
+        
+        # 4. JWT 토큰 생성 (user_id 또는 email을 토큰 subject로 사용)
+        user_identifier = str(user["user_id"])  # 또는 user["email"]
+        access_token = create_access_token(data={"sub": user_identifier})
+        refresh_token = create_refresh_token(data={"sub": user_identifier})
+        
+        # 토큰 데이터 구성
+        token_data = TokenData(
+            access_token=access_token,
+            refresh_token=refresh_token,  # 로그인 시에도 리프레시 토큰 반환
+            token_type="bearer",
+            expires_in=settings.jwt_access_token_expire_minutes * 60  # 초 단위로 변환
+        )
+        
+        logger.info("로그인 성공: user_id=%s", user_identifier)
+        return LoginSuccessResponse(
+            success=True,
+            message="로그인에 성공했습니다.",
+            data=token_data
         )
     
-    # 사용자 비활성 상태 체크 (is_active 컬럼이 있는 경우)
-    if user.get("is_active") is False:
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("로그인 처리 중 오류 발생")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="비활성화된 계정입니다. 관리자에게 문의하세요."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="로그인 처리 중 오류가 발생했습니다."
         )
-    
-    # 3. 평문 비밀번호와 DB의 해시된 비밀번호 비교
-    if not verify_password(request.password, user["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="아이디 또는 비밀번호가 올바르지 않습니다."
-        )
-    
-    # 4. JWT 토큰 생성 (user_id 또는 email을 토큰 subject로 사용)
-    user_identifier = str(user["user_id"])  # 또는 user["email"]
-    access_token = create_access_token(data={"sub": user_identifier})
-    refresh_token = create_refresh_token(data={"sub": user_identifier})
-    
-    # 토큰 데이터 구성
-    token_data = TokenData(
-        access_token=access_token,
-        refresh_token=refresh_token,  # 로그인 시에도 리프레시 토큰 반환
-        token_type="bearer",
-        expires_in=settings.jwt_access_token_expire_minutes * 60  # 초 단위로 변환
-    )
-    
-    return LoginSuccessResponse(
-        success=True,
-        message="로그인에 성공했습니다.",
-        data=token_data
-    )
 
 
 @router.post(

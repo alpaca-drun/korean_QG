@@ -5,8 +5,7 @@ from app.schemas.curriculum import (
     ListResponse,
     PassageUpdateRequest
 )
-from app.db.storage import get_db_connection
-from app.db.database import select_one, select_all, insert_one
+from app.db.database import select_one, select_all, insert_one, get_db_connection
 from app.db.passages import (
     get_original_passages_paginated,
     get_custom_passages_paginated,
@@ -16,7 +15,8 @@ from app.db.passages import (
     insert_without_passage,
     update_project_config_status,
     update_passage_use,
-    search_passages_keyword
+    search_passages_keyword,
+    get_scope_ids_by_achievement
 )
 import json
 import traceback
@@ -54,28 +54,6 @@ def truncate_passage_content(passage: dict, max_length: int = CONTENT_PREVIEW_LE
     
     return truncated
 
-
-def get_scope_ids_by_achievement(achievement_standard_id: int, connection) -> list:
-    """
-    achievement_standard_id로 scope_id 리스트를 조회합니다.
-    project_scopes 테이블의 achievement_ids JSON 필드에서 찾습니다.
-    """
-    try:
-        with connection.cursor() as cursor:
-            # JSON_CONTAINS를 사용하여 achievement_ids 배열에 해당 ID가 포함되어 있는지 확인
-            sql = """
-                SELECT scope_id 
-                FROM project_scopes
-                WHERE JSON_CONTAINS(achievement_ids, %s)
-            """
-            # achievement_ids가 JSON 배열([1,5,12])이므로, 찾을 값은 스칼라(예: 1)로 전달해야 매칭됩니다.
-            # JSON_CONTAINS([1,5], 1) => true
-            cursor.execute(sql, (json.dumps(achievement_standard_id),))
-            results = cursor.fetchall()
-            return [row['scope_id'] for row in results] if results else []
-    except Exception as e:
-        logger.warning("scope_id 조회 오류: %s", e, exc_info=True)
-        return []
 
 @router.get(
     "/list-by-project",
@@ -171,16 +149,12 @@ async def get_passages(
     **참고**: 리스트 조회에서는 content가 50자로 제한됩니다.
     전체 내용이 필요한 경우 `/passages/{passage_id}` 또는 `/passages/full_content`를 사용하세요.
     """
-    connection = get_db_connection()
-    if not connection:
-        raise HTTPException(
-            status_code=500,
-            detail="데이터베이스 연결에 실패했습니다."
-        )
+    from app.db.database import select_with_query
     
     try:
         user_id = int(current_user_id)
-        with connection.cursor() as cursor:
+        with get_db_connection() as connection:
+          with connection.cursor() as cursor:
             # scope_id 결정
             scope_ids = []
             if scope_id is not None:
@@ -188,7 +162,7 @@ async def get_passages(
                 scope_ids = [scope_id]
             elif achievement_standard_id is not None:
                 # achievement_standard_id로 scope_id 리스트 조회
-                scope_ids = get_scope_ids_by_achievement(achievement_standard_id, connection)
+                scope_ids = get_scope_ids_by_achievement(achievement_standard_id, connection=connection)
             
             # WHERE 조건 구성
             where_conditions = []
@@ -420,9 +394,6 @@ async def get_passages(
             status_code=500,
             detail=error_detail
         )
-    finally:
-        if connection:
-            connection.close()
 
 
 @router.get(
@@ -443,16 +414,10 @@ async def get_passage(
     - **passage_id**: 지문 ID
     - **source_type**: 지문 소스 타입 (0: passages 테이블, 1: passage_custom 테이블, None: 둘 다 검색)
     """
-    connection = get_db_connection()
-    if not connection:
-        raise HTTPException(
-            status_code=500,
-            detail="데이터베이스 연결에 실패했습니다."
-        )
-    
     try:
         user_id = int(current_user_id)
-        with connection.cursor() as cursor:
+        with get_db_connection() as connection:
+          with connection.cursor() as cursor:
             passage = None
             
             # source_type에 따라 조회
@@ -577,9 +542,6 @@ async def get_passage(
             status_code=500,
             detail=error_detail
         )
-    finally:
-        if connection:
-            connection.close()
 
 
 @router.get(
@@ -674,18 +636,13 @@ async def create_passage(
     
     생성된 지문의 ID를 포함한 전체 정보를 반환합니다.
     """
-    connection = get_db_connection()
-    if not connection:
-        raise HTTPException(
-            status_code=500,
-            detail="데이터베이스 연결에 실패했습니다."
-        )
+    from app.db.database import select_with_query
     
     try:
         user_id = int(current_user_id)
         
-        with connection.cursor() as cursor:
-            # 1) project_id로 프로젝트 소유권 확인 및 scope_id, achievement_standard_id 조회
+        with get_db_connection() as connection:
+            # 1) project_id로 프로젝트 소유권 확인 및 scope_id 조회
             project_sql = """
                 SELECT 
                     p.scope_id,
@@ -694,65 +651,35 @@ async def create_passage(
                 LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
                 WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
             """
-            cursor.execute(project_sql, (project_id, user_id))
-            project_result = cursor.fetchone()
+            project_result = select_with_query(project_sql, (project_id, user_id), connection=connection)
             
             if not project_result:
-                    raise HTTPException(
+                raise HTTPException(
                     status_code=404,
                     detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)"
                 )
             
+            project_data = project_result[0]
+            
             # scope_id 가져오기
-            final_scope_id = project_result.get('scope_id')
+            final_scope_id = project_data.get('scope_id')
             if not final_scope_id:
-                    raise HTTPException(
-                        status_code=404,
+                raise HTTPException(
+                    status_code=404,
                     detail=f"프로젝트 ID {project_id}에 해당하는 scope_id를 찾을 수 없습니다."
                 )
             
-            # achievement_ids에서 첫 번째 achievement_standard_id 가져오기
-            achievement_standard_id = None
-            achievement_ids_raw = project_result.get('achievement_ids')
-            if achievement_ids_raw:
-                try:
-                    # JSON 문자열인 경우 파싱
-                    if isinstance(achievement_ids_raw, str):
-                        achievement_ids = json.loads(achievement_ids_raw)
-                    # 이미 리스트인 경우
-                    elif isinstance(achievement_ids_raw, list):
-                        achievement_ids = achievement_ids_raw
-                    else:
-                        achievement_ids = []
-                    
-                    # achievement_ids가 리스트이고 비어있지 않으면 첫 번째 값 사용
-                    if isinstance(achievement_ids, list) and len(achievement_ids) > 0:
-                        first_id = achievement_ids[0]
-                        # 정수로 변환 가능한지 확인
-                        if isinstance(first_id, int):
-                            achievement_standard_id = first_id
-                        elif isinstance(first_id, str) and first_id.isdigit():
-                            achievement_standard_id = int(first_id)
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    pass
-            
-            # passage_custom 테이블에 INSERT (source_passage_id는 NULL로 설정)
-            sql = """
-                INSERT INTO passage_custom (user_id, scope_id, custom_title, title, auth, context, passage_id, is_use)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
-            """
-            cursor.execute(sql, (
-                user_id,
-                final_scope_id,
-                custom_title or title,  # custom_title
-                title,  # title
-                auth,   # auth (None 가능)
-                content,  # context
-                None,  # passage_id는 NULL (완전 새로운 지문)
-            ))
-            # INSERT 직후에 생성된 ID를 먼저 확보
-            custom_passage_id = cursor.lastrowid
-            connection.commit()
+            # 2) 커스텀 지문 생성 (db 함수 사용)
+            custom_passage_id = create_custom_passage({
+                "user_id": user_id,
+                "scope_id": final_scope_id,
+                "custom_title": custom_title or title,
+                "title": title,
+                "auth": auth,
+                "context": content,
+                "passage_id": None,  # 완전 새로운 지문
+                "is_use": 1
+            }, connection=connection)
             
             if not custom_passage_id:
                 raise HTTPException(
@@ -760,24 +687,19 @@ async def create_passage(
                     detail="지문 생성은 성공했지만 생성된 ID를 가져올 수 없습니다."
                 )
 
-            # 생성 직후: 지문 상세 조회와 동일한 응답 형태로 반환
-            # source_type=2로 명시하여 커스텀 지문임을 지정
-            return await get_passage(custom_passage_id, source_type=2, current_user_id=current_user_id)
+        # 생성 직후: 지문 상세 조회와 동일한 응답 형태로 반환
+        # source_type=2로 명시하여 커스텀 지문임을 지정
+        return await get_passage(custom_passage_id, source_type=2, current_user_id=current_user_id)
             
     except HTTPException:
         raise
     except Exception as e:
-        if connection:
-            connection.rollback()
         logger.exception("지문 생성 중 오류")
         error_detail = f"지문 생성 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
             detail=error_detail
         )
-    finally:
-        if connection:
-            connection.close()
 
 
 @router.post(
@@ -838,22 +760,24 @@ async def update_passage(
             custom_title += random_suffix
             title_auto_modified = True
 
-        # 4. 새 커스텀 지문 생성
+        # 4. 새 커스텀 지문 생성 및 프로젝트 설정 업데이트 (단일 트랜잭션)
         # 커스텀 지문의 경우 상속받은 원본 ID(passage_id)를 유지, 원본인 경우 해당 ID를 사용
         original_id = base_info.get("passage_id") if is_custom_source else passage_id
 
-        new_custom_id = create_custom_passage({
-            "user_id": user_id,
-            "scope_id": scope_id,
-            "custom_title": custom_title,
-            "title": base_info.get("title"),  # 시스템 원본 제목 유지
-            "auth": base_info.get("auth"),    # 원본 저자 정보 유지
-            "context": request.content,
-            "passage_id": original_id,
-            "is_use": 1
-        })
+        # 단일 트랜잭션으로 두 작업 수행 (데이터 일관성 보장)
+        with get_db_connection() as connection:
+            new_custom_id = create_custom_passage({
+                "user_id": user_id,
+                "scope_id": scope_id,
+                "custom_title": custom_title,
+                "title": base_info.get("title"),  # 시스템 원본 제목 유지
+                "auth": base_info.get("auth"),    # 원본 저자 정보 유지
+                "context": request.content,
+                "passage_id": original_id,
+                "is_use": 1
+            }, connection=connection)
 
-        update_project_config_status(request.project_id, 1, new_custom_id)
+            update_project_config_status(request.project_id, 1, new_custom_id, connection=connection)
         # 메시지 설정
         if title_auto_modified:
             message = f"기존 제목과 중복되어 '{custom_title}'로 자동 변경되어 저장되었습니다."
@@ -899,38 +823,36 @@ async def delete_passage(
     
     주의: 원본 지문(passages)은 삭제할 수 없습니다. source_type=1이면 400 에러를 반환합니다.
     """
-    connection = get_db_connection()
-    if not connection:
-        raise HTTPException(
-            status_code=500,
-            detail="데이터베이스 연결에 실패했습니다."
-        )
+    from app.db.database import update, select_with_query
     
     try:
         user_id = int(current_user_id)
-        with connection.cursor() as cursor:
-            # source_type이 0이면 원본 지문 삭제 시도 → 거부
-            if is_custom == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="원본 지문(passages)은 삭제할 수 없습니다. 커스텀 지문(passage_custom)만 삭제 가능합니다."
-                )
-            
-            # source_type이 2이거나 None인 경우: 커스텀 지문 삭제 시도
-            sql = """
-                UPDATE passage_custom
-                SET is_use = 0
-                WHERE custom_passage_id = %s AND user_id = %s
-            """
-            cursor.execute(sql, (passage_id, user_id))
-            updated = cursor.rowcount > 0
+        
+        # source_type이 0이면 원본 지문 삭제 시도 → 거부
+        if is_custom == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="원본 지문(passages)은 삭제할 수 없습니다. 커스텀 지문(passage_custom)만 삭제 가능합니다."
+            )
+        
+        with get_db_connection() as connection:
+            # source_type이 2이거나 None인 경우: 커스텀 지문 삭제 시도 (soft delete)
+            updated = update(
+                table="passage_custom",
+                data={"is_use": 0},
+                where={"custom_passage_id": passage_id, "user_id": user_id},
+                connection=connection
+            )
 
-            if not updated:
+            if updated <= 0:
                 # source_type이 None이고 커스텀 지문에 없으면 원본 지문인지 확인
                 if is_custom is None:
-                    check_sql = "SELECT passage_id FROM passages WHERE passage_id = %s"
-                    cursor.execute(check_sql, (passage_id,))
-                    if cursor.fetchone():
+                    check_result = select_with_query(
+                        "SELECT passage_id FROM passages WHERE passage_id = %s",
+                        (passage_id,),
+                        connection=connection
+                    )
+                    if check_result:
                         raise HTTPException(
                             status_code=400,
                             detail="원본 지문(passages)은 삭제할 수 없습니다. 커스텀 지문(passage_custom)만 삭제 가능합니다."
@@ -940,23 +862,17 @@ async def delete_passage(
                     detail=f"커스텀 지문 ID {passage_id}를 찾을 수 없습니다."
                 )
 
-            connection.commit()
-            return {"success": True, "message": "커스텀 지문이 비활성(is_use=0) 처리되었습니다.", "passage_id": passage_id}
+        return {"success": True, "message": "커스텀 지문이 비활성(is_use=0) 처리되었습니다.", "passage_id": passage_id}
 
     except HTTPException:
         raise
     except Exception as e:
-        if connection:
-            connection.rollback()
         logger.exception("지문 소프트 삭제 중 오류")
         error_detail = f"지문 소프트 삭제 중 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
             detail=error_detail
         )
-    finally:
-        if connection:
-            connection.close()
 
 
 

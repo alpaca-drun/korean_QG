@@ -130,12 +130,4 @@ def verify_token(token: str, token_type: str = "access") -> Optional[str]:
 
 
 
-def create_temp_token_for_user_1() -> str:
-    """
-    임시 함수: user_id가 1인 액세스 토큰을 생성합니다.
-    """
-    return create_refresh_token(data={"sub": "1"})
-
-# 테스트용 토큰 생성 (모듈 로드 시 실행 - 필요시 logger로 확인)
-token = create_temp_token_for_user_1()
-logger.debug("Token: %s", token)
+# 테스트용 코드 제거됨 (프로덕션 보안 위험)

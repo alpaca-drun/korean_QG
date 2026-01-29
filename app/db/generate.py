@@ -18,19 +18,20 @@ from app.core.logger import logger
 # dong
 # ===========================
 
-def update_project_status(project_id: int, status: str):
+def update_project_status(project_id: int, status: str, connection=None):
     """프로젝트 상태 업데이트 (KST 기준)"""
     query = """
         UPDATE projects SET status = %s, updated_at = NOW() WHERE project_id = %s
     """
-    return update_with_query(query, (status, project_id))
+    return update_with_query(query, (status, project_id), connection=connection)
 
 def update_project_generation_config(
     project_id: int,
     target_count=None,
     stem_directive=None,
     additional_prompt=None,
-    use_ai_model=1
+    use_ai_model=1,
+    connection=None
 ):
     """
     프로젝트 생성 설정 데이터 업데이트
@@ -68,7 +69,7 @@ def update_project_generation_config(
         WHERE project_id = %s
     """
     params.append(project_id)
-    return update_with_query(query, tuple(params))
+    return update_with_query(query, tuple(params), connection=connection)
 
 
 def get_generation_config(project_id: int):
@@ -326,28 +327,37 @@ def save_question_to_db(
 def save_questions_batch_to_db(
     questions_data: list[Dict[str, Any]],
     project_id: Optional[int] = None,
-    config_id: Optional[int] = None
+    config_id: Optional[int] = None,
+    connection=None
 ) -> list[Optional[int]]:
     """
     여러 문항을 배치로 데이터베이스에 저장 (단일 트랜잭션 사용)
     """
     question_ids = []
     
+    def _execute(conn):
+        ids = []
+        for question_data in questions_data:
+            question_id = save_question_to_db(
+                question_data, 
+                project_id=project_id, 
+                config_id=config_id, 
+                connection=conn
+            )
+            ids.append(question_id)
+        return ids
+
     try:
-        with get_db_connection() as connection:
-            for question_data in questions_data:
-                question_id = save_question_to_db(
-                    question_data, 
-                    project_id=project_id, 
-                    config_id=config_id, 
-                    connection=connection
-                )
-                question_ids.append(question_id)
-            connection.commit()
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as connection:
+                result = _execute(connection)
+                connection.commit()
+                return result
     except Exception as e:
         logger.exception("배치 문항 DB 저장 실패: %s", e)
-    
-    return question_ids
+        return []
 
 
 

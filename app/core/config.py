@@ -6,9 +6,12 @@ from typing import Optional, List
 class Settings(BaseSettings):
     app_name: str = "Curriculum API"
     app_version: str = "1.0.0"
-    debug: bool = True
+    debug: bool = False  # 프로덕션 기본값: False
     host: str = "0.0.0.0"
     port: int = 8000
+    
+    # CORS 설정
+    cors_origins: str = "https://korean.chunjae-it-edu.com"  # 콤마로 구분된 허용 origins
     
     # LLM API 설정
     gemini_api_key: Optional[str] = None
@@ -18,7 +21,7 @@ class Settings(BaseSettings):
     default_llm_provider: str = "gemini"  # gemini, openai
     
     # API 키 로테이션 설정
-    api_key_rotation_strategy: str = "round_robin"  # round_robin, random, failover
+    api_key_rotation_strategy: str = "random"  # round_robin, random, failover
     max_parallel_api_keys: int = 5  # 병렬 처리에 사용할 최대 API 키 수
     
     # 비동기 작업 설정

@@ -19,21 +19,22 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
-# CORS 설정
-origins = [
-    "https://korean.chunjae-it-edu.com",
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "http://localhost:5173",
-]
+# CORS 설정 (환경변수에서 origins 가져오기)
+# 프로덕션: CORS_ORIGINS="https://korean.chunjae-it-edu.com"
+# 개발: CORS_ORIGINS="http://localhost:3000,http://localhost:5173"
+cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+
+# 개발 모드일 때만 localhost 허용
+if settings.debug:
+    localhost_origins = ["http://localhost", "http://localhost:3000", "http://localhost:8000", "http://localhost:5173"]
+    cors_origins = list(set(cors_origins + localhost_origins))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
 # API 라우터 등록
