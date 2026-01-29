@@ -192,7 +192,8 @@ def get_user_projects(user_id: int, status: str = None):
 
 def save_batch_log(
     batch_log_data: Dict[str, Any],
-    project_id: Optional[int] = None
+    project_id: Optional[int] = None,
+    connection=None
 ) -> Optional[int]:
     """
     배치 로그를 데이터베이스에 저장
@@ -200,37 +201,43 @@ def save_batch_log(
     Args:
         batch_log_data: 배치 로그 데이터 딕셔너리
         project_id: 프로젝트 ID
+        connection: 외부에서 전달된 DB 연결
         
     Returns:
         저장된 batch_id 또는 None
     """
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            # 배치 로그 테이블에 저장 (최소 컬럼)
+            sql = """
+                INSERT INTO batch_logs (
+                    input_token, output_token, 
+                    total_duration,total_attempts,success_count
+                ) VALUES (%s, %s, %s, %s, %s)
+            """
+            
+            input_tokens = batch_log_data.get("input_tokens", 0)
+            output_tokens = batch_log_data.get("output_tokens", 0)
+            total_tokens = batch_log_data.get("total_tokens", 0)
+            duration_seconds = batch_log_data.get("duration_seconds", 0.0)
+            total_attempts = batch_log_data.get("requested_count", 0)
+            success_count = batch_log_data.get("generated_count", 0)
+            logger.debug("배치 로그 저장 시도: tokens=%s", total_tokens)
+            
+            cursor.execute(
+                sql,
+                (input_tokens, output_tokens, duration_seconds,total_attempts, success_count )
+            )
+            return cursor.lastrowid
+
     try:
-        with get_db_connection() as connection:
-            with connection.cursor() as cursor:
-                # 배치 로그 테이블에 저장 (최소 컬럼)
-                sql = """
-                    INSERT INTO batch_logs (
-                        input_token, output_token, 
-                        total_duration,total_attempts,success_count
-                    ) VALUES (%s, %s, %s, %s, %s)
-                """
-                
-                input_tokens = batch_log_data.get("input_tokens", 0)
-                output_tokens = batch_log_data.get("output_tokens", 0)
-                total_tokens = batch_log_data.get("total_tokens", 0)
-                duration_seconds = batch_log_data.get("duration_seconds", 0.0)
-                total_attempts = batch_log_data.get("requested_count", 0)
-                success_count = batch_log_data.get("generated_count", 0)
-                logger.debug("배치 로그 저장 시도: tokens=%s", total_tokens)
-                
-                cursor.execute(
-                    sql,
-                    (input_tokens, output_tokens, duration_seconds,total_attempts, success_count )
-                )
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as connection:
+                result = _execute(connection)
                 connection.commit()
-                batch_id = cursor.lastrowid
-                
-                return batch_id
+                return result
             
     except Exception as e:
         logger.exception("배치 로그 DB 저장 실패: %s", e)
@@ -240,7 +247,8 @@ def save_batch_log(
 def save_question_to_db(
     question_data: Dict[str, Any],
     project_id: Optional[int] = None,
-    config_id: Optional[int] = None
+    config_id: Optional[int] = None,
+    connection=None
 ) -> Optional[int]:
     """
     문항을 데이터베이스에 저장
@@ -248,60 +256,67 @@ def save_question_to_db(
     Args:
         question_data: 문항 데이터 딕셔너리
         project_id: 프로젝트 ID
+        config_id: 설정 ID
+        connection: 외부에서 전달된 DB 연결 (트랜잭션 유지용)
     Returns:
         저장된 question_id 또는 None
     """
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            # 문항 테이블에 저장
+            sql = """
+                INSERT INTO multiple_choice_questions (
+                    config_id, project_id, batch_id, question, box_content, modified_passage,
+                    option1, option2, option3, option4, option5, 
+                    answer, answer_explain, is_used, llm_difficulty, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """
+            batch_id = question_data.get("batch_index", None)
+            question_text = question_data.get("question_text", {})
+            
+            # 'null' 문자열이나 빈 값을 None(NULL)으로 처리하는 헬퍼 함수
+            def clean_val(v):
+                if v is None or str(v).lower() == 'null' or v == '':
+                    return None
+                return v
+
+            # Question 스키마의 필드명에 맞춤: "text"
+            question = clean_val(question_text.get("text"))
+            modified_passage = clean_val(question_text.get("modified_passage"))
+            box_content = clean_val(question_text.get("box_content"))
+            
+            options = question_data.get("choices", [])
+            option1 = clean_val(options[0]["text"]) if len(options) > 0 and "text" in options[0] else None
+            option2 = clean_val(options[1]["text"]) if len(options) > 1 and "text" in options[1] else None
+            option3 = clean_val(options[2]["text"]) if len(options) > 2 and "text" in options[2] else None
+            option4 = clean_val(options[3]["text"]) if len(options) > 3 and "text" in options[3] else None
+            option5 = clean_val(options[4]["text"]) if len(options) > 4 and "text" in options[4] else None
+            
+            # Question 스키마의 필드명에 맞춤: "correct_answer", "explanation"
+            answer = clean_val(question_data.get("correct_answer"))
+            answer_explain = clean_val(question_data.get("explanation"))
+            is_used = question_data.get("is_used", 1)  # 기본값 1 (사용)
+            
+            # llm_difficulty 변환: 1 -> "쉬움", 2 -> "보통", 3 -> "어려움"
+            llm_difficulty_raw = question_data.get("llm_difficulty", None)
+            llm_difficulty_map = {1: "쉬움", 2: "보통", 3: "어려움"}
+            llm_difficulty = llm_difficulty_map.get(llm_difficulty_raw, None) if llm_difficulty_raw else None
+            llm_difficulty = clean_val(llm_difficulty)
+
+            cursor.execute(
+                sql,
+                (config_id, project_id, batch_id, question, box_content, modified_passage, option1, option2, option3, option4, option5, answer, answer_explain, is_used, llm_difficulty)
+            )
+            return cursor.lastrowid
+
     try:
-        with get_db_connection() as connection:
-            with connection.cursor() as cursor:
-                # 문항 테이블에 저장
-                sql = """
-                    INSERT INTO multiple_choice_questions (
-                        config_id, project_id, batch_id, question, box_content, modified_passage,
-                        option1, option2, option3, option4, option5, 
-                        answer, answer_explain, is_used, llm_difficulty, created_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                """
-                batch_id = question_data.get("batch_index", None)
-                question_text = question_data.get("question_text", {})
-                
-                # 'null' 문자열이나 빈 값을 None(NULL)으로 처리하는 헬퍼 함수
-                def clean_val(v):
-                    if v is None or str(v).lower() == 'null' or v == '':
-                        return None
-                    return v
-
-                # Question 스키마의 필드명에 맞춤: "text"
-                question = clean_val(question_text.get("text"))
-                modified_passage = clean_val(question_text.get("modified_passage"))
-                box_content = clean_val(question_text.get("box_content"))
-                
-                options = question_data.get("choices", [])
-                option1 = clean_val(options[0]["text"]) if len(options) > 0 and "text" in options[0] else None
-                option2 = clean_val(options[1]["text"]) if len(options) > 1 and "text" in options[1] else None
-                option3 = clean_val(options[2]["text"]) if len(options) > 2 and "text" in options[2] else None
-                option4 = clean_val(options[3]["text"]) if len(options) > 3 and "text" in options[3] else None
-                option5 = clean_val(options[4]["text"]) if len(options) > 4 and "text" in options[4] else None
-                
-                # Question 스키마의 필드명에 맞춤: "correct_answer", "explanation"
-                answer = clean_val(question_data.get("correct_answer"))
-                answer_explain = clean_val(question_data.get("explanation"))
-                is_used = question_data.get("is_used", 1)  # 기본값 1 (사용)
-                
-                # llm_difficulty 변환: 1 -> "쉬움", 2 -> "보통", 3 -> "어려움"
-                llm_difficulty_raw = question_data.get("llm_difficulty", None)
-                llm_difficulty_map = {1: "쉬움", 2: "보통", 3: "어려움"}
-                llm_difficulty = llm_difficulty_map.get(llm_difficulty_raw, None) if llm_difficulty_raw else None
-                llm_difficulty = clean_val(llm_difficulty)
-
-                cursor.execute(
-                    sql,
-                    (config_id, project_id, batch_id, question, box_content, modified_passage, option1, option2, option3, option4, option5, answer, answer_explain, is_used, llm_difficulty)
-                )
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as connection:
+                result = _execute(connection)
                 connection.commit()
-                question_id = cursor.lastrowid
-                
-                return question_id
+                return result
             
     except Exception as e:
         logger.exception("문항 DB 저장 실패: %s", e)
@@ -314,20 +329,23 @@ def save_questions_batch_to_db(
     config_id: Optional[int] = None
 ) -> list[Optional[int]]:
     """
-    여러 문항을 배치로 데이터베이스에 저장
-    
-    Args:
-        questions_data: 문항 데이터 리스트
-        project_id: 프로젝트 ID
-        
-    Returns:
-        저장된 question_id 리스트
+    여러 문항을 배치로 데이터베이스에 저장 (단일 트랜잭션 사용)
     """
     question_ids = []
     
-    for question_data in questions_data:
-        question_id = save_question_to_db(question_data, project_id=project_id, config_id=config_id)
-        question_ids.append(question_id)
+    try:
+        with get_db_connection() as connection:
+            for question_data in questions_data:
+                question_id = save_question_to_db(
+                    question_data, 
+                    project_id=project_id, 
+                    config_id=config_id, 
+                    connection=connection
+                )
+                question_ids.append(question_id)
+            connection.commit()
+    except Exception as e:
+        logger.exception("배치 문항 DB 저장 실패: %s", e)
     
     return question_ids
 

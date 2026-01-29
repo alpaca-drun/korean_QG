@@ -67,95 +67,53 @@ class QuestionGenerationTask:
                         
                         # 1단계: 배치 로그를 DB에 저장하고 매핑 테이블 생성
                         batch_index_mapping = {}  # {원래_batch_number: DB_batch_id}
-                        batch_log_success = True
                         
-                        logger.info(f"📊 배치 로그 저장 시작: {len(batch_log_data)}개 배치")
-                        for batch_log in batch_log_data:
-                            # 배치 로그 DB 저장 후 ID 반환
-                            batch_id = save_batch_log(
-                                batch_log_data=batch_log.model_dump(),
-                                project_id=project_id
-                            )
-                            
-                            # 원래 batch_number와 DB의 batch_id 매핑
-                            original_batch_number = batch_log.batch_number
-                            
-                            if batch_id is None:
-                                logger.warning(f"  ⚠️ 배치 로그 저장 실패: {original_batch_number} → 숫자로 사용")
-                                # 실패 시 원래 번호를 숫자로 변환 (문자열이면 0)
-                                if isinstance(original_batch_number, int):
+                        logger.info(f"📊 배치 로그 및 문항 저장 시작: {len(batch_log_data)}개 배치")
+                        
+                        from app.db.database import get_db_connection
+                        with get_db_connection() as connection:
+                            for batch_log in batch_log_data:
+                                # 배치 로그 DB 저장 후 ID 반환
+                                batch_id = save_batch_log(
+                                    batch_log_data=batch_log.model_dump(),
+                                    project_id=project_id,
+                                    connection=connection
+                                )
+                                
+                                # 원래 batch_number와 DB의 batch_id 매핑
+                                original_batch_number = batch_log.batch_number
+                                
+                                if batch_id is None:
+                                    logger.warning(f"  ⚠️ 배치 로그 저장 실패: {original_batch_number}")
                                     batch_index_mapping[original_batch_number] = original_batch_number
                                 else:
-                                    try:
-                                        batch_index_mapping[original_batch_number] = int(original_batch_number)
-                                    except:
-                                        batch_index_mapping[original_batch_number] = 0
-                                batch_log_success = False
-                            else:
-                                batch_index_mapping[original_batch_number] = batch_id
-                                logger.info(f"  ✅ 배치 로그 저장: {original_batch_number} → DB ID {batch_id}")
-                        
-                        if not batch_log_success:
-                            logger.warning(f"⚠️ 일부 배치 로그 저장 실패 - 원래 번호 사용")
-                        logger.debug(f"📊 배치 매핑 테이블: {batch_index_mapping}")
-                        
-                        # 2단계: 각 question의 batch_index를 DB ID로 업데이트
-                        for question in result.questions:
-                            original_batch_index = None
+                                    batch_index_mapping[original_batch_number] = batch_id
                             
-                            # 기존 batch_index 값 가져오기
-                            if hasattr(question, 'batch_index'):
-                                original_batch_index = question.batch_index
-                            elif isinstance(question, dict) and 'batch_index' in question:
-                                original_batch_index = question['batch_index']
-                            
-                            logger.debug(f"  🔍 문항 {question.question_id}: 원래 batch_index={original_batch_index} (타입: {type(original_batch_index).__name__})")
-                            
-                            # 매핑 테이블에서 새 batch_id 찾아서 업데이트
-                            if original_batch_index in batch_index_mapping:
-                                new_batch_id = batch_index_mapping[original_batch_index]
+                            # 2단계: 각 question의 batch_index를 DB ID로 업데이트
+                            for question in result.questions:
+                                original_batch_index = getattr(question, 'batch_index', None)
                                 
-                                if hasattr(question, 'batch_index'):
+                                # 매핑 테이블에서 새 batch_id 찾아서 업데이트
+                                if original_batch_index in batch_index_mapping:
+                                    new_batch_id = batch_index_mapping[original_batch_index]
                                     question.batch_index = new_batch_id
-                                elif isinstance(question, dict) and 'batch_index' in question:
-                                    question['batch_index'] = new_batch_id
-                                
-                                logger.debug(f"  ✅ 문항 {question.question_id}: batch_index {original_batch_index} → {new_batch_id}")
-                            else:
-                                logger.warning(f"  ⚠️ 문항 {question.question_id}: batch_index {original_batch_index}가 매핑 테이블에 없음!")
-                                logger.debug(f"     매핑 테이블 키: {list(batch_index_mapping.keys())}")
-                        
-                        # 3단계: 업데이트된 questions를 DB에 저장
-                        # batch_index가 정수인 문항만 필터링
-                        valid_questions = []
-                        for question in result.questions:
-                            batch_idx = question.batch_index if hasattr(question, 'batch_index') else None
-                            if batch_idx is not None and isinstance(batch_idx, int):
-                                valid_questions.append(question)
-                            else:
-                                logger.warning(f"  ⚠️ 문항 {question.question_id} 건너뜀: batch_index={batch_idx} (정수 아님)")
-                        
-                        if len(valid_questions) < len(result.questions):
-                            logger.warning(f"⚠️ {len(result.questions) - len(valid_questions)}개 문항이 유효하지 않은 batch_index로 인해 제외됨")
-                        
-                        questions_data = [question.model_dump() for question in valid_questions]
-                        
-                        # 데이터 확인 (첫 번째 문항만)
-                        if questions_data:
-                            logger.debug(f"📝 저장할 데이터 샘플 (첫 번째 문항):")
-                            sample = questions_data[0]
-                            logger.debug(f"  - batch_index: {sample.get('batch_index')}")
-                            logger.debug(f"  - question_text.text: {sample.get('question_text', {}).get('text', 'N/A')[:50]}...")
-                            logger.debug(f"  - correct_answer: {sample.get('correct_answer')}")
-                            logger.debug(f"  - explanation: {sample.get('explanation', 'N/A')[:50]}...")
-                            logger.debug(f"  - is_used: {sample.get('is_used')}")
-                            logger.debug(f"  - project_id: {project_id}")
-                        
-                        saved_ids = save_questions_batch_to_db(
-                            questions_data=questions_data,
-                            project_id=project_id,
-                            config_id=config_id
-                        )
+                            
+                            # 3단계: 업데이트된 questions를 DB에 저장
+                            valid_questions = []
+                            for question in result.questions:
+                                batch_idx = getattr(question, 'batch_index', None)
+                                if isinstance(batch_idx, int):
+                                    valid_questions.append(question.model_dump())
+                            
+                            if valid_questions:
+                                save_questions_batch_to_db(
+                                    questions_data=valid_questions,
+                                    project_id=project_id,
+                                    config_id=config_id
+                                )
+                            
+                            connection.commit()
+                            logger.info("✅ 모든 배치 로그 및 문항 저장 완료")
 
                         ## 📢 project 테이블 상태값 업데이트
                         update_project_status(project_id, "COMPLETED")

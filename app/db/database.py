@@ -2,27 +2,27 @@ from typing import List, Dict, Any, Optional, Union
 from contextlib import contextmanager
 import pymysql
 from pymysql.cursors import DictCursor
+from dbutils.pooled_db import PooledDB
 from app.core.config import settings
 from app.core.logger import logger
 
+# 커넥션 풀 전역 변수
+_pool = None
 
-@contextmanager
-def get_db_connection():
-    """
-    데이터베이스 연결을 위한 context manager
-    
-    사용 예시:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM projects")
-                result = cursor.fetchall()
-    """
-    connection = None
-    try:
+def get_pool():
+    """데이터베이스 커넥션 풀 생성 및 반환"""
+    global _pool
+    if _pool is None:
         if not all([settings.db_host, settings.db_user, settings.db_password, settings.db_database]):
             raise ValueError("데이터베이스 설정이 완료되지 않았습니다.")
         
-        connection = pymysql.connect(
+        _pool = PooledDB(
+            creator=pymysql,
+            maxconnections=10,    # 최대 연결 수
+            mincached=2,         # 최소 유휴 연결 수
+            maxcached=5,         # 최대 유휴 연결 수
+            maxshared=3,         # 최대 공유 연결 수
+            blocking=True,       # 풀이 다 찼을 때 대기 여부
             host=settings.db_host,
             port=settings.db_port,
             user=settings.db_user,
@@ -31,18 +31,26 @@ def get_db_connection():
             charset='utf8mb4',
             cursorclass=DictCursor,
             autocommit=False,
-            init_command="SET time_zone = '+09:00'"  # KST 명시적 설정
+            init_command="SET time_zone = '+09:00'"
         )
+    return _pool
+
+@contextmanager
+def get_db_connection():
+    """
+    커넥션 풀에서 연결을 가져오는 context manager
+    """
+    pool = get_pool()
+    connection = pool.connection()
+    try:
         yield connection
         connection.commit()
     except Exception as e:
-        if connection:
-            connection.rollback()
-        logger.exception("DB 연결/컨텍스트 중 오류")
+        connection.rollback()
+        logger.exception("DB 작업 중 오류 발생")
         raise e
     finally:
-        if connection:
-            connection.close()
+        connection.close()  # 실제로는 풀로 반환됨
 
 
 # ===========================
