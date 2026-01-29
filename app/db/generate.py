@@ -2,13 +2,9 @@
 DB CRUD 함수 사용 예시
 """
 from app.db.database import (
-    
     select_one, select_all, select_with_query, count, search,
-    insert_one, insert_many,
-    update,
-    delete, soft_delete,
-    get_db_connection,
-    update_with_query
+    insert_one, insert_many, update, delete, soft_delete,
+    get_db_connection, update_with_query
 )
 from typing import Optional, Dict, Any
 from threading import Lock
@@ -35,40 +31,55 @@ def update_project_generation_config(
 ):
     """
     프로젝트 생성 설정 데이터 업데이트
-
-    값이 옵션이여서 없는 경우(=None)에는 해당 컬럼은 업데이트 대상에서 제외함
+    INSERT ON DUPLICATE KEY UPDATE 패턴을 사용하여 레코드가 없으면 생성, 있으면 업데이트합니다.
     """
-    # 업데이트할 필드/값 동적 생성
+    # 업데이트할 필드/값 동적 생성 (VALUES() 함수용)
     set_clauses = []
-    params = []
+    
+    # INSERT용 컬럼 및 값
+    columns = ["project_id", "created_at", "updated_at"]
+    values = [project_id, "NOW()", "NOW()"]
+    placeholders = ["%s", "NOW()", "NOW()"]
+    params = [project_id]
 
     if target_count is not None:
-        set_clauses.append("target_count = %s")
+        columns.append("target_count")
+        placeholders.append("%s")
         params.append(target_count)
+        set_clauses.append("target_count = VALUES(target_count)")
+    
     if stem_directive is not None:
-        set_clauses.append("stem_directive = %s")
+        columns.append("stem_directive")
+        placeholders.append("%s")
         params.append(stem_directive)
+        set_clauses.append("stem_directive = VALUES(stem_directive)")
+    
     if additional_prompt is not None:
-        set_clauses.append("additional_prompt = %s")
+        columns.append("additional_prompt")
+        placeholders.append("%s")
         params.append(additional_prompt)
+        set_clauses.append("additional_prompt = VALUES(additional_prompt)")
+    
     if use_ai_model is not None:
-        set_clauses.append("use_ai_model = %s")
+        columns.append("use_ai_model")
+        placeholders.append("%s")
         params.append(use_ai_model)
+        set_clauses.append("use_ai_model = VALUES(use_ai_model)")
+
     # updated_at은 항상 업데이트
     set_clauses.append("updated_at = NOW()")
 
-    if len(set_clauses) == 1:  # updated_at만 있는 경우
-        # 업데이트할 값이 없음
-        raise ValueError("업데이트할 값이 없어 쿼리를 실행할 수 없습니다.")
+    column_str = ", ".join(columns)
+    placeholder_str = ", ".join(placeholders)
+    set_clause_str = ", ".join(set_clauses)
 
-    set_clause_str = ",\n        ".join(set_clauses)
     query = f"""
-        UPDATE project_source_config
-        SET 
+        INSERT INTO project_source_config ({column_str})
+        VALUES ({placeholder_str})
+        ON DUPLICATE KEY UPDATE 
         {set_clause_str}
-        WHERE project_id = %s
     """
-    params.append(project_id)
+    
     return update_with_query(query, tuple(params), connection=connection)
 
 
@@ -78,6 +89,7 @@ def get_generation_config(project_id: int):
     query = """
         SELECT 
             psc.config_id,
+            pr.project_name,
             COALESCE(NULLIF(cp.context, ''), NULLIF(p.context, ''), '-') AS passage,
             COALESCE(NULLIF(cp.title, ''), NULLIF(p.title, ''), '-') AS title,
             COALESCE(NULLIF(cp.auth, ''), NULLIF(p.auth, ''), '-') AS auth,
