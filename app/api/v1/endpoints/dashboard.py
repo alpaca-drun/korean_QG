@@ -606,10 +606,11 @@ async def get_project_detail(
     project_id: int, 
     current_user_id: str = Depends(get_current_user)
     ):
-
+    user_id = int(current_user_id)
+    
     project = select_one(
         table="projects",
-        where={"project_id": project_id, "user_id": current_user_id, "is_deleted": False}
+        where={"project_id": project_id, "user_id": user_id, "is_deleted": False}
     )
 
     if not project:

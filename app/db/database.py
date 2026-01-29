@@ -23,6 +23,8 @@ def get_pool():
             maxcached=5,         # 최대 유휴 연결 수
             maxshared=3,         # 최대 공유 연결 수
             blocking=True,       # 풀이 다 찼을 때 대기 여부
+            maxusage=None,       # 연결 재사용 횟수 제한 없음
+            setsession=[],       # 세션 초기화 명령 (필요 시 추가)
             host=settings.db_host,
             port=settings.db_port,
             user=settings.db_user,
@@ -31,6 +33,9 @@ def get_pool():
             charset='utf8mb4',
             cursorclass=DictCursor,
             autocommit=False,
+            connect_timeout=10,   # 연결 타임아웃 10초
+            read_timeout=30,      # 읽기 타임아웃 30초
+            write_timeout=30,     # 쓰기 타임아웃 30초
             init_command="SET time_zone = '+09:00'"
         )
     return _pool
@@ -60,24 +65,13 @@ def get_db_connection():
 def select_one(
     table: str,
     where: Optional[Dict[str, Any]] = None,
-    columns: str = "*"
+    columns: str = "*",
+    connection=None
 ) -> Optional[Dict[str, Any]]:
     """
     단일 레코드 조회
-    
-    Args:
-        table: 테이블 이름
-        where: WHERE 조건 (딕셔너리)
-        columns: 조회할 컬럼 (기본값: "*")
-    
-    Returns:
-        레코드 (딕셔너리) 또는 None
-    
-    예시:
-        user = select_one("users", {"user_id": 1})
-        project = select_one("projects", {"project_id": 1, "is_deleted": False})
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             sql = f"SELECT {columns} FROM {table}"
             params = []
@@ -91,6 +85,12 @@ def select_one(
             cursor.execute(sql, params)
             return cursor.fetchone()
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            return _execute(conn)
+
 
 def select_all(
     table: str,
@@ -98,27 +98,13 @@ def select_all(
     columns: str = "*",
     order_by: Optional[str] = None,
     limit: Optional[int] = None,
-    offset: Optional[int] = None
+    offset: Optional[int] = None,
+    connection=None
 ) -> List[Dict[str, Any]]:
     """
     여러 레코드 조회
-    
-    Args:
-        table: 테이블 이름
-        where: WHERE 조건 (딕셔너리)
-        columns: 조회할 컬럼 (기본값: "*")
-        order_by: 정렬 (예: "created_at DESC")
-        limit: 제한 개수
-        offset: 시작 위치
-    
-    Returns:
-        레코드 리스트
-    
-    예시:
-        projects = select_all("projects", {"user_id": 1, "is_deleted": False}, order_by="created_at DESC")
-        questions = select_all("multiple_choice_questions", {"project_id": 1}, limit=10)
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             sql = f"SELECT {columns} FROM {table}"
             params = []
@@ -140,54 +126,42 @@ def select_all(
             cursor.execute(sql, params)
             return cursor.fetchall()
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            return _execute(conn)
+
 
 def select_with_query(
     query: str,
-    params: Optional[Union[tuple, list]] = None
+    params: Optional[Union[tuple, list]] = None,
+    connection=None
 ) -> List[Dict[str, Any]]:
     """
     커스텀 쿼리로 조회 (복잡한 JOIN, 서브쿼리 등)
-    
-    Args:
-        query: SQL 쿼리문
-        params: 쿼리 파라미터
-    
-    Returns:
-        레코드 리스트
-    
-    예시:
-        query = '''
-            SELECT p.*, ps.grade, ps.subject 
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            WHERE p.user_id = %s
-        '''
-        results = select_with_query(query, (1,))
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             cursor.execute(query, params or ())
             return cursor.fetchall()
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            return _execute(conn)
+
 
 def count(
     table: str,
-    where: Optional[Dict[str, Any]] = None
+    where: Optional[Dict[str, Any]] = None,
+    connection=None
 ) -> int:
     """
     레코드 개수 조회
-    
-    Args:
-        table: 테이블 이름
-        where: WHERE 조건 (딕셔너리)
-    
-    Returns:
-        레코드 개수
-    
-    예시:
-        total = count("projects", {"user_id": 1, "is_deleted": False})
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             sql = f"SELECT COUNT(*) as count FROM {table}"
             params = []
@@ -201,6 +175,12 @@ def count(
             result = cursor.fetchone()
             return result["count"] if result else 0
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            return _execute(conn)
+
 
 # ===========================
 # 추가 (INSERT) 함수들
@@ -208,26 +188,13 @@ def count(
 
 def insert_one(
     table: str,
-    data: Dict[str, Any]
+    data: Dict[str, Any],
+    connection=None
 ) -> int:
     """
     단일 레코드 삽입
-    
-    Args:
-        table: 테이블 이름
-        data: 삽입할 데이터 (딕셔너리)
-    
-    Returns:
-        삽입된 레코드의 ID (auto_increment)
-    
-    예시:
-        project_id = insert_one("projects", {
-            "user_id": 1,
-            "project_name": "새 프로젝트",
-            "status": "WRITING"
-        })
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             columns = ", ".join(data.keys())
             placeholders = ", ".join(["%s"] * len(data))
@@ -236,32 +203,27 @@ def insert_one(
             cursor.execute(sql, list(data.values()))
             return cursor.lastrowid
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            res = _execute(conn)
+            conn.commit()
+            return res
+
 
 def insert_many(
     table: str,
-    data_list: List[Dict[str, Any]]
+    data_list: List[Dict[str, Any]],
+    connection=None
 ) -> int:
     """
     여러 레코드 일괄 삽입
-    
-    Args:
-        table: 테이블 이름
-        data_list: 삽입할 데이터 리스트
-    
-    Returns:
-        삽입된 레코드 개수
-    
-    예시:
-        questions = [
-            {"project_id": 1, "question": "문제1", "answer": "답1"},
-            {"project_id": 1, "question": "문제2", "answer": "답2"}
-        ]
-        count = insert_many("multiple_choice_questions", questions)
     """
     if not data_list:
         return 0
     
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             columns = ", ".join(data_list[0].keys())
             placeholders = ", ".join(["%s"] * len(data_list[0]))
@@ -271,6 +233,14 @@ def insert_many(
             cursor.executemany(sql, params)
             return cursor.rowcount
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            res = _execute(conn)
+            conn.commit()
+            return res
+
 
 # ===========================
 # 수정 (UPDATE) 함수들
@@ -279,27 +249,13 @@ def insert_many(
 def update(
     table: str,
     data: Dict[str, Any],
-    where: Dict[str, Any]
+    where: Dict[str, Any],
+    connection=None
 ) -> int:
     """
     레코드 업데이트
-    
-    Args:
-        table: 테이블 이름
-        data: 업데이트할 데이터 (딕셔너리)
-        where: WHERE 조건 (딕셔너리)
-    
-    Returns:
-        업데이트된 레코드 개수
-    
-    예시:
-        count = update(
-            "projects",
-            {"status": "COMPLETED", "project_name": "완료된 프로젝트"},
-            {"project_id": 1}
-        )
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             set_clause = ", ".join([f"{key} = %s" for key in data.keys()])
             where_clause = " AND ".join([f"{key} = %s" for key in where.keys()])
@@ -310,6 +266,14 @@ def update(
             cursor.execute(sql, params)
             return cursor.rowcount
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            res = _execute(conn)
+            conn.commit()
+            return res
+
 
 # ===========================
 # 삭제 (DELETE) 함수들
@@ -317,24 +281,13 @@ def update(
 
 def delete(
     table: str,
-    where: Dict[str, Any]
+    where: Dict[str, Any],
+    connection=None
 ) -> int:
     """
     레코드 삭제 (물리 삭제)
-    
-    Args:
-        table: 테이블 이름
-        where: WHERE 조건 (딕셔너리)
-    
-    Returns:
-        삭제된 레코드 개수
-    
-    예시:
-        count = delete("projects", {"project_id": 1})
-    
-    주의: 물리적으로 삭제됩니다. soft delete가 필요한 경우 update() 사용
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             where_clause = " AND ".join([f"{key} = %s" for key in where.keys()])
             sql = f"DELETE FROM {table} WHERE {where_clause}"
@@ -342,27 +295,25 @@ def delete(
             cursor.execute(sql, list(where.values()))
             return cursor.rowcount
 
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            res = _execute(conn)
+            conn.commit()
+            return res
+
 
 def soft_delete(
     table: str,
     where: Dict[str, Any],
-    deleted_column: str = "is_deleted"
+    deleted_column: str = "is_deleted",
+    connection=None
 ) -> int:
     """
     레코드 논리 삭제 (soft delete)
-    
-    Args:
-        table: 테이블 이름
-        where: WHERE 조건 (딕셔너리)
-        deleted_column: 삭제 플래그 컬럼명 (기본값: "is_deleted")
-    
-    Returns:
-        업데이트된 레코드 개수
-    
-    예시:
-        count = soft_delete("projects", {"project_id": 1})
     """
-    return update(table, {deleted_column: True}, where)
+    return update(table, {deleted_column: True}, where, connection=connection)
 
 
 # ===========================
@@ -373,23 +324,12 @@ def execute_transaction(operations: List[callable]) -> bool:
     """
     여러 DB 작업을 트랜잭션으로 실행
     
-    Args:
-        operations: 실행할 함수 리스트
-    
-    Returns:
-        성공 여부
-    
-    예시:
-        def create_project_with_config():
-            project_id = insert_one("projects", {...})
-            insert_one("project_source_config", {"project_id": project_id, ...})
-        
-        success = execute_transaction([create_project_with_config])
+    주의: operations 리스트에 전달되는 함수들은 connection 인자를 받아야 함
     """
     try:
         with get_db_connection() as conn:
             for operation in operations:
-                operation()
+                operation(connection=conn)
         return True
     except Exception as e:
         logger.error("트랜잭션 실패: %s", e)
@@ -407,33 +347,13 @@ def search(
     where: Optional[Dict[str, Any]] = None,
     columns: str = "*",
     order_by: Optional[str] = None,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    connection=None
 ) -> List[Dict[str, Any]]:
     """
     LIKE 검색
-    
-    Args:
-        table: 테이블 이름
-        search_columns: 검색할 컬럼 리스트
-        keyword: 검색 키워드
-        where: 추가 WHERE 조건
-        columns: 조회할 컬럼
-        order_by: 정렬
-        limit: 제한 개수
-    
-    Returns:
-        레코드 리스트
-    
-    예시:
-        projects = search(
-            "projects",
-            ["project_name"],
-            "프로젝트",
-            where={"user_id": 1, "is_deleted": False},
-            order_by="created_at DESC"
-        )
     """
-    with get_db_connection() as conn:
+    def _execute(conn):
         with conn.cursor() as cursor:
             sql = f"SELECT {columns} FROM {table} WHERE "
             params = []
@@ -457,6 +377,12 @@ def search(
             
             cursor.execute(sql, params)
             return cursor.fetchall()
+
+    if connection:
+        return _execute(connection)
+    else:
+        with get_db_connection() as conn:
+            return _execute(conn)
 
 def update_with_query(query: str, params: tuple):
     """커스텀 쿼리로 업데이트"""

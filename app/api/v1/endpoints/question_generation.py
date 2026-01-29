@@ -187,18 +187,21 @@ async def generate_questions_batch_async(
             provider=provider
         )
         
-        ## ⌛프로젝트 상태 생성중으로 변경
-        update_project_status(requests.project_id, "GENERATING")
+        from app.db.database import get_db_connection
+        with get_db_connection() as connection:
+            ## ⌛프로젝트 상태 생성중으로 변경
+            update_project_status(requests.project_id, "GENERATING", connection=connection)
 
-        use_ai_model = 1
-        ## 📢생성 설정 데이터 업데이트
-        update_project_generation_config(
-            requests.project_id,
-            requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
-            requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
-            requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,
-            use_ai_model
-        )
+            use_ai_model = 1
+            ## 📢생성 설정 데이터 업데이트
+            update_project_generation_config(
+                requests.project_id,
+                requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
+                requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
+                requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,
+                use_ai_model,
+                connection=connection
+            )
 
         logger.debug("배치 문항 생성 백그라운드 시작")
         # 즉시 SUCCESS 응답 반환
@@ -244,12 +247,21 @@ from app.clients.email import get_email_client
 @router.post(
     "/send-email",
     summary="이메일 전송",
-    description="이메일을 전송합니다.",
+    description="이메일을 전송합니다. (인증 필요)",
     tags=["이메일"]
 )
-async def send_email(to_address: str, project_name: str, success_count: int, total_count: int, total_questions: int):
+async def send_email(
+    to_address: str,
+    project_name: str,
+    success_count: int,
+    total_count: int,
+    total_questions: int,
+    current_user_id: str = Depends(get_current_user)  # 인증 추가
+):
+    """인증된 사용자만 이메일 전송 가능"""
     email_client = get_email_client()
     email_client.send_success_email(to_address, project_name, success_count, total_count, total_questions)
+    logger.info("이메일 전송 요청 (user_id=%s, to=%s)", current_user_id, to_address)
     return {
         "success": True,
         "message": "이메일 전송 성공"

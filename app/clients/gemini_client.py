@@ -11,6 +11,16 @@ from app.core.config import settings
 from app.core.logger import logger
 
 
+def _cleanup_uploaded_files(uploaded_files: List) -> None:
+    """업로드된 파일 정리 (메모리 누수 방지)"""
+    for uploaded_file in uploaded_files:
+        try:
+            genai.delete_file(uploaded_file.name)
+            logger.debug("업로드 파일 삭제 완료: %s", uploaded_file.name)
+        except Exception as e:
+            logger.warning("업로드 파일 삭제 실패: %s - %s", getattr(uploaded_file, 'name', 'unknown'), e)
+
+
 class GeminiClient(LLMClientBase):
     """Google Gemini API 클라이언트 - 여러 API 키 지원 및 병렬 처리"""
     
@@ -561,6 +571,10 @@ class GeminiClient(LLMClientBase):
                     'error': str(e)
                 }
             }
+        finally:
+            # 업로드된 파일 정리 (메모리 누수 방지)
+            if uploaded_files:
+                _cleanup_uploaded_files(uploaded_files)
     
     async def _call_api(self, prompt: str, model) -> str:
         """Gemini API 호출 (비동기 래퍼)"""
@@ -660,6 +674,10 @@ class GeminiClient(LLMClientBase):
                 None,
                 lambda: structured_model.generate_content(full_prompt)
             )
+        
+        # 업로드된 파일 정리 (메모리 누수 방지)
+        if uploaded_files:
+            _cleanup_uploaded_files(uploaded_files)
         
         # return_response_obj에 따라 반환 형식 결정
         if return_response_obj:

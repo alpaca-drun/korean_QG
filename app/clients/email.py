@@ -1,15 +1,21 @@
 """
 AWS SES를 이용한 이메일 전송 클라이언트
 """
+import time
 import boto3
 from typing import Optional
 from botocore.exceptions import ClientError
+from botocore.config import Config
 from app.core.config import settings
 from app.core.logger import logger
 
 
 class EmailClient:
     """AWS SES 이메일 클라이언트"""
+    
+    # 재시도 설정
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # 초
     
     def __init__(
         self,
@@ -32,12 +38,23 @@ class EmailClient:
         self.aws_region = aws_region or settings.aws_ses_region
         self.sender_email = sender_email or settings.aws_ses_sender_email
         
+        # boto3 설정 (타임아웃 및 재시도)
+        boto_config = Config(
+            connect_timeout=10,  # 연결 타임아웃 10초
+            read_timeout=30,     # 읽기 타임아웃 30초
+            retries={
+                'max_attempts': 3,
+                'mode': 'standard'
+            }
+        )
+        
         # SES 클라이언트 초기화
         self.ses = boto3.client(
             'ses',
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
-            region_name=self.aws_region
+            region_name=self.aws_region,
+            config=boto_config
         )
     
     def send_email(
@@ -87,21 +104,43 @@ class EmailClient:
                 destination['BccAddresses'] = bcc_addresses
                 logger.info("BCC 수신자: %s", ", ".join(bcc_addresses))
             
-            # 이메일 전송
-            response = self.ses.send_email(
-                Source=self.sender_email,
-                Destination=destination,
-                Message=message
-            )
+            # 이메일 전송 (재시도 로직 포함)
+            last_error = None
+            for attempt in range(self.MAX_RETRIES):
+                try:
+                    logger.debug("이메일 전송 시도 %d/%d: %s", attempt + 1, self.MAX_RETRIES, to_address)
+                    
+                    response = self.ses.send_email(
+                        Source=self.sender_email,
+                        Destination=destination,
+                        Message=message
+                    )
+                    
+                    logger.info("이메일 전송 성공: %s (MessageId: %s)", to_address, response['MessageId'])
+                    return True
+                    
+                except ClientError as e:
+                    error_code = e.response['Error']['Code']
+                    error_message = e.response['Error']['Message']
+                    last_error = e
+                    
+                    # 재시도 가능한 에러인지 확인
+                    if error_code in ['Throttling', 'ServiceUnavailable', 'RequestThrottled']:
+                        logger.warning("이메일 전송 일시적 실패 (시도 %d/%d): %s - %s", 
+                                     attempt + 1, self.MAX_RETRIES, error_code, error_message)
+                        if attempt < self.MAX_RETRIES - 1:
+                            time.sleep(self.RETRY_DELAY * (attempt + 1))
+                            continue
+                    else:
+                        # 재시도 불가능한 에러 (잘못된 이메일 주소 등)
+                        logger.error("이메일 전송 실패 (재시도 불가): %s - %s", error_code, error_message)
+                        return False
             
-            logger.info("이메일 전송 성공: %s (MessageId: %s)", to_address, response['MessageId'])
-            return True
-            
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
-            logger.error("이메일 전송 실패: %s - %s", error_code, error_message)
+            # 최대 재시도 후에도 실패
+            if last_error:
+                logger.error("이메일 전송 최종 실패: %s", last_error)
             return False
+            
         except Exception as e:
             logger.exception("이메일 전송 중 예외 발생: %s", e)
             return False
