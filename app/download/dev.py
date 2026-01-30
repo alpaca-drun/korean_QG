@@ -20,18 +20,16 @@ def execute_query_via_app_db(query: str, params: tuple | None = None, fetch: boo
     app/db/storage.py의 get_db_connection()을 사용해서 쿼리를 실행합니다.
     (FastAPI 서버와 동일한 settings/db 환경변수를 사용)
     """
-    connection = get_db_connection()
-    if not connection:
-        raise ValueError("DB 연결 실패: settings.db_host/db_user/db_password/db_database 설정을 확인하세요.")
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(query, params)
-            if fetch:
-                return cursor.fetchall()
-            connection.commit()
-            return cursor.rowcount
-    finally:
-        connection.close()
+        with get_db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                if fetch:
+                    return cursor.fetchall()
+                return cursor.rowcount
+    except Exception as e:
+        logger.error(f"DB 쿼리 실행 실패: {e}")
+        raise e
 
 # .env 파일에서 환경변수 로드
 load_dotenv()
