@@ -402,7 +402,7 @@ def get_project_all_questions(project_id: int):
             NULLIF(mcq.modified_difficulty, 'null') as modified_difficulty,
             NULLIF(mcq.modified_passage, 'null') as modified_passage
         FROM multiple_choice_questions mcq
-        WHERE mcq.project_id = 47 AND IFNULL(mcq.is_used, 1) = 1
+        WHERE mcq.project_id = %s AND IFNULL(mcq.is_used, 1) = 1
     """
     
     # OX 문항
@@ -425,10 +425,7 @@ def get_project_all_questions(project_id: int):
             NULL as option5,
             NULL as llm_difficulty,
             NULL as modified_difficulty,
-            NULL as modified_passage,
-            NULL as passage_content,
-            NULL as passage_title,
-            NULL as passage_is_custom
+            NULL as modified_passage
         FROM true_false_questions tfq
         WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
@@ -453,10 +450,7 @@ def get_project_all_questions(project_id: int):
             NULL as option5,
             NULL as llm_difficulty,
             NULL as modified_difficulty,
-            NULL as modified_passage,
-            NULL as passage_content,
-            NULL as passage_title,
-            NULL as passage_is_custom
+            NULL as modified_passage
         FROM short_answer_questions saq
         WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
     """
