@@ -58,6 +58,15 @@ class PromptTemplate:
         if user_prompt_template is None:
             user_prompt_template = COMMON_USER_PROMPT
 
+        # 사용자 발문 유형 처리
+        stem_directive = getattr(request, 'stem_directive', None)
+        if stem_directive:
+            # 사용자가 발문 유형을 입력한 경우, 해당 유형을 우선순위로 추가
+            stem_directive_section = f'\n\n**💡 사용자 요청 발문 유형 (최우선 적용):**\n- "{stem_directive}"\n\n위 발문 유형을 최우선으로 적용하되, 필요 시 아래 예시도 참고하라:\n'
+            stem_directive_instruction = f'\n4. **🎯 중요:** 사용자가 요청한 발문 유형 "{stem_directive}"을 최우선으로 적용하여 문항을 출제하라.'
+        else:
+            stem_directive_section = '\n'
+            stem_directive_instruction = ''
 
         # 사용자 프롬프트에 변수 채우기
         # 프롬프트에서는 항상 10문항씩 생성하도록 고정
@@ -76,7 +85,8 @@ class PromptTemplate:
             passage=request.passage,
             passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
             passage_author=request.passage_author if hasattr(request, 'passage_author') else None,
-            difficulty_content=difficulty_content
+            difficulty_content=difficulty_content,
+            stem_directive_section=stem_directive_section
         )
         user_prompt = user_prompt_template.format(
             school_level=request.school_level,
@@ -87,7 +97,9 @@ class PromptTemplate:
             passage=request.passage,
             learning_objective=request.learning_objective,
             learning_activity=getattr(request, 'learning_activity', ''),
-            learning_element=getattr(request, 'learning_element', '')
+            learning_element=getattr(request, 'learning_element', ''),
+            stem_directive=stem_directive or "",
+            stem_directive_instruction=stem_directive_instruction
         )
 
         return system_prompt, user_prompt
