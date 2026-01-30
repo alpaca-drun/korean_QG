@@ -153,10 +153,19 @@ class QuestionGenerationTask:
                     if isinstance(r, QuestionGenerationSuccessResponse) and r.success
                 )
                 
-                # 프로젝트 이름 가져오기 (첫 번째 요청에서)
+                # 프로젝트 이름 및 ID 가져오기 (첫 번째 요청에서)
                 project_name = getattr(requests[0], 'project_name', None) if requests else None
+                project_id = getattr(requests[0], 'project_id', None) if requests else None
                 if not project_name:
                     project_name = "알 수 없는 프로젝트"
+                
+                # 결과 URL 생성
+                from app.core.config import settings
+                result_url = None
+                if project_id:
+                    # CORS origins 중 첫 번째를 베이스 URL로 사용
+                    base_url = settings.cors_origins.split(",")[0]
+                    result_url = f"{base_url}/question-result/{project_id}"
                 
                 # 사용자 이메일 가져오기
                 user_email = self._get_user_email(user_id)
@@ -168,7 +177,8 @@ class QuestionGenerationTask:
                         project_name=project_name,
                         success_count=success_count,    
                         total_count=total_count,
-                        total_questions=total_questions
+                        total_questions=total_questions,
+                        result_url=result_url
                     )
                     
                     if email_sent:

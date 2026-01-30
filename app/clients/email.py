@@ -151,75 +151,79 @@ class EmailClient:
         project_name: str,
         success_count: int,
         total_count: int,
-        total_questions: int
+        total_questions: int,
+        result_url: Optional[str] = None
     ) -> bool:
         """
         문항 생성 성공 이메일 전송
-        
-        Args:
-            to_address: 수신자 이메일
-            project_name: 프로젝트 이름
-            success_count: 성공한 배치 수
-            total_count: 전체 배치 수
-            total_questions: 생성된 전체 문항 수
-            
-        Returns:
-            bool: 전송 성공 여부
         """
         subject = f"[문항 생성 완료] {project_name}"
         
-        # 텍스트 본문
+        # URL 관련 문구 추가
+        url_text = f"\n결과 확인: {result_url}" if result_url else ""
+        
+        # 텍스트 본문 (Plain Text)
         body = f"""
 안녕하세요,
 
-"{project_name}" 프로젝트의 문항 생성이 완료되었습니다.
+요청하신 "{project_name}" 프로젝트의 문항 생성이 완료되었습니다.
 
-📊 생성 결과:
-- 성공한 배치: {success_count}/{total_count}
 - 생성된 총 문항 수: {total_questions}개
-
-대시보드에서 생성된 문항을 확인하실 수 있습니다.
+{url_text}
 
 감사합니다.
         """.strip()
         
-        # HTML 본문 (선택사항)
+        # HTML 버튼 (CTA) - 인라인 스타일 적용
+        cta_section = f"""
+            <div style="margin: 40px 0; text-align: center;">
+                <a href="{result_url}" style="background-color: #2563EB; color: #ffffff; padding: 16px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 18px; display: inline-block;">
+                    생성된 문항 확인하기
+                </a>
+            </div>
+        """ if result_url else ""
+        
+        # HTML 본문
         html_body = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px; }}
-        .content {{ background-color: #f9f9f9; padding: 20px; margin-top: 20px; border-radius: 5px; }}
-        .stats {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #4CAF50; }}
-        .footer {{ margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }}
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>✅ 문항 생성 완료</h1>
-        </div>
-        <div class="content">
-            <p>안녕하세요,</p>
-            <p><strong>"{project_name}"</strong> 프로젝트의 문항 생성이 완료되었습니다.</p>
+<body style="margin: 0; padding: 0; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f7;">
+    <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border: 1px solid #e1e1e7; border-radius: 8px; overflow: hidden;">
+        <!-- 상단 강조 라인 -->
+        <div style="height: 4px; background-color: #2563EB;"></div>
+        
+        <div style="padding: 40px 30px;">
+            <h2 style="margin-top: 0; color: #111827; font-size: 22px;">문항 생성이 완료되었습니다.</h2>
             
-            <div class="stats">
-                <h3>📊 생성 결과</h3>
-                <ul>
-                    <li>성공한 배치: <strong>{success_count}/{total_count}</strong></li>
-                    <li>생성된 총 문항 수: <strong>{total_questions}개</strong></li>
-                </ul>
+            <p style="font-size: 16px; color: #4b5563;">
+                안녕하세요, <br>
+                요청하신 <strong>{project_name}</strong> 프로젝트의 문항 생성이 성공적으로 완료되었습니다.
+            </p>
+            
+            <div style="margin: 30px 0; padding: 20px; background-color: #f9fafb; border-radius: 6px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="color: #6b7280; font-size: 14px;">프로젝트명</td>
+                        <td style="color: #111827; font-size: 14px; font-weight: bold; text-align: right;">{project_name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding-top: 10px; color: #6b7280; font-size: 14px;">생성 문항 수</td>
+                        <td style="padding-top: 10px; color: #2563EB; font-size: 14px; font-weight: bold; text-align: right;">{total_questions}개</td>
+                    </tr>
+                </table>
             </div>
+
+            <p style="font-size: 15px; color: #4b5563;">아래 버튼을 클릭하여 생성된 문항을 바로 확인하실 수 있습니다.</p>
             
-            <p>대시보드에서 생성된 문항을 확인하실 수 있습니다.</p>
-            <p>감사합니다.</p>
+            {cta_section}
+            
         </div>
-        <div class="footer">
-            <p>이 메일은 자동으로 발송되었습니다.</p>
+        
+        <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e1e1e7;">
+            <p style="margin: 0; font-size: 12px; color: #9ca3af;">본 메일은 발신 전용입니다.</p>
         </div>
     </div>
 </body>
@@ -227,7 +231,7 @@ class EmailClient:
         """.strip()
         
         return self.send_email(to_address, subject, body, html_body)
-    
+        
     def send_failure_email(
         self,
         to_address: str,

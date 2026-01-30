@@ -265,11 +265,19 @@ async def send_email(
     success_count: int,
     total_count: int,
     total_questions: int,
+    result_url: Optional[str] = None,
     current_user_id: str = Depends(get_current_user)  # 인증 추가
 ):
     """인증된 사용자만 이메일 전송 가능"""
     email_client = get_email_client()
-    email_client.send_success_email(to_address, project_name, success_count, total_count, total_questions)
+    email_client.send_success_email(
+        to_address=to_address, 
+        project_name=project_name, 
+        success_count=success_count, 
+        total_count=total_count, 
+        total_questions=total_questions,
+        result_url=result_url
+    )
     logger.info("이메일 전송 요청 (user_id=%s, to=%s)", current_user_id, to_address)
     return {
         "success": True,
