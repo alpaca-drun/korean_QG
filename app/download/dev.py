@@ -97,13 +97,13 @@ def find_table_in_cell(cell, tag, doc=None):
     
     return None
 
-def find_career_table(doc, tag="{nu}"):
+def find_career_table(doc, tag="{answer}"):
     """
     표에서 특정 태그를 포함한 표를 찾는 함수 (중첩 표 포함)
     
     Args:
         doc: Document 객체
-        tag: 찾을 태그 문자열 (기본값: "{nu}")
+        tag: 찾을 태그 문자열 (기본값: "{answer}")
     
     Returns:
         찾은 Table 객체 또는 None
@@ -235,10 +235,10 @@ def fill_table_from_list(doc_path, output_path, data_list, category=""):
         logger.error("표를 찾을 수 없습니다!")
         return
     
-    # {nu} 플레이스홀더가 포함된 표 찾기
-    original_table = find_career_table(doc, "{nu}")
+    # {answer} 플레이스홀더가 포함된 표 찾기
+    original_table = find_career_table(doc, "{answer}")
     if original_table is None:
-        logger.error("{nu} 태그가 포함된 표를 찾을 수 없습니다.")
+        logger.error("{answer} 태그가 포함된 표를 찾을 수 없습니다.")
         return
     
     logger.info("원본 표 찾기 완료")
@@ -567,7 +567,6 @@ def replace_table_text(table, data, num):
     """
     # 플레이스홀더 교체 딕셔너리
     replacements = {
-        '{nu}': str(data.get('nu', '')),
         '{num}': str(num),
         '{question}': str(data.get('question', '')),
         '{select1}': str(data.get('select1', '')),
