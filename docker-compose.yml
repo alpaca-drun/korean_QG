@@ -53,7 +53,7 @@ services:
       - ./app:/app/app
       - ./scripts:/app/scripts
       - ./storage:/app/storage
-      - ./downloads:/app/downloads
+      - ./downloads_tmp:/app/downloads_tmp
     networks:
       - dev_dong_network
     healthcheck:
