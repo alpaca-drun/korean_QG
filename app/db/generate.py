@@ -23,6 +23,7 @@ def update_project_status(project_id: int, status: str, connection=None):
 
 def update_project_generation_config(
     project_id: int,
+    question_type=None,
     target_count=None,
     stem_directive=None,
     additional_prompt=None,
@@ -31,54 +32,46 @@ def update_project_generation_config(
 ):
     """
     프로젝트 생성 설정 데이터 업데이트
-    INSERT ON DUPLICATE KEY UPDATE 패턴을 사용하여 레코드가 없으면 생성, 있으면 업데이트합니다.
     """
-    # 업데이트할 필드/값 동적 생성 (VALUES() 함수용)
     set_clauses = []
-    
-    # INSERT용 컬럼 및 값
-    columns = ["project_id", "created_at", "updated_at"]
-    values = [project_id, "NOW()", "NOW()"]
-    placeholders = ["%s", "NOW()", "NOW()"]
-    params = [project_id]
+    params = []
 
     if target_count is not None:
-        columns.append("target_count")
-        placeholders.append("%s")
+        set_clauses.append("target_count = %s")
         params.append(target_count)
-        set_clauses.append("target_count = VALUES(target_count)")
+    
+    if question_type is not None:
+        set_clauses.append("question_type = %s")
+        params.append(question_type)
     
     if stem_directive is not None:
-        columns.append("stem_directive")
-        placeholders.append("%s")
+        set_clauses.append("stem_directive = %s")
         params.append(stem_directive)
-        set_clauses.append("stem_directive = VALUES(stem_directive)")
     
     if additional_prompt is not None:
-        columns.append("additional_prompt")
-        placeholders.append("%s")
+        set_clauses.append("additional_prompt = %s")
         params.append(additional_prompt)
-        set_clauses.append("additional_prompt = VALUES(additional_prompt)")
     
     if use_ai_model is not None:
-        columns.append("use_ai_model")
-        placeholders.append("%s")
+        set_clauses.append("use_ai_model = %s")
         params.append(use_ai_model)
-        set_clauses.append("use_ai_model = VALUES(use_ai_model)")
+
+    if not set_clauses:
+        return True
 
     # updated_at은 항상 업데이트
     set_clauses.append("updated_at = NOW()")
 
-    column_str = ", ".join(columns)
-    placeholder_str = ", ".join(placeholders)
     set_clause_str = ", ".join(set_clauses)
 
     query = f"""
-        INSERT INTO project_source_config ({column_str})
-        VALUES ({placeholder_str})
-        ON DUPLICATE KEY UPDATE 
-        {set_clause_str}
+        UPDATE project_source_config 
+        SET {set_clause_str}
+        WHERE project_id = %s
+        ORDER BY config_id DESC
+        LIMIT 1
     """
+    params.append(project_id)
     
     return update_with_query(query, tuple(params), connection=connection)
 
@@ -125,6 +118,7 @@ def get_generation_config(project_id: int):
         LEFT JOIN passages p ON psc.passage_id = p.passage_id
         LEFT JOIN passage_custom cp ON psc.custom_passage_id = cp.custom_passage_id
         WHERE psc.project_id = %s
+        ORDER BY psc.config_id DESC
     """
     results = select_with_query(query, (project_id,))
     return results[0] if results else None
@@ -157,7 +151,11 @@ def get_project_detail(project_id: int):
             psc.stem_directive
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-        LEFT JOIN project_source_config psc ON p.project_id = psc.project_id
+        LEFT JOIN project_source_config psc ON psc.config_id = (
+            SELECT MAX(config_id)
+            FROM project_source_config
+            WHERE project_id = p.project_id
+        )
         WHERE p.project_id = %s AND p.is_deleted = FALSE
     """
     results = select_with_query(query, (project_id,))
@@ -622,6 +620,8 @@ def get_project_source_info(project_id: int):
         LEFT JOIN passages p ON psc.passage_id = p.passage_id
         LEFT JOIN custom_passage cp ON psc.custom_passage_id = cp.custom_passage_id
         WHERE psc.project_id = %s
+        ORDER BY psc.config_id DESC
+        LIMIT 1
     """
     results = select_with_query(query, (project_id,))
     return results[0] if results else None

@@ -406,6 +406,8 @@ async def get_project_meta(
     project_query = """
         SELECT 
             p.project_id,
+            p.project_name,
+
             ps.grade,
             ps.semester,
             ps.subject,
@@ -413,13 +415,19 @@ async def get_project_meta(
             ps.large_unit_name,
             ps.small_unit_name,
 
+            IFNULL(psc.question_type, '프로젝트타입') as question_type,
+
             IFNULL(psc.target_count, 0) as target_count,
             IFNULL(psc.additional_prompt, "") as additional_prompt,
             IFNULL(psc.stem_directive, "") as stem_directive
 
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-        LEFT JOIN project_source_config psc ON p.project_id = psc.project_id
+        LEFT JOIN project_source_config psc ON psc.config_id = (
+            SELECT MAX(config_id)
+            FROM project_source_config
+            WHERE project_id = p.project_id
+        )
         WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
     """
     project_result = select_with_query(project_query, (project_id, user_id))
@@ -433,12 +441,14 @@ async def get_project_meta(
         success=True,
         message="프로젝트 메타정보 조회 성공",
         project_id=project_info.get("project_id"),
+        project_name=project_info.get("project_name"),
         grade=str(project_info.get("grade")) if project_info.get("grade") is not None else None,
         semester=str(project_info.get("semester")) if project_info.get("semester") is not None else None,
         subject=project_info.get("subject"),
         publisher_author=project_info.get("publisher_author"),
         large_unit_name=project_info.get("large_unit_name"),
         small_unit_name=project_info.get("small_unit_name"),
+        question_type=project_info.get("question_type"),
         target_count=project_info.get("target_count"),
         additional_prompt=project_info.get("additional_prompt"),
         stem_directive=project_info.get("stem_directive")
@@ -523,6 +533,8 @@ async def get_project_passages(
         LEFT JOIN passage_custom pc ON psc.custom_passage_id = pc.custom_passage_id
         WHERE psc.project_id = %s
         AND (psc.passage_id IS NOT NULL OR psc.custom_passage_id IS NOT NULL)
+        ORDER BY psc.config_id DESC
+        LIMIT 1
     """
     passage_results = select_with_query(passage_query, (project_id,))
     
