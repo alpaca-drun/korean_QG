@@ -396,7 +396,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 saq.short_question_id AS qid,
                 saq.created_at AS created_at,
                 saq.question AS question,
-                NULLIF(saq.modified_passage, '') AS passage,
+                NULL AS passage,
                 NULL AS select1,
                 NULL AS select2,
                 NULL AS select3,
@@ -416,7 +416,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 tfq.ox_question_id AS qid,
                 tfq.created_at AS created_at,
                 tfq.question AS question,
-                NULLIF(tfq.modified_passage, '') AS passage,
+                NULL AS passage,
                 'O' AS select1,
                 'X' AS select2,
                 NULL AS select3,
@@ -506,7 +506,8 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 'answer': row.get('answer', ''),
                 'answer_explain': row.get('answer_explain', ''),
                 # 템플릿에 {passage}가 있으면 프로젝트 지문을 사용
-                'passage': row.get('passage', '')
+                'passage': row.get('passage', ''),
+                'boxcontent': row.get('box_content', '')
             })
             if idx % 10 == 0 or idx == len(results):
                 logger.debug("진행 중... %s/%s", idx, len(results))
