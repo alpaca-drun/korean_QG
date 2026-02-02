@@ -667,7 +667,7 @@ async def get_project_detail(
 
 
 
-@router.get(
+@router.delete(
     "/delete",
     response_model=SuccessResponse,
     summary="프로젝트 삭제",
