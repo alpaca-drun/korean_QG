@@ -3,6 +3,10 @@ from copy import deepcopy
 import os
 from dotenv import load_dotenv
 import sys
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+from app.db.database import select_one
 
 # 실행 위치에 상관없이 import 되도록 경로 보정
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -177,10 +181,17 @@ def replace_document_text(doc, replacements):
                     replaced_count += 1
             
             if new_text != paragraph.text:
+                # 기존 run의 서식 정보 저장
+                reference_run = None
+                if paragraph.runs:
+                    reference_run = paragraph.runs[0]
+                
                 # 단락 내용 교체
                 paragraph.clear()
                 if new_text:
-                    paragraph.add_run(new_text)
+                    new_run = paragraph.add_run(new_text)
+                    if reference_run:
+                        copy_run_formatting(reference_run, new_run)
     
     # 표 안의 셀에서도 교체 (표 내부는 replace_table_text에서 처리되지만, 
     # 표 외부의 플레이스홀더를 위해 여기서도 처리)
@@ -196,9 +207,16 @@ def replace_document_text(doc, replacements):
                                 replaced_count += 1
                         
                         if new_text != paragraph.text:
+                            # 기존 run의 서식 정보 저장
+                            reference_run = None
+                            if paragraph.runs:
+                                reference_run = paragraph.runs[0]
+
                             paragraph.clear()
                             if new_text:
-                                paragraph.add_run(new_text)
+                                new_run = paragraph.add_run(new_text)
+                                if reference_run:
+                                    copy_run_formatting(reference_run, new_run)
     
     logger.info("[문서 플레이스홀더 교체] 완료 (총 %s개 교체)", replaced_count)
 
@@ -309,10 +327,17 @@ def get_project_id_from_env_or_arg(project_id: str | int | None = None) -> int:
             or os.getenv("CREATE_PROJECT_ID")
             or os.getenv("CREATE_INFO_ID")
         )
+
+    row = select_one(
+        "projects", 
+        where={"project_id": project_id}, columns="project_id" )
+
+    project_name = row.get("project_name")
+
     if not project_id:
         raise ValueError("PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
     try:
-        return int(str(project_id).strip())
+        return int(str(project_id).strip()), project_name
     except ValueError:
         raise ValueError(f"PROJECT_ID가 정수가 아닙니다: {project_id}")
 
@@ -365,8 +390,8 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
     """
     # project_id_int = get_project_id_from_env_or_arg(project_id)
     project_id_int = project_id
-    passage_text = get_project_passage_text(project_id_int, user_id=user_id)
-    logger.debug("passage_text: %s", passage_text)
+    # passage_text = get_project_passage_text(project_id_int, user_id=user_id)
+    # logger.debug("passage_text: %s", passage_text)
     
     # ✅ 현재 DB 스키마 기반: multiple_choice_questions / short_answer_questions / true_false_questions
     # seq는 생성시간 기준으로 부여
@@ -376,6 +401,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 mcq.question_id AS qid,
                 mcq.created_at AS created_at,
                 mcq.question AS question,
+                NULLIF(mcq.modified_passage, '') AS passage,
                 mcq.option1 AS select1,
                 mcq.option2 AS select2,
                 mcq.option3 AS select3,
@@ -395,6 +421,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 saq.short_question_id AS qid,
                 saq.created_at AS created_at,
                 saq.question AS question,
+                NULL AS passage,
                 NULL AS select1,
                 NULL AS select2,
                 NULL AS select3,
@@ -414,6 +441,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 tfq.ox_question_id AS qid,
                 tfq.created_at AS created_at,
                 tfq.question AS question,
+                NULL AS passage,
                 'O' AS select1,
                 'X' AS select2,
                 NULL AS select3,
@@ -503,7 +531,8 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 'answer': row.get('answer', ''),
                 'answer_explain': row.get('answer_explain', ''),
                 # 템플릿에 {passage}가 있으면 프로젝트 지문을 사용
-                'passage': passage_text
+                'passage': row.get('passage', ''),
+                'boxcontent': row.get('box_content', '')
             })
             if idx % 10 == 0 or idx == len(results):
                 logger.debug("진행 중... %s/%s", idx, len(results))
@@ -522,39 +551,23 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
 
 def copy_run_formatting(source_run, target_run):
     """
-    source_run의 서식을 target_run에 복사하는 함수
-    
-    Args:
-        source_run: 서식을 복사할 원본 Run 객체
-        target_run: 서식을 적용할 대상 Run 객체
+    source_run의 서식(XML rPr)을 target_run으로 전체 복사하여
+    한글/영문 폰트, 크기, 스타일을 완벽하게 보존함
     """
     try:
-        # 폰트 이름
-        if source_run.font.name:
-            target_run.font.name = source_run.font.name
-        # 폰트 크기
-        if source_run.font.size:
-            target_run.font.size = source_run.font.size
-        # 굵기
-        if source_run.font.bold is not None:
-            target_run.font.bold = source_run.font.bold
-        # 기울임
-        if source_run.font.italic is not None:
-            target_run.font.italic = source_run.font.italic
-        # 밑줄
-        if source_run.font.underline is not None:
-            target_run.font.underline = source_run.font.underline
-        # 색상
-        try:
-            if source_run.font.color.rgb:
-                target_run.font.color.rgb = source_run.font.color.rgb
-        except:
-            pass
-        # 하이라이트 색상
-        if source_run.font.highlight_color is not None:
-            target_run.font.highlight_color = source_run.font.highlight_color
+        # 원본 Run의 서식 XML(rPr)을 가져옴
+        source_rPr = source_run._element.rPr
+        if source_rPr is not None:
+            # 타겟 Run의 기존 rPr 제거
+            target_rPr = target_run._element.rPr
+            if target_rPr is not None:
+                target_run._element.remove(target_rPr)
+            
+            # 원본 rPr을 복사하여 타겟 Run의 첫 번째 자식으로 삽입
+            target_run._element.insert(0, deepcopy(source_rPr))
+            
     except Exception as e:
-        # 서식 복사 실패 시 기본 서식으로 진행
+        logger.debug("서식 복사 중 오류: %s", e)
         pass
 
 def replace_table_text(table, data, num):
@@ -564,22 +577,79 @@ def replace_table_text(table, data, num):
     Args:
         table: docx Table 객체
         data: 채울 데이터 (dict)
+        num: 문항 번호
     """
     # 플레이스홀더 교체 딕셔너리
+    # data.get(key) 가 None일 경우 ''로 처리하여 문자열 "None"이 생성되는 것 방지
     replacements = {
         '{num}': str(num),
-        '{question}': str(data.get('question', '')),
-        '{select1}': str(data.get('select1', '')),
-        '{select2}': str(data.get('select2', '')),
-        '{select3}': str(data.get('select3', '')),
-        '{select4}': str(data.get('select4', '')),
-        '{select5}': str(data.get('select5', '')),
-        '{answer}': str(data.get('answer', '')),
-        '{answer_explain}': str(data.get('answer_explain', '')),
-        '{passage}': str(data.get('passage', ''))
+        '{question}': str(data.get('question') or ''),
+        '{select1}': str(data.get('select1') or ''),
+        '{select2}': str(data.get('select2') or ''),
+        '{select3}': str(data.get('select3') or ''),
+        '{select4}': str(data.get('select4') or ''),
+        '{select5}': str(data.get('select5') or ''),
+        '{answer}': str(data.get('answer') or ''),
+        '{answer_explain}': str(data.get('answer_explain') or ''),
+        '{passage}': str(data.get('passage') or ''),
+        '{boxcontent}': str(data.get('boxcontent') or '')
     }
     
-    # 표 내의 모든 셀을 순회하며 플레이스홀더 교체
+    # 1. 값이 비어있는 경우 해당 행 삭제 처리
+    rows_to_delete = []
+    # 삭제 대상이 될 수 있는 플레이스홀더들
+    check_placeholders = [
+        '{question}', '{select1}', '{select2}', '{select3}', '{select4}', '{select5}', 
+        '{answer}', '{answer_explain}', '{passage}', '{boxcontent}'
+    ]
+    
+    for row in table.rows:
+        row_text = "".join(cell.text for cell in row.cells)
+        should_delete_row = False
+        
+        for placeholder in check_placeholders:
+            if placeholder in row_text:
+                value = replacements.get(placeholder, '')
+                # 값이 없거나, 빈 문자열이거나, '-' 이거나, 문자열 "None"인 경우 행 삭제
+                if not value or value.strip() == '' or value.strip() == '-' or value.strip().lower() == 'none':
+                    should_delete_row = True
+                    break
+        
+        if should_delete_row:
+            rows_to_delete.append(row)
+            
+    # 행 제거 (뒤에서부터 삭제하여 인덱스 꼬임 방지)
+    # 삭제 시 인접한 행들의 테두리도 정리
+    for row in reversed(rows_to_delete):
+        # 현재 행의 인덱스 찾기
+        try:
+            current_idx = -1
+            for i, r in enumerate(table.rows):
+                if r._tr == row._tr:
+                    current_idx = i
+                    break
+            
+            if current_idx != -1:
+                # 1. 이전 행의 하단 테두리 제거
+                if current_idx > 0:
+                    prev_row = table.rows[current_idx - 1]
+                    for cell in prev_row.cells:
+                        _set_cell_border(cell, bottom={"val": "nil"})
+                
+                # 2. 다음 행의 상단 테두리 제거
+                if current_idx < len(table.rows) - 1:
+                    next_row = table.rows[current_idx + 1]
+                    for cell in next_row.cells:
+                        _set_cell_border(cell, top={"val": "nil"})
+        except:
+            pass # 인덱스 조회 실패 시 건너뜀
+
+        tr = row._tr
+        parent = tr.getparent()
+        if parent is not None:
+            parent.remove(tr)
+
+    # 2. 남은 표 내의 모든 셀을 순회하며 플레이스홀더 교체
     for row_idx, row in enumerate(table.rows):
         for col_idx, cell in enumerate(row.cells):
             # 각 단락을 순회
@@ -624,6 +694,30 @@ def replace_table_text(table, data, num):
                     if reference_run:
                         copy_run_formatting(reference_run, new_run)
 
+def _set_cell_border(cell, **kwargs):
+    """
+    셀의 테두리를 설정하는 내부 유틸리티 함수
+    Usage: _set_cell_border(cell, top={"val": "nil"}, bottom={"val": "nil"})
+    """
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = tcPr.find(qn('w:tcBorders'))
+    if tcBorders is None:
+        tcBorders = OxmlElement('w:tcBorders')
+        tcPr.append(tcBorders)
+
+    for edge in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        edge_data = kwargs.get(edge)
+        if edge_data:
+            tag = 'w:{}'.format(edge)
+            element = tcBorders.find(qn(tag))
+            if element is None:
+                element = OxmlElement(tag)
+                tcBorders.append(element)
+
+            for key, val in edge_data.items():
+                element.set(qn('w:{}'.format(key)), str(val))
+
 # 사용 예시
 if __name__ == "__main__":
     import sys
@@ -639,7 +733,7 @@ if __name__ == "__main__":
         logger.error("PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
         sys.exit(1)
 
-    project_id_int = get_project_id_from_env_or_arg(project_id)
+    project_id_int, project_name = get_project_id_from_env_or_arg(project_id)
     category = os.getenv("CATEGORY", "")
     
     # DB에서 데이터 가져오기
@@ -653,7 +747,7 @@ if __name__ == "__main__":
         
         # 입력 파일과 출력 파일 경로 (환경변수에서 가져오거나 기본값 사용)
         input_file = os.getenv('INPUT_DOCX', 'sample3.docx')
-        output_file = os.getenv('OUTPUT_DOCX', f'output-project-{project_id_int}.docx')
+        output_file = os.getenv('OUTPUT_DOCX', f'{project_name}.docx')
         
         logger.info("[파일 경로] 입력: %s, 출력: %s", input_file, output_file)
         

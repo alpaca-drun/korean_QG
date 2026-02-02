@@ -337,9 +337,15 @@ async def download_selected_results(
     project_query = """
         SELECT 
             p.project_id,
+            p.project_name,
             ps.subject as category
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+        LEFT JOIN project_source_config psc ON psc.config_id = (
+            SELECT MAX(config_id)
+            FROM project_source_config
+            WHERE project_id = p.project_id
+        )
         WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
     """
     project_result = select_with_query(project_query, (project_id, user_id))
@@ -363,7 +369,7 @@ async def download_selected_results(
 
     # 임시 파일 생성 후 docx 저장
     out_dir = Path(tempfile.gettempdir())
-    out_path = out_dir / f"output-project-{project_id}.docx"
+    out_path = out_dir / f"{project_info.get('project_name')}.docx"
 
     try:
         fill_table_from_list(str(template_path), str(out_path), data_list, category=category)
@@ -374,7 +380,7 @@ async def download_selected_results(
     return FileResponse(
         path=str(out_path),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"output-project-{project_id}.docx",
+        filename=f"{project_info.get('project_name')}.docx",
     )
 
 
