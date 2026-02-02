@@ -226,6 +226,9 @@ SNS 게시물을 제작하려고 한다. 다음은 홍보 담당
 [학생의 초고]
   안녕하세요. 저는 2학년 3반 학생입니다...
 ```
+
+{additional_prompt_section}
+
 ---
 
 # 난이도 적용 지침
@@ -334,7 +337,7 @@ COMMON_USER_PROMPT = """
 ## 출제 지침
 1. 학습활동 내용을 중심으로 다양한 문제 유형을 출제하라.
 2. 문항 간 평가 요소가 중복되지 않도록 하라.
-3. 시스템 프롬프트의 영역별 출제 전략과 난이도 가이드를 준수하라.{stem_directive_instruction}
+3. 시스템 프롬프트의 영역별 출제 전략과 난이도 가이드를 준수하라.{stem_directive_instruction}{additional_prompt_instruction}
 
 # 지문(passage) 작성 규칙
 ## 규칙 1: 참조 표현이 있는 경우 (필수 생성)

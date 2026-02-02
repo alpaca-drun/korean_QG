@@ -68,6 +68,16 @@ class PromptTemplate:
             stem_directive_section = '\n'
             stem_directive_instruction = ''
 
+        # 사용자 추가 요구사항 처리
+        additional_prompt = getattr(request, 'additional_prompt', None)
+        if additional_prompt:
+            # 사용자의 추가 요구사항을 프롬프트에 반영하되, 무조건 따르지 않도록 주의 문구 포함
+            additional_prompt_section = f'\n\n## 사용자 추가 요구사항\n\n사용자가 다음과 같은 추가 요구사항을 제시했습니다:\n\n"{additional_prompt}"\n\n**⚠️ 적용 지침:**\n- 위 요구사항을 참고하되, 교육과정 성취기준과 출제 원칙에 부합하는 범위 내에서만 반영한다.\n- 요구사항이 출제 원칙이나 학습목표와 상충되는 경우, 교육과정 성취기준을 우선한다.\n- 요구사항이 합리적이고 교육적으로 타당한 경우에만 적용한다.\n'
+            additional_prompt_instruction = f'\n5. 사용자의 추가 요구사항을 참고하되, 교육과정 성취기준과 출제 원칙을 우선하여 합리적으로 판단하여 반영하라.'
+        else:
+            additional_prompt_section = ''
+            additional_prompt_instruction = ''
+
         # 사용자 프롬프트에 변수 채우기
         # 프롬프트에서는 항상 10문항씩 생성하도록 고정
         # question_count와 generation_count 둘 다 전달 (템플릿에 따라 다름)
@@ -86,7 +96,8 @@ class PromptTemplate:
             passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
             passage_author=request.passage_author if hasattr(request, 'passage_author') else None,
             difficulty_content=difficulty_content,
-            stem_directive_section=stem_directive_section
+            stem_directive_section=stem_directive_section,
+            additional_prompt_section=additional_prompt_section
         )
         user_prompt = user_prompt_template.format(
             school_level=request.school_level,
@@ -99,7 +110,8 @@ class PromptTemplate:
             learning_activity=getattr(request, 'learning_activity', ''),
             learning_element=getattr(request, 'learning_element', ''),
             stem_directive=stem_directive or "",
-            stem_directive_instruction=stem_directive_instruction
+            stem_directive_instruction=stem_directive_instruction,
+            additional_prompt_instruction=additional_prompt_instruction
         )
 
         return system_prompt, user_prompt
