@@ -6,6 +6,8 @@ import sys
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+from app.db.database import select_one
+
 # 실행 위치에 상관없이 import 되도록 경로 보정
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
@@ -325,10 +327,17 @@ def get_project_id_from_env_or_arg(project_id: str | int | None = None) -> int:
             or os.getenv("CREATE_PROJECT_ID")
             or os.getenv("CREATE_INFO_ID")
         )
+
+    row = select_one(
+        "projects", 
+        where={"project_id": project_id}, columns="project_id" )
+
+    project_name = row.get("project_name")
+
     if not project_id:
         raise ValueError("PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
     try:
-        return int(str(project_id).strip())
+        return int(str(project_id).strip()), project_name
     except ValueError:
         raise ValueError(f"PROJECT_ID가 정수가 아닙니다: {project_id}")
 
@@ -724,7 +733,7 @@ if __name__ == "__main__":
         logger.error("PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
         sys.exit(1)
 
-    project_id_int = get_project_id_from_env_or_arg(project_id)
+    project_id_int, project_name = get_project_id_from_env_or_arg(project_id)
     category = os.getenv("CATEGORY", "")
     
     # DB에서 데이터 가져오기
@@ -738,7 +747,7 @@ if __name__ == "__main__":
         
         # 입력 파일과 출력 파일 경로 (환경변수에서 가져오거나 기본값 사용)
         input_file = os.getenv('INPUT_DOCX', 'sample3.docx')
-        output_file = os.getenv('OUTPUT_DOCX', f'output-project-{project_id_int}.docx')
+        output_file = os.getenv('OUTPUT_DOCX', f'{project_name}.docx')
         
         logger.info("[파일 경로] 입력: %s, 출력: %s", input_file, output_file)
         
