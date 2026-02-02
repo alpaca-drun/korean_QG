@@ -340,6 +340,11 @@ async def download_selected_results(
             ps.subject as category
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+        LEFT JOIN project_source_config psc ON psc.config_id = (
+            SELECT MAX(config_id)
+            FROM project_source_config
+            WHERE project_id = p.project_id
+        )
         WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
     """
     project_result = select_with_query(project_query, (project_id, user_id))
