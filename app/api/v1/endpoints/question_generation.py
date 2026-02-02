@@ -202,6 +202,7 @@ async def generate_questions_batch_async(
             ## 📢생성 설정 데이터 업데이트
             update_project_generation_config(
                 requests.project_id,
+                requests.question_type if hasattr(requests, "question_type") and requests.question_type is not None else None,
                 requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
                 requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
                 requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,

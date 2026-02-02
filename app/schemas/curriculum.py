@@ -13,6 +13,7 @@ class ProjectMetaResponse(BaseModel):
     publisher_author: Optional[str] = None
     large_unit_name: Optional[str] = None
     small_unit_name: Optional[str] = None
+    question_type: Optional[str] = None
     target_count: Optional[int] = None
     additional_prompt: Optional[str] = None
     stem_directive: Optional[str] = None
@@ -22,12 +23,14 @@ class ProjectMetaResponse(BaseModel):
                 "success": True,
                 "message": "프로젝트 메타정보 조회 성공",
                 "project_id": 1,
+                "project_name": "프로젝트 이름",
                 "grade": "중학교",
                 "semester": "1학기",
                 "subject": "국어",
                 "publisher_author": "출판사/저자",
                 "large_unit_name": "1. 문학의 즐거움",
                 "small_unit_name": "(1) 시 감상하기",
+                "question_type": "5지선다",
                 "target_count": 10,
                 "additional_prompt": "추가 프롬프트",
                 "stem_directive": "주제 지시문"

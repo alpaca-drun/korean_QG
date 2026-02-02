@@ -283,7 +283,7 @@ async def get_project_list(
                 SELECT project_id, question_type 
                 FROM project_source_config 
                 WHERE config_id IN (
-                    SELECT MIN(config_id) FROM project_source_config GROUP BY project_id
+                    SELECT MAX(config_id) FROM project_source_config GROUP BY project_id
                 )
             ) psc ON p.project_id = psc.project_id
             WHERE p.user_id = %s AND p.is_deleted = FALSE

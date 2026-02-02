@@ -108,47 +108,52 @@ def get_custom_passages_paginated(scope_id: int, user_id: int, connection=None) 
 def update_passage_use(project_id: int, is_modified: int, passage_id: int = None, connection=None):
     """
     프로젝트 소스 구성에서 지문 사용 상태(is_modified, passage_id) 업데이트
-    INSERT ON DUPLICATE KEY UPDATE 패턴으로 Race Condition 방지
-    - project_id가 UNIQUE KEY이므로 동시 요청 시에도 안전하게 처리
+    - 동일한 project_id가 있으면 최신 레코드 업데이트
+    - 없으면 신규 생성
     """
     def _execute(conn):
         with conn.cursor() as cursor:
-            # is_modified 값에 따라 passage_id 또는 custom_passage_id 컬럼 결정
-            if passage_id is not None and is_modified == 1:
-                # custom_passage_id 설정
-                query = """
-                    INSERT INTO project_source_config (project_id, is_modified, custom_passage_id, created_at, updated_at)
-                    VALUES (%s, %s, %s, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE 
-                        is_modified = VALUES(is_modified),
-                        custom_passage_id = VALUES(custom_passage_id),
-                        updated_at = NOW()
-                """
-                params = (project_id, is_modified, passage_id)
-            elif passage_id is not None and is_modified == 0:
-                # passage_id 설정
-                query = """
-                    INSERT INTO project_source_config (project_id, is_modified, passage_id, created_at, updated_at)
-                    VALUES (%s, %s, %s, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE 
-                        is_modified = VALUES(is_modified),
-                        passage_id = VALUES(passage_id),
-                        updated_at = NOW()
-                """
-                params = (project_id, is_modified, passage_id)
-            else:
-                # is_modified만 설정
-                query = """
-                    INSERT INTO project_source_config (project_id, is_modified, created_at, updated_at)
-                    VALUES (%s, %s, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE 
-                        is_modified = VALUES(is_modified),
-                        updated_at = NOW()
-                """
-                params = (project_id, is_modified)
+            # 1. 먼저 업데이트 시도 (최신 레코드 1개)
+            set_clauses = ["is_modified = %s", "updated_at = NOW()"]
+            params = [is_modified]
+
+            if passage_id is not None:
+                if is_modified == 1:
+                    set_clauses.append("custom_passage_id = %s")
+                    set_clauses.append("passage_id = NULL")
+                else:
+                    set_clauses.append("passage_id = %s")
+                    set_clauses.append("custom_passage_id = NULL")
+                params.append(passage_id)
             
-            cursor.execute(query, params)
-            return cursor.lastrowid if cursor.lastrowid else cursor.rowcount
+            update_query = f"""
+                UPDATE project_source_config 
+                SET {', '.join(set_clauses)}
+                WHERE project_id = %s
+                ORDER BY config_id DESC
+                LIMIT 1
+            """
+            cursor.execute(update_query, tuple(params + [project_id]))
+
+            # 2. 업데이트된 행이 없으면 인서트
+            if cursor.rowcount == 0:
+                columns = ["project_id", "is_modified", "created_at", "updated_at"]
+                placeholders = ["%s", "%s", "NOW()", "NOW()"]
+                insert_params = [project_id, is_modified]
+
+                if passage_id is not None:
+                    if is_modified == 1:
+                        columns.append("custom_passage_id")
+                    else:
+                        columns.append("passage_id")
+                    placeholders.append("%s")
+                    insert_params.append(passage_id)
+
+                insert_query = f"INSERT INTO project_source_config ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
+                cursor.execute(insert_query, tuple(insert_params))
+                return cursor.lastrowid
+            
+            return True
 
     try:
         if connection:
@@ -164,21 +169,32 @@ def update_passage_use(project_id: int, is_modified: int, passage_id: int = None
 
 def update_project_config_status(project_id: int, is_modified: int, custom_passage_id: int, connection=None):
     """
-    프로젝트 설정 상태 업데이트 (KST 기준)
-    INSERT ON DUPLICATE KEY UPDATE 패턴으로 Race Condition 방지
+    프로젝트 설정 상태 업데이트
+    - 동일한 project_id가 있으면 최신 레코드 업데이트
+    - 없으면 신규 생성
     """
     def _execute(conn):
         with conn.cursor() as cursor:
-            query = """
-                INSERT INTO project_source_config (project_id, is_modified, custom_passage_id, created_at, updated_at)
-                VALUES (%s, %s, %s, NOW(), NOW())
-                ON DUPLICATE KEY UPDATE 
-                    is_modified = VALUES(is_modified),
-                    custom_passage_id = VALUES(custom_passage_id),
-                    updated_at = NOW()
+            # 1. 먼저 업데이트 시도 (최신 레코드 1개)
+            update_query = """
+                UPDATE project_source_config 
+                SET is_modified = %s, custom_passage_id = %s, updated_at = NOW()
+                WHERE project_id = %s
+                ORDER BY config_id DESC
+                LIMIT 1
             """
-            cursor.execute(query, (project_id, is_modified, custom_passage_id))
-            return cursor.lastrowid if cursor.lastrowid else cursor.rowcount
+            cursor.execute(update_query, (is_modified, custom_passage_id, project_id))
+
+            # 2. 업데이트된 행이 없으면 인서트
+            if cursor.rowcount == 0:
+                insert_query = """
+                    INSERT INTO project_source_config (project_id, is_modified, custom_passage_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, NOW(), NOW())
+                """
+                cursor.execute(insert_query, (project_id, is_modified, custom_passage_id))
+                return cursor.lastrowid
+            
+            return True
 
     try:
         if connection:
