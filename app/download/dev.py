@@ -330,9 +330,11 @@ def get_project_id_from_env_or_arg(project_id: str | int | None = None) -> int:
 
     row = select_one(
         "projects", 
-        where={"project_id": project_id}, columns="project_id" )
+        where={"project_id": project_id}, 
+        columns="project_id, project_name" 
+    )
 
-    project_name = row.get("project_name")
+    project_name = row.get("project_name") if row else f"project-{project_id}"
 
     if not project_id:
         raise ValueError("PROJECT_ID 환경변수가 설정되지 않았습니다. (또는 CREATE_PROJECT_ID/CREATE_INFO_ID 숫자값)")
