@@ -56,4 +56,5 @@ docker/mariadb/backups/*.sql
 storage/
 
 
-docker-compose.yml
+
+downloads_tmp/
