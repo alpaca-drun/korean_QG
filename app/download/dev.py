@@ -365,8 +365,8 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
     """
     # project_id_int = get_project_id_from_env_or_arg(project_id)
     project_id_int = project_id
-    passage_text = get_project_passage_text(project_id_int, user_id=user_id)
-    logger.debug("passage_text: %s", passage_text)
+    # passage_text = get_project_passage_text(project_id_int, user_id=user_id)
+    # logger.debug("passage_text: %s", passage_text)
     
     # ✅ 현재 DB 스키마 기반: multiple_choice_questions / short_answer_questions / true_false_questions
     # seq는 생성시간 기준으로 부여
@@ -376,6 +376,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 mcq.question_id AS qid,
                 mcq.created_at AS created_at,
                 mcq.question AS question,
+                NULLIF(mcq.modified_passage, '') AS passage,
                 mcq.option1 AS select1,
                 mcq.option2 AS select2,
                 mcq.option3 AS select3,
@@ -395,6 +396,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 saq.short_question_id AS qid,
                 saq.created_at AS created_at,
                 saq.question AS question,
+                NULLIF(saq.modified_passage, '') AS passage,
                 NULL AS select1,
                 NULL AS select2,
                 NULL AS select3,
@@ -414,6 +416,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 tfq.ox_question_id AS qid,
                 tfq.created_at AS created_at,
                 tfq.question AS question,
+                NULLIF(tfq.modified_passage, '') AS passage,
                 'O' AS select1,
                 'X' AS select2,
                 NULL AS select3,
@@ -503,7 +506,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 'answer': row.get('answer', ''),
                 'answer_explain': row.get('answer_explain', ''),
                 # 템플릿에 {passage}가 있으면 프로젝트 지문을 사용
-                'passage': passage_text
+                'passage': row.get('passage', '')
             })
             if idx % 10 == 0 or idx == len(results):
                 logger.debug("진행 중... %s/%s", idx, len(results))
