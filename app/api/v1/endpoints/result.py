@@ -368,7 +368,8 @@ async def download_selected_results(
         raise HTTPException(status_code=404, detail=f"project_id={project_id}에 해당하는 문항이 없습니다.")
 
     # 임시 파일 생성 후 docx 저장
-    out_dir = Path(tempfile.gettempdir())
+    out_dir = Path("/app/downloads")
+    out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{project_info.get('project_name')}.docx"
 
     try:
