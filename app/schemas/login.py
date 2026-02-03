@@ -97,3 +97,31 @@ class LogoutResponse(BaseModel):
                 "message": "로그아웃에 성공했습니다."
             }
         }
+
+
+class PasswordChangeRequest(BaseModel):
+    """비밀번호 변경 요청 스키마"""
+    current_password: str = Field(..., description="현재 비밀번호")
+    new_password: str = Field(..., description="새 비밀번호", min_length=6)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "current_password": "old_password123",
+                "new_password": "new_password123"
+            }
+        }
+
+
+class PasswordChangeResponse(BaseModel):
+    """비밀번호 변경 응답 스키마"""
+    success: bool = Field(default=True, description="성공 여부")
+    message: str = Field(..., description="응답 메시지")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "비밀번호가 성공적으로 변경되었습니다."
+            }
+        }
