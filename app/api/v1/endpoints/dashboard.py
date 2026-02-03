@@ -277,13 +277,14 @@ async def get_project_list(
     - 최종 수정일
     """
     user_id, role = user_data
+
     
     try:
         if role == "admin":
             # 기본 쿼리 구성 (projects와 project_scopes, project_source_config JOIN)
             base_query = """
                 SELECT 
-                    u.name as user_name,
+                    u.name AS user_name,
                     p.project_id,
                     p.project_name,
                     p.status,
