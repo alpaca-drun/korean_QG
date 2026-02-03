@@ -1,8 +1,12 @@
 from typing import Optional
 from pathlib import Path
 from app.schemas.question_generation import QuestionGenerationRequest
-from app.prompts.common_templates import COMMON_SYSTEM_PROMPT, COMMON_USER_PROMPT
-from app.prompts.short_answer import COMMON_SYSTEM_PROMPT_SHORT_ANSWER, COMMON_USER_PROMPT_SHORT_ANSWER
+from app.prompts.common_templates import (
+    COMMON_SYSTEM_PROMPT, 
+    COMMON_USER_PROMPT,
+    COMMON_SYSTEM_PROMPT_SHORT_ANSWER, 
+    COMMON_USER_PROMPT_SHORT_ANSWER
+)
 from app.core.logger import logger
 
 # difficulty.md 파일 읽어오기
