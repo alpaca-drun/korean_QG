@@ -102,8 +102,8 @@ async def login(request: LoginRequest):
         
         # 4. JWT 토큰 생성 (user_id 또는 email을 토큰 subject로 사용)
         user_identifier = str(user["user_id"])  # 또는 user["email"]
-        access_token = create_access_token(data={"sub": user_identifier})
-        refresh_token = create_refresh_token(data={"sub": user_identifier})
+        access_token = create_access_token(data={"sub": user_identifier, "role": user["role"]})
+        refresh_token = create_refresh_token(data={"sub": user_identifier, "role": user["role"]})
         
         # 토큰 데이터 구성
         token_data = TokenData(
