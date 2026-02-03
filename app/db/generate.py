@@ -257,6 +257,7 @@ def save_batch_log(
 ### 문항 데이터 저장
 def save_question_to_db(
     question_data: Dict[str, Any],
+    question_type: Optional[str] = None,
     project_id: Optional[int] = None,
     config_id: Optional[int] = None,
     connection=None
@@ -274,16 +275,22 @@ def save_question_to_db(
     """
     def _execute(conn):
         with conn.cursor() as cursor:
-            # 문항 테이블에 저장
-            sql = """
-                INSERT INTO multiple_choice_questions (
-                    config_id, project_id, batch_id, question, box_content, modified_passage,
-                    option1, option2, option3, option4, option5, 
-                    answer, answer_explain, is_used, llm_difficulty, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-            """
+            
+
+
+            # # 문항 테이블에 저장
+            # sql = """
+            #     INSERT INTO multiple_choice_questions (
+            #         config_id, project_id, batch_id, question, box_content, modified_passage,
+            #         option1, option2, option3, option4, option5, 
+            #         answer, answer_explain, is_used, llm_difficulty, created_at
+            #     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            # """
             batch_id = question_data.get("batch_index", None)
             question_text = question_data.get("question_text", {})
+
+            print("🟣🟣🟣🟣🟣🟣")
+            print(question_text)
             
             # 'null' 문자열이나 빈 값을 None(NULL)으로 처리하는 헬퍼 함수
             def clean_val(v):
@@ -314,10 +321,32 @@ def save_question_to_db(
             llm_difficulty = llm_difficulty_map.get(llm_difficulty_raw, None) if llm_difficulty_raw else None
             llm_difficulty = clean_val(llm_difficulty)
 
-            cursor.execute(
+            if question_type == "5지선다":
+                sql = """
+                    INSERT INTO multiple_choice_questions (
+                        config_id, project_id, batch_id, question, box_content, modified_passage,
+                        option1, option2, option3, option4, option5, 
+                        answer, answer_explain, is_used, llm_difficulty, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """
+                cursor.execute(
                 sql,
                 (config_id, project_id, batch_id, question, box_content, modified_passage, option1, option2, option3, option4, option5, answer, answer_explain, is_used, llm_difficulty)
             )
+            elif question_type == "단답형":
+                sql = """
+                    INSERT INTO short_answer_questions (
+                        config_id, project_id, batch_id, question, box_content, modified_passage,
+                        answer, answer_explain, is_used, llm_difficulty, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """
+                cursor.execute(
+                sql,
+                (config_id, project_id, batch_id, question, box_content, modified_passage, answer, answer_explain, is_used, llm_difficulty)
+                )
+
+
+
             return cursor.lastrowid
 
     try:
@@ -334,8 +363,12 @@ def save_question_to_db(
         return None
 
 
+
+
+
 def save_questions_batch_to_db(
     questions_data: list[Dict[str, Any]],
+    question_type: Optional[str] = None,
     project_id: Optional[int] = None,
     config_id: Optional[int] = None,
     connection=None
@@ -343,13 +376,13 @@ def save_questions_batch_to_db(
     """
     여러 문항을 배치로 데이터베이스에 저장 (단일 트랜잭션 사용)
     """
-    question_ids = []
     
     def _execute(conn):
         ids = []
         for question_data in questions_data:
             question_id = save_question_to_db(
                 question_data, 
+                question_type=question_type,
                 project_id=project_id, 
                 config_id=config_id, 
                 connection=conn

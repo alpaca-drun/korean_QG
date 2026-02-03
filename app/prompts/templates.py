@@ -2,6 +2,7 @@ from typing import Optional
 from pathlib import Path
 from app.schemas.question_generation import QuestionGenerationRequest
 from app.prompts.common_templates import COMMON_SYSTEM_PROMPT, COMMON_USER_PROMPT
+from app.prompts.short_answer import COMMON_SYSTEM_PROMPT_SHORT_ANSWER, COMMON_USER_PROMPT_SHORT_ANSWER
 from app.core.logger import logger
 
 # difficulty.md 파일 읽어오기
@@ -53,10 +54,19 @@ class PromptTemplate:
         logger.debug("achievement_text: %s", achievement_text)
 
         if system_prompt is None:
-            system_prompt_template = COMMON_SYSTEM_PROMPT
-
+            if request.question_type == "5지선다":
+                system_prompt_template = COMMON_SYSTEM_PROMPT
+            elif request.question_type == "단답형":
+                system_prompt_template = COMMON_SYSTEM_PROMPT_SHORT_ANSWER
+            else:
+                system_prompt_template = COMMON_SYSTEM_PROMPT
         if user_prompt_template is None:
-            user_prompt_template = COMMON_USER_PROMPT
+            if request.question_type == "5지선다":
+                user_prompt_template = COMMON_USER_PROMPT
+            elif request.question_type == "단답형":
+                user_prompt_template = COMMON_USER_PROMPT_SHORT_ANSWER
+            else:
+                user_prompt_template = COMMON_USER_PROMPT
 
         # 사용자 발문 유형 처리
         stem_directive = getattr(request, 'stem_directive', None)
