@@ -64,6 +64,7 @@ async def get_result(
         "project_source_config",
         where={"project_id": project_id},
         columns="is_modified",
+        order_by="config_id DESC"
     )
     if not config:
         raise HTTPException(status_code=404, detail="프로젝트 설정을 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
@@ -145,6 +146,12 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
         where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
         columns="project_id",
     )
+    question_type = select_one(
+        "project_source_config",
+        where={"project_id": project_id},
+        columns="question_type",
+        order_by="config_id DESC"
+    )
     if not project:
         return QuestionMetaUpdateResponse(
             success=False,
@@ -153,13 +160,21 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
             failed_count=len(request.items),
             results=[]
         )
-    
+    if question_type == "5지선다":
+        table_configs = [
+            ("multiple_choice_questions", "question_id", "multiple_choice"),
+        ]
+    elif question_type == "단답형":
     # 테이블/PK 매핑 (question_id로 테이블 자동 판단)
-    table_configs = [
-        ("multiple_choice_questions", "question_id", "multiple_choice"),
-        ("true_false_questions", "ox_question_id", "true_false"),
-        ("short_answer_questions", "short_question_id", "short_answer"),
-    ]
+        table_configs = [
+            ("short_answer_questions", "short_question_id", "short_answer"),
+        ]
+    else:
+        table_configs = [
+            ("multiple_choice_questions", "question_id", "multiple_choice"),
+            ("short_answer_questions", "short_question_id", "short_answer"),
+            ("ox_questions", "ox_question_id", "true_false"),
+        ]
     
     # 각 문항 업데이트 (단일 트랜잭션으로 처리)
     results = []

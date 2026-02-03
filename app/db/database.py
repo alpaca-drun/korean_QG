@@ -66,6 +66,7 @@ def select_one(
     table: str,
     where: Optional[Dict[str, Any]] = None,
     columns: str = "*",
+    order_by: Optional[str] = None,
     connection=None
 ) -> Optional[Dict[str, Any]]:
     """
@@ -80,6 +81,9 @@ def select_one(
                 conditions = " AND ".join([f"{key} = %s" for key in where.keys()])
                 sql += f" WHERE {conditions}"
                 params = list(where.values())
+            
+            if order_by:
+                sql += f" ORDER BY {order_by}"
             
             sql += " LIMIT 1"
             cursor.execute(sql, params)
