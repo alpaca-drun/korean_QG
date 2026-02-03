@@ -454,9 +454,9 @@ def get_project_all_questions(project_id: int):
             NULL as option3,
             NULL as option4,
             NULL as option5,
-            NULL as llm_difficulty,
-            NULL as modified_difficulty,
-            NULL as modified_passage
+            NULLIF(tfq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(tfq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(tfq.modified_passage, 'null') as modified_passage
         FROM true_false_questions tfq
         WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
@@ -479,9 +479,9 @@ def get_project_all_questions(project_id: int):
             NULL as option3,
             NULL as option4,
             NULL as option5,
-            NULL as llm_difficulty,
-            NULL as modified_difficulty,
-            NULL as modified_passage
+            NULLIF(saq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(saq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(saq.modified_passage, 'null') as modified_passage
         FROM short_answer_questions saq
         WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
     """
