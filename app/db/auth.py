@@ -31,3 +31,12 @@ def get_users():
     )
     return users
 
+
+def update_user_password(user_id: int, password_hash: str) -> bool:
+    """사용자 비밀번호 변경"""
+    result = update(
+        "users",
+        {"password_hash": password_hash},
+        {"user_id": user_id}
+    )
+    return result > 0
