@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException, status, Query, Depends
+from fastapi import APIRouter, HTTPException, status, Query, Depends, BackgroundTasks
 from typing import Optional
 from fastapi.responses import FileResponse
 from pathlib import Path
 import tempfile
+import os
+from urllib.parse import quote
 
 from app.download.dev import fill_table_from_list, get_question_data_from_db
 from app.db.database import select_one, update, select_with_query, get_db_connection
@@ -319,7 +321,8 @@ async def update_selected_results(request: QuestionMetaUpdateRequest, current_us
 )
 async def download_selected_results(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
-    current_user_id: str = Depends(get_current_user)
+    current_user_id: str = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
     project_id로 문항을 조회하여 docx 파일로 반환합니다.
@@ -368,7 +371,8 @@ async def download_selected_results(
         raise HTTPException(status_code=404, detail=f"project_id={project_id}에 해당하는 문항이 없습니다.")
 
     # 임시 파일 생성 후 docx 저장
-    out_dir = Path(tempfile.gettempdir())
+    out_dir = Path("/app/downloads_tmp")
+    out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{project_info.get('project_name')}.docx"
 
     try:
@@ -377,10 +381,20 @@ async def download_selected_results(
         logger.exception("DOCX 생성 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"DOCX 생성 실패: {str(e)}")
 
+    # 파일명 인코딩 (한글 깨짐 방지)
+    project_name = project_info.get('project_name') or "download"
+    encoded_filename = quote(f"{project_name}.docx")
+
+    # 파일 전송 후 삭제 예약
+    background_tasks.add_task(os.remove, str(out_path))
+
     return FileResponse(
         path=str(out_path),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"{project_info.get('project_name')}.docx",
+        filename=f"{project_name}.docx",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+        }
     )
 
 
