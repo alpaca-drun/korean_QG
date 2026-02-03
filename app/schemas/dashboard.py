@@ -28,6 +28,8 @@ class DashboardSummaryResponse(BaseModel):
 
 class ProjectListItem(BaseModel):
     """프로젝트 목록 아이템"""
+    #프로젝트 소유자명
+    user_name: Optional[str] = Field(None, description="프로젝트 소유자명")
     project_id: int = Field(..., description="프로젝트 ID")
     project_name: str = Field(..., description="프로젝트명")
     

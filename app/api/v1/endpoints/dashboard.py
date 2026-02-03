@@ -283,6 +283,7 @@ async def get_project_list(
             # 기본 쿼리 구성 (projects와 project_scopes, project_source_config JOIN)
             base_query = """
                 SELECT 
+                    u.name as user_name,
                     p.project_id,
                     p.project_name,
                     p.status,
@@ -302,6 +303,7 @@ async def get_project_list(
                         SELECT MAX(config_id) FROM project_source_config GROUP BY project_id
                     )
                 ) psc ON p.project_id = psc.project_id
+                LEFT JOIN users u ON p.user_id = u.user_id
                 WHERE p.is_deleted = FALSE
             """
             params=[]
@@ -377,6 +379,7 @@ async def get_project_list(
             question_cnt = get_question_count_for_project(p["project_id"])
             
             items.append(ProjectListItem(
+                user_name=p.get("user_name"),
                 project_id=p["project_id"],
                 project_name=p["project_name"],
                 grade=p.get("grade"),
