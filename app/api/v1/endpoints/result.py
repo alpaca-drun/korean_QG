@@ -48,13 +48,13 @@ async def get_result(
         project = select_one(
             "projects",
             where={"project_id": project_id, "is_deleted": False},
-            columns="project_id",
+            columns="project_id, user_id",
         )
     else:
         project = select_one(
             "projects",
             where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
-            columns="project_id",
+            columns="project_id, user_id",
         )
 
     if not project:
@@ -77,8 +77,8 @@ async def get_result(
         items = [q for q in items if q.get("question_type") == question_type]
     
 
-
-    return ListResponse(items=items or [], total=len(items or []))
+    is_owner = project.get("user_id") == user_id
+    return ListResponse(items=items or [], total=len(items or []),is_owner=is_owner)
 
 
 
