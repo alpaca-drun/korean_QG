@@ -64,13 +64,13 @@ def truncate_passage_content(passage: dict, max_length: int = CONTENT_PREVIEW_LE
 )
 async def get_passages_by_project(
     project_id: int = Query(..., description="프로젝트 ID (필수)", example=1),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     프로젝트 ID로 지문을 조회합니다.
     """
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
         
         # 1. project_id로 scope_id 찾기
         scope_id = select_one(
@@ -131,7 +131,7 @@ async def get_passages(
     scope_id: Optional[int] = Query(None, description="스코프 ID", example=1),
     limit: int = Query(100, description="조회 개수 제한", ge=1, le=1000),
     offset: int = Query(0, description="조회 시작 위치", ge=0),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     지문 리스트를 반환합니다.
@@ -151,8 +151,8 @@ async def get_passages(
     """
     from app.db.database import select_with_query
     
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
         with get_db_connection() as connection:
           with connection.cursor() as cursor:
             # scope_id 결정
@@ -406,7 +406,7 @@ async def get_passages(
 async def get_passage(
     passage_id: int,
     source_type: Optional[int] = Query(None, description="지문 소스 타입 (0: 원본 지문, 1: 커스텀 지문, None: 자동 검색)", example=1),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     지문 ID로 특정 지문의 상세 정보를 반환합니다.
@@ -414,8 +414,8 @@ async def get_passage(
     - **passage_id**: 지문 ID
     - **source_type**: 지문 소스 타입 (0: passages 테이블, 1: passage_custom 테이블, None: 둘 다 검색)
     """
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
         with get_db_connection() as connection:
           with connection.cursor() as cursor:
             passage = None
@@ -554,7 +554,7 @@ async def get_passage(
 async def search_passages_by_keyword(
     keyword: str,
     source_type: Optional[int] = Query(None, description="지문 소스 타입 (0: 원본 지문, 1: 커스텀 지문, None: 전체)", example=None),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     키워드를 포함하는 지문을 반환합니다.
@@ -567,8 +567,8 @@ async def search_passages_by_keyword(
     **참고**: 리스트 조회에서는 content가 50자로 제한됩니다.
     전체 내용이 필요한 경우 `/passages/{passage_id}` 또는 `/passages/full_content`를 사용하세요.
     """
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
         
         # DB 로직을 app/db/passages.py의 함수로 대체
         passages = search_passages_keyword(keyword, user_id, source_type)
@@ -620,7 +620,7 @@ async def create_passage(
     project_id: int = Body(..., description="프로젝트 ID", example=1),
     auth: Optional[str] = Body(None, description="작성자", example="작성자"),
     custom_title: Optional[str] = Body(None, description="커스텀 제목", example="내가 만든 지문"),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     새로운 지문을 생성하여 passage_custom 테이블에 저장합니다.
@@ -638,8 +638,8 @@ async def create_passage(
     """
     from app.db.database import select_with_query
     
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
         
         with get_db_connection() as connection:
             # 1) project_id로 프로젝트 소유권 확인 및 scope_id 조회
@@ -689,7 +689,7 @@ async def create_passage(
 
         # 생성 직후: 지문 상세 조회와 동일한 응답 형태로 반환
         # source_type=2로 명시하여 커스텀 지문임을 지정
-        return await get_passage(custom_passage_id, source_type=2, current_user_id=current_user_id)
+        return await get_passage(custom_passage_id, source_type=2, user_data=user_data)
             
     except HTTPException:
         raise
@@ -711,16 +711,15 @@ async def create_passage(
     tags=["지문"]
 )
 async def update_passage(
-
     request: PassageUpdateRequest,
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     기존 지문을 기반으로 새로운 지문을 생성하여 passage_custom 테이블에 저장합니다.
     """
+    user_id, role = user_data
     try:
         passage_id = request.passage_id
-        user_id = int(current_user_id)
         
         # 1. 프로젝트 범위(scope_id) 및 소유권 확인
         scope_id = get_project_scope_id(request.project_id, user_id)
@@ -813,7 +812,7 @@ async def update_passage(
 async def delete_passage(
     passage_id: int,
     is_custom: Optional[int] = Query(None, description="지문 소스 타입 (0: 원본 지문, 1: 커스텀 지문, None: 자동 판단)", example=2),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     지문 ID를 기반으로 지문을 소프트 삭제 처리합니다.
@@ -825,8 +824,8 @@ async def delete_passage(
     """
     from app.db.database import update, select_with_query
     
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
         
         # source_type이 0이면 원본 지문 삭제 시도 → 거부
         if is_custom == 0:
@@ -885,11 +884,12 @@ async def delete_passage(
 )
 async def original_used_response(
     request: PassageUseRequest,
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     원본 지문 그대로 사용 여부를 조회합니다.
     """
+    user_id, role = user_data
     try:
         if request.is_custom == 0:
             config_id = update_passage_use(request.project_id, 0, request.passage_id)
@@ -927,11 +927,12 @@ async def original_used_response(
 )
 async def modified_used_response(
     request: PassageUseRequest,
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     원본 지문 그대로 사용 여부를 조회합니다.
     """
+    user_id, role = user_data
     logger.debug("request: %s", request)
     try:
         if request.is_custom == 0:
@@ -959,13 +960,13 @@ async def modified_used_response(
 )
 async def generate_without_passage(
     request: PassageGenerateWithoutPassageRequest,
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     지문없이 생성
     """
+    user_id, role = user_data
     try:
-        user_id = int(current_user_id)
 
         project_id = request.project_id
         project = select_one(

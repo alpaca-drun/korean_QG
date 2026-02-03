@@ -11,7 +11,7 @@ security = HTTPBearer(
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> str:
+) -> tuple[int, str]:
     """
     현재 인증된 사용자를 가져옵니다.
     
@@ -19,14 +19,20 @@ async def get_current_user(
         credentials: HTTP Authorization 헤더의 Bearer 토큰
         
     Returns:
-        사용자 ID
+        tuple[user_id, role]
         
     Raises:
         HTTPException: 토큰이 유효하지 않은 경우
     """
     token = credentials.credentials
-    user_id = verify_token(token, token_type="access")
-    
+    result = verify_token(token, token_type="access")
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않거나 만료된 토큰입니다.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user_id, role = result
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -34,12 +40,12 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    return user_id
+    return int(user_id), str(role) if role else ""
 
 
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
-) -> Optional[str]:
+) -> Optional[int]:
     """
     현재 인증된 사용자를 가져옵니다 (선택사항).
     토큰이 없거나 유효하지 않아도 예외를 발생시키지 않습니다.
@@ -54,9 +60,11 @@ async def get_current_user_optional(
         return None
     
     token = credentials.credentials
-    user_id = verify_token(token, token_type="access")
-    
-    return user_id
+    result = verify_token(token, token_type="access")
+    if result is None:
+        return None
+    user_id, _ = result
+    return int(user_id) if user_id is not None else None
 
 
 
