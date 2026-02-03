@@ -240,7 +240,7 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
                             "question_id": item.question_id,
                             "question_type": found_question_type,
                             "success": False,
-                            "message": "업데이트 대상 문항을 찾을 수 없습니다."
+                            "message": "기존과 값이 동일하여 업데이트되지 않았습니다."
                         })
                         failed_count += 1
                     else:
