@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from app.schemas.login import (
     LoginRequest,
     LoginSuccessResponse,
@@ -6,7 +6,9 @@ from app.schemas.login import (
     TokenData,
     RefreshTokenRequest,
     LogoutRequest,
-    LogoutResponse
+    LogoutResponse,
+    PasswordChangeRequest,
+    PasswordChangeResponse
 )
 from app.utils.auth import (
     verify_password,
@@ -15,9 +17,10 @@ from app.utils.auth import (
     create_refresh_token,
     verify_token
 )
+from app.utils.dependencies import get_current_user
 from app.core.config import settings
 from app.core.logger import logger
-from app.db.auth import get_user_by_login_id, get_user_by_id
+from app.db.auth import get_user_by_login_id, get_user_by_id, update_user_password
 
 router = APIRouter()
 
@@ -221,4 +224,63 @@ async def logout(request: LogoutRequest):
     return LogoutResponse(
         success=True,
         message="로그아웃에 성공했습니다."
+    )
+
+
+@router.post(
+    "/change-password",
+    response_model=PasswordChangeResponse,
+    summary="비밀번호 변경",
+    description="로그인한 사용자의 비밀번호를 변경합니다.",
+    tags=["인증"]
+)
+async def change_password(
+    request: PasswordChangeRequest,
+    user_data: tuple[int, str] = Depends(get_current_user)
+):
+    """
+    현재 로그인한 사용자의 비밀번호를 변경합니다.
+    
+    - **current_password**: 현재 비밀번호
+    - **new_password**: 새 비밀번호
+    """
+    user_id, _ = user_data
+    
+    # 1. 사용자 정보 조회
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사용자를 찾을 수 없습니다."
+        )
+    
+    # 2. 현재 비밀번호 확인
+    if not verify_password(request.current_password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="현재 비밀번호가 올바르지 않습니다."
+        )
+    
+    # 3. 새 비밀번호 유효성 검사 (필요한 경우 추가)
+    if request.current_password == request.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="새 비밀번호는 현재 비밀번호와 다르게 설정해야 합니다."
+        )
+        
+    # 4. 비밀번호 업데이트
+    new_password_hash = get_password_hash(request.new_password)
+    success = update_user_password(user_id, new_password_hash)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="비밀번호 변경에 실패했습니다."
+        )
+        
+    logger.info(f"비밀번호 변경 성공: user_id={user_id}")
+    
+    return PasswordChangeResponse(
+        success=True,
+        message="비밀번호가 성공적으로 변경되었습니다."
     )
