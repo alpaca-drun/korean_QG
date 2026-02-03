@@ -20,7 +20,7 @@ async def get_scope(
     publisher_author: str = Query(..., description="출판사/저자", example="천재교육/노미숙"),
     large_unit_id: int = Query(..., description="대단원 ID", example=1),
     small_unit_id: int = Query(..., description="소단원 ID", example=1),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     사용자가 선택한 조건에 맞는 scope_id를 조회합니다.
@@ -34,6 +34,7 @@ async def get_scope(
     Returns:
         scope_id: 해당 조건의 범위 ID
     """
+    user_id, role = user_data
     try:
         # 단일 트랜잭션으로 scope 조회 + 프로젝트 생성 (데이터 일관성 보장)
         with get_db_connection() as connection:
@@ -54,7 +55,7 @@ async def get_scope(
             
             # 2. 프로젝트 생성
             project_id = insert_one("projects", {
-                "user_id": current_user_id,
+                "user_id": user_id,
                 "project_name": project_name,
                 "scope_id": result["scope_id"],
                 "status": "WRITING"

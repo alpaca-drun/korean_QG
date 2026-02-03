@@ -7,6 +7,7 @@ class ProjectMetaResponse(BaseModel):
     success: bool = True
     message: str = "프로젝트 메타정보 조회 성공"
     project_id: int
+    project_name: Optional[str] = None
     grade: Optional[str] = None
     semester: Optional[str] = None
     subject: Optional[str] = None

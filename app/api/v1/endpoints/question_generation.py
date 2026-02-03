@@ -28,7 +28,7 @@ router = APIRouter()
 async def generate_questions_batch(
     requests: List[QuestionGeneration],
     provider: Optional[str] = Query(None, description="LLM 제공자", example="gemini"),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     배치 문항 생성 API (동기 처리)
@@ -89,8 +89,9 @@ async def generate_questions_batch(
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
         logger.debug("question_generation_requests: %s", question_generation_requests)
 
+    user_id, role = user_data
     service = QuestionGenerationService()
-    results = await service.generate_questions_batch(question_generation_requests, current_user_id, provider)
+    results = await service.generate_questions_batch(question_generation_requests, str(user_id), provider)
     
     return results
 
@@ -106,7 +107,7 @@ async def generate_questions_batch_async(
     background_tasks: BackgroundTasks,
     requests: QuestionGeneration,
     provider: Optional[str] = Query(None, description="LLM 제공자", example="gemini"),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     배치 문항 생성 API (비동기 처리)
@@ -185,11 +186,12 @@ async def generate_questions_batch_async(
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
 
         # 백그라운드 작업 등록
+        user_id, role = user_data
         task = QuestionGenerationTask()
         background_tasks.add_task(
             task.generate_batch_async,
             requests=question_generation_requests,
-            user_id=current_user_id,
+            user_id=str(user_id),
             provider=provider
         )
         
@@ -267,9 +269,10 @@ async def send_email(
     total_count: int,
     total_questions: int,
     result_url: Optional[str] = None,
-    current_user_id: str = Depends(get_current_user)  # 인증 추가
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """인증된 사용자만 이메일 전송 가능"""
+    user_id, role = user_data
     email_client = get_email_client()
     email_client.send_success_email(
         to_address=to_address, 
@@ -279,7 +282,7 @@ async def send_email(
         total_questions=total_questions,
         result_url=result_url
     )
-    logger.info("이메일 전송 요청 (user_id=%s, to=%s)", current_user_id, to_address)
+    logger.info("이메일 전송 요청 (user_id=%s, to=%s)", user_id, to_address)
     return {
         "success": True,
         "message": "이메일 전송 성공"

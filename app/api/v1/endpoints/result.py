@@ -36,18 +36,27 @@ router = APIRouter()
 async def get_result(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
     question_type: Optional[str] = Query(None, description="문항 타입 필터 (multiple_choice/true_false/short_answer). 제공하지 않으면 모든 타입을 반환합니다."),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     project_id를 기반으로 문항 리스트를 반환합니다.
     question_type을 제공하지 않으면 모든 타입의 문항을 반환합니다.
     """
-    user_id = int(current_user_id)
-    project = select_one(
-        "projects",
-        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
-        columns="project_id",
-    )
+    user_id, role = user_data
+
+    if role == "admin":
+        project = select_one(
+            "projects",
+            where={"project_id": project_id, "is_deleted": False},
+            columns="project_id",
+        )
+    else:
+        project = select_one(
+            "projects",
+            where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+            columns="project_id",
+        )
+
     if not project:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
 
@@ -55,6 +64,7 @@ async def get_result(
         "project_source_config",
         where={"project_id": project_id},
         columns="is_modified",
+        order_by="config_id DESC"
     )
     if not config:
         raise HTTPException(status_code=404, detail="프로젝트 설정을 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
@@ -81,7 +91,7 @@ async def get_result(
     description="여러 문항의 메타데이터를 한 번에 업데이트합니다. feedback_score/is_checked/modified_difficulty를 업데이트합니다. question_type은 자동으로 판단됩니다.",
     tags=["결과 관리"]
 )
-async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current_user_id: str = Depends(get_current_user)):
+async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_data: tuple[int, str] = Depends(get_current_user)):
     """
     여러 문항의 메타데이터를 한 번에 업데이트합니다.
     question_type은 자동으로 판단됩니다.
@@ -108,7 +118,7 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
     }
     ```
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     if not request.items:
         return QuestionMetaUpdateResponse(
@@ -136,6 +146,12 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
         where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
         columns="project_id",
     )
+    question_type = select_one(
+        "project_source_config",
+        where={"project_id": project_id},
+        columns="question_type",
+        order_by="config_id DESC"
+    )
     if not project:
         return QuestionMetaUpdateResponse(
             success=False,
@@ -144,13 +160,21 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
             failed_count=len(request.items),
             results=[]
         )
-    
+    if question_type == "5지선다":
+        table_configs = [
+            ("multiple_choice_questions", "question_id", "multiple_choice"),
+        ]
+    elif question_type == "단답형":
     # 테이블/PK 매핑 (question_id로 테이블 자동 판단)
-    table_configs = [
-        ("multiple_choice_questions", "question_id", "multiple_choice"),
-        ("true_false_questions", "ox_question_id", "true_false"),
-        ("short_answer_questions", "short_question_id", "short_answer"),
-    ]
+        table_configs = [
+            ("short_answer_questions", "short_question_id", "short_answer"),
+        ]
+    else:
+        table_configs = [
+            ("multiple_choice_questions", "question_id", "multiple_choice"),
+            ("short_answer_questions", "short_question_id", "short_answer"),
+            ("ox_questions", "ox_question_id", "true_false"),
+        ]
     
     # 각 문항 업데이트 (단일 트랜잭션으로 처리)
     results = []
@@ -263,8 +287,8 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, current
 #     description="feedback_score/is_used/modified_difficulty/modified_passage를 업데이트합니다.",
 #     tags=["결과 관리"]
 # )
-async def update_selected_results(request: QuestionMetaUpdateRequest, current_user_id: str = Depends(get_current_user)):
-    user_id = int(current_user_id)
+async def update_selected_results(request: QuestionMetaUpdateRequest, user_data: tuple[int, str] = Depends(get_current_user)):
+    user_id, role = user_data
 
     # 프로젝트 소유권 확인
     project = select_one(
@@ -321,7 +345,7 @@ async def update_selected_results(request: QuestionMetaUpdateRequest, current_us
 )
 async def download_selected_results(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
-    current_user_id: str = Depends(get_current_user),
+    user_data: tuple[int, str] = Depends(get_current_user),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
@@ -334,24 +358,43 @@ async def download_selected_results(
         raise HTTPException(status_code=500, detail=f"템플릿 파일을 찾을 수 없습니다: {template_path}")
 
     # ✅ 프로젝트 소유권 확인 및 카테고리 조회
-    user_id = int(current_user_id)
-    
-    # 프로젝트 정보와 카테고리(subject) 조회
-    project_query = """
-        SELECT 
-            p.project_id,
-            p.project_name,
-            ps.subject as category
-        FROM projects p
-        LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-        LEFT JOIN project_source_config psc ON psc.config_id = (
-            SELECT MAX(config_id)
-            FROM project_source_config
-            WHERE project_id = p.project_id
-        )
-        WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
-    """
-    project_result = select_with_query(project_query, (project_id, user_id))
+    user_id, role = user_data
+
+
+    if role == "admin":
+        # 프로젝트 정보와 카테고리(subject) 조회
+        project_query = """
+            SELECT 
+                p.project_id,
+                p.project_name,
+                ps.subject as category
+            FROM projects p
+            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+            LEFT JOIN project_source_config psc ON psc.config_id = (
+                SELECT MAX(config_id)
+                FROM project_source_config
+                WHERE project_id = p.project_id
+            )
+            WHERE p.project_id = %s AND p.is_deleted = FALSE
+        """
+    else:
+        # 프로젝트 정보와 카테고리(subject) 조회
+        project_query = """
+            SELECT 
+                p.project_id,
+                p.project_name,
+                ps.subject as category
+            FROM projects p
+            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+            LEFT JOIN project_source_config psc ON psc.config_id = (
+                SELECT MAX(config_id)
+                FROM project_source_config
+                WHERE project_id = p.project_id
+            )
+            WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
+        """
+    download_params = (project_id,) if role == "admin" else (project_id, user_id)
+    project_result = select_with_query(project_query, download_params)
     
     if not project_result:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
@@ -407,7 +450,7 @@ async def download_selected_results(
 )
 async def get_project_meta(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     project_id를 기반으로 프로젝트의 메타정보를 반환합니다.
@@ -420,37 +463,67 @@ async def get_project_meta(
     - 대단원 (large_unit_name)
     - 소단원 (small_unit_name)
     """
-    user_id = int(current_user_id)
-    
-    # 프로젝트 소유권 확인 및 메타정보 조회
-    project_query = """
-        SELECT 
-            p.project_id,
-            p.project_name,
+    user_id, role = user_data
+    if role == "admin":
+        # 프로젝트 소유권 확인 및 메타정보 조회
+        project_query = """
+            SELECT 
+                p.project_id,
+                p.project_name,
 
-            ps.grade,
-            ps.semester,
-            ps.subject,
-            ps.publisher_author,
-            ps.large_unit_name,
-            ps.small_unit_name,
+                ps.grade,
+                ps.semester,
+                ps.subject,
+                ps.publisher_author,
+                ps.large_unit_name,
+                ps.small_unit_name,
 
-            IFNULL(psc.question_type, '프로젝트타입') as question_type,
+                IFNULL(psc.question_type, '프로젝트타입') as question_type,
 
-            IFNULL(psc.target_count, 0) as target_count,
-            IFNULL(psc.additional_prompt, "") as additional_prompt,
-            IFNULL(psc.stem_directive, "") as stem_directive
+                IFNULL(psc.target_count, 0) as target_count,
+                IFNULL(psc.additional_prompt, "") as additional_prompt,
+                IFNULL(psc.stem_directive, "") as stem_directive
 
-        FROM projects p
-        LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-        LEFT JOIN project_source_config psc ON psc.config_id = (
-            SELECT MAX(config_id)
-            FROM project_source_config
-            WHERE project_id = p.project_id
-        )
-        WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
-    """
-    project_result = select_with_query(project_query, (project_id, user_id))
+            FROM projects p
+            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+            LEFT JOIN project_source_config psc ON psc.config_id = (
+                SELECT MAX(config_id)
+                FROM project_source_config
+                WHERE project_id = p.project_id
+            )
+            WHERE p.project_id = %s AND p.is_deleted = FALSE
+        """
+    else:
+        # 프로젝트 소유권 확인 및 메타정보 조회
+        project_query = """
+            SELECT 
+                p.project_id,
+                p.project_name,
+
+                ps.grade,
+                ps.semester,
+                ps.subject,
+                ps.publisher_author,
+                ps.large_unit_name,
+                ps.small_unit_name,
+
+                IFNULL(psc.question_type, '프로젝트타입') as question_type,
+
+                IFNULL(psc.target_count, 0) as target_count,
+                IFNULL(psc.additional_prompt, "") as additional_prompt,
+                IFNULL(psc.stem_directive, "") as stem_directive
+
+            FROM projects p
+            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+            LEFT JOIN project_source_config psc ON psc.config_id = (
+                SELECT MAX(config_id)
+                FROM project_source_config
+                WHERE project_id = p.project_id
+            )
+            WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
+        """
+    params = (project_id,) if role == "admin" else (project_id, user_id)
+    project_result = select_with_query(project_query, params)
     
     if not project_result:
         return ProjectMetaResponse(success=False, message="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)", project_id=0, grade=None, semester=None, subject=None, publisher_author=None, large_unit_name=None, small_unit_name=None, target_count=None, additional_prompt=None, stem_directive=None)
@@ -484,7 +557,7 @@ async def get_project_meta(
 )
 async def get_project_passages(
     project_id: int = Query(..., description="프로젝트 ID", example=1),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     project_id를 기반으로 해당 프로젝트에서 사용된 지문 목록을 반환합니다.
@@ -497,14 +570,21 @@ async def get_project_passages(
     - auth: 저자
     - is_custom: 0(원본) 또는 1(커스텀)
     """
-    user_id = int(current_user_id)
-    
+    user_id, role = user_data
     # 프로젝트 소유권 확인
-    project = select_one(
-        "projects",
-        where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
-        columns="project_id",
-    )
+    if role == "admin":
+        project = select_one(
+            "projects",
+            where={"project_id": project_id, "is_deleted": False},
+            columns="project_id",
+        )
+    else:
+        project = select_one(
+            "projects",
+            where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
+            columns="project_id",
+        )
+        
     if not project:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
     

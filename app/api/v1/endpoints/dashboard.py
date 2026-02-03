@@ -41,6 +41,14 @@ def get_project_ids_for_user(user_id: int) -> list:
     )
     return [p["project_id"] for p in projects]
 
+def get_all_project_ids() -> list:
+    """모든 프로젝트 ID 목록을 조회합니다."""
+    projects = select_all(
+        table="projects",
+        where={"is_deleted": False},
+        columns="project_id"
+    )
+    return [p["project_id"] for p in projects]
 
 def get_question_counts_by_project_ids(project_ids: list) -> QuestionTypeCount:
     """프로젝트 ID 목록에 해당하는 문항 수를 조회합니다."""
@@ -188,7 +196,7 @@ def get_question_type_label(question_type: str) -> str:
     description="대시보드 상단 카드에 표시할 요약 통계를 조회합니다.",
     tags=["대시보드"]
 )
-async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)):
+async def get_dashboard_summary(user_data: tuple[int, str] = Depends(get_current_user)):
     """
     대시보드 상단 요약 통계를 반환합니다.
     
@@ -198,18 +206,25 @@ async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)
     - 생성완료 프로젝트 수
     - 총 생성 문항 수
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
-        # 프로젝트 ID 목록 조회
-        project_ids = get_project_ids_for_user(user_id)
-        
-        # 통계 계산
-        total_projects = len(project_ids)
-        writing_count = count("projects", {"user_id": user_id, "is_deleted": False, "status": "WRITING"})
-        completed_count = count("projects", {"user_id": user_id, "is_deleted": False, "status": "COMPLETED"})
-        total_questions = get_total_question_count_by_project_ids(project_ids)
-        
+
+        if role == "admin":
+            project_ids = get_all_project_ids()
+            total_projects = len(project_ids)
+            writing_count = count("projects", {"is_deleted": False, "status": "WRITING"})
+            completed_count = count("projects", {"is_deleted": False, "status": "COMPLETED"})
+            total_questions = get_total_question_count_by_project_ids(project_ids)
+            
+        else:
+            project_ids = get_project_ids_for_user(user_id)
+            # 통계 계산
+            total_projects = len(project_ids)
+            writing_count = count("projects", {"is_deleted": False, "status": "WRITING"})
+            completed_count = count("projects", {"is_deleted": False, "status": "COMPLETED"})
+            total_questions = get_total_question_count_by_project_ids(project_ids)
+            
         summary = DashboardSummary(
             total_projects=total_projects,
             writing_count=writing_count,
@@ -243,7 +258,7 @@ async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)
     tags=["대시보드"]
 )
 async def get_project_list(
-    current_user_id: str = Depends(get_current_user),
+    user_data: tuple[int, str] = Depends(get_current_user),
     page: int = Query(1, ge=1, description="페이지 번호"),
     limit: int = Query(10, ge=1, le=100, description="페이지당 항목 수"),
     status: Optional[str] = Query(None, description="상태 필터 (WRITING, GENERATING, COMPLETED)"),
@@ -261,34 +276,64 @@ async def get_project_list(
     - 상태
     - 최종 수정일
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
+
     
     try:
-        # 기본 쿼리 구성 (projects와 project_scopes, project_source_config JOIN)
-        base_query = """
-            SELECT 
-                p.project_id,
-                p.project_name,
-                p.status,
-                p.created_at,
-                p.updated_at,
-                ps.grade,
-                ps.semester,
-                ps.publisher_author,
-                ps.subject,
-                psc.question_type
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            LEFT JOIN (
-                SELECT project_id, question_type 
-                FROM project_source_config 
-                WHERE config_id IN (
-                    SELECT MAX(config_id) FROM project_source_config GROUP BY project_id
-                )
-            ) psc ON p.project_id = psc.project_id
-            WHERE p.user_id = %s AND p.is_deleted = FALSE
-        """
-        params = [user_id]
+        if role == "admin":
+            # 기본 쿼리 구성 (projects와 project_scopes, project_source_config JOIN)
+            base_query = """
+                SELECT 
+                    u.name AS user_name,
+                    p.project_id,
+                    p.project_name,
+                    p.status,
+                    p.created_at,
+                    p.updated_at,
+                    ps.grade,
+                    ps.semester,
+                    ps.publisher_author,
+                    ps.subject,
+                    psc.question_type
+                FROM projects p
+                LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+                LEFT JOIN (
+                    SELECT project_id, question_type 
+                    FROM project_source_config 
+                    WHERE config_id IN (
+                        SELECT MAX(config_id) FROM project_source_config GROUP BY project_id
+                    )
+                ) psc ON p.project_id = psc.project_id
+                LEFT JOIN users u ON p.user_id = u.user_id
+                WHERE p.is_deleted = FALSE
+            """
+            params=[]
+        else:
+            # 기본 쿼리 구성 (projects와 project_scopes, project_source_config JOIN)
+            base_query = """
+                SELECT 
+                    p.project_id,
+                    p.project_name,
+                    p.status,
+                    p.created_at,
+                    p.updated_at,
+                    ps.grade,
+                    ps.semester,
+                    ps.publisher_author,
+                    ps.subject,
+                    psc.question_type
+                FROM projects p
+                LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+                LEFT JOIN (
+                    SELECT project_id, question_type 
+                    FROM project_source_config 
+                    WHERE config_id IN (
+                        SELECT MAX(config_id) FROM project_source_config GROUP BY project_id
+                    )
+                ) psc ON p.project_id = psc.project_id
+                WHERE p.user_id = %s AND p.is_deleted = FALSE
+            """
+            params = [user_id]
         
         # 상태 필터
         if status and status in ["WRITING", "GENERATING", "COMPLETED"]:
@@ -335,6 +380,7 @@ async def get_project_list(
             question_cnt = get_question_count_for_project(p["project_id"])
             
             items.append(ProjectListItem(
+                user_name=p.get("user_name"),
                 project_id=p["project_id"],
                 project_name=p["project_name"],
                 grade=p.get("grade"),
@@ -382,7 +428,7 @@ async def get_project_list(
     description="대시보드 필터에 사용할 옵션 목록을 조회합니다.",
     tags=["대시보드"]
 )
-async def get_filter_options(current_user_id: str = Depends(get_current_user)):
+async def get_filter_options(user_data: tuple[int, str] = Depends(get_current_user)):
     """
     대시보드 필터에 사용할 옵션 목록을 반환합니다.
     
@@ -390,19 +436,30 @@ async def get_filter_options(current_user_id: str = Depends(get_current_user)):
     - 과목 목록
     - 상태 목록
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
-        # 사용자의 프로젝트에서 사용된 과목 목록 조회
-        subject_query = """
-            SELECT DISTINCT ps.subject
-            FROM projects p
-            JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            WHERE p.user_id = %s AND p.is_deleted = FALSE AND ps.subject IS NOT NULL
-            ORDER BY ps.subject
-        """
-        subjects_result = select_with_query(subject_query, (user_id,))
-        
+        if role == "admin":
+            # 사용자의 프로젝트에서 사용된 과목 목록 조회
+            subject_query = """
+                SELECT DISTINCT ps.subject
+                FROM projects p
+                JOIN project_scopes ps ON p.scope_id = ps.scope_id
+                WHERE p.is_deleted = FALSE AND ps.subject IS NOT NULL
+                ORDER BY ps.subject
+            """
+            subjects_result = select_with_query(subject_query, tuple([]))           
+        else:
+            # 사용자의 프로젝트에서 사용된 과목 목록 조회
+            subject_query = """
+                SELECT DISTINCT ps.subject
+                FROM projects p
+                JOIN project_scopes ps ON p.scope_id = ps.scope_id
+                WHERE p.user_id = %s AND p.is_deleted = FALSE AND ps.subject IS NOT NULL
+                ORDER BY ps.subject
+            """
+            subjects_result = select_with_query(subject_query, (user_id,))
+            
         subjects = [FilterOption(value="all", label="전체 과목")]
         for s in subjects_result:
             if s["subject"]:
@@ -441,14 +498,14 @@ async def get_filter_options(current_user_id: str = Depends(get_current_user)):
     tags=["대시보드"]
 )
 async def search_projects(
-    current_user_id: str = Depends(get_current_user),
+    user_data: tuple[int, str] = Depends(get_current_user),
     keyword: str = Query(..., description="검색 키워드"),
     page: int = Query(1, ge=1, description="페이지 번호"),
     limit: int = Query(10, ge=1, le=100, description="페이지당 항목 수")
 ):
     """프로젝트명으로 검색합니다."""
     return await get_project_list(
-        current_user_id=current_user_id,
+        user_data=user_data,
         page=page,
         limit=limit,
         keyword=keyword
@@ -460,142 +517,6 @@ async def search_projects(
 # ===========================
 
 @router.get(
-    "/stats",
-    response_model=DashboardResponse,
-    summary="대시보드 통계 조회",
-    description="현재 로그인한 사용자의 대시보드 통계를 조회합니다.",
-    tags=["대시보드"]
-)
-async def get_dashboard_stats(current_user_id: str = Depends(get_current_user)):
-    """
-    JWT 토큰에서 user_id를 추출하여 해당 사용자의 대시보드 통계를 반환합니다.
-    """
-    user_id = int(current_user_id)
-    
-    try:
-        project_ids = get_project_ids_for_user(user_id)
-        total_projects = len(project_ids)
-        
-        writing_count = count("projects", {"user_id": user_id, "is_deleted": False, "status": "WRITING"})
-        generating_count = count("projects", {"user_id": user_id, "is_deleted": False, "status": "GENERATING"})
-        completed_count = count("projects", {"user_id": user_id, "is_deleted": False, "status": "COMPLETED"})
-        
-        project_status = ProjectStatusCount(
-            writing=writing_count,
-            generating=generating_count,
-            completed=completed_count
-        )
-        
-        question_count = get_question_counts_by_project_ids(project_ids)
-        token_usage = get_token_usage_by_project_ids(project_ids)
-        avg_feedback_score = get_avg_feedback_score_by_project_ids(project_ids)
-        
-        recent_projects_data = select_all(
-            table="projects",
-            where={"user_id": user_id, "is_deleted": False},
-            order_by="updated_at DESC",
-            limit=5
-        )
-        
-        recent_projects = []
-        for p in recent_projects_data:
-            question_cnt = get_question_count_for_project(p["project_id"])
-            recent_projects.append(RecentProject(
-                project_id=p["project_id"],
-                project_name=p["project_name"],
-                status=p["status"] or "WRITING",
-                question_count=question_cnt,
-                created_at=p.get("created_at"),
-                updated_at=p.get("updated_at")
-            ))
-        
-        stats = DashboardStats(
-            total_projects=total_projects,
-            project_status=project_status,
-            question_count=question_count,
-            token_usage=token_usage,
-            recent_projects=recent_projects,
-            avg_feedback_score=avg_feedback_score
-        )
-        
-        return DashboardResponse(
-            success=True,
-            message="대시보드 데이터 조회 성공",
-            data=stats
-        )
-        
-    except Exception as e:
-        logger.exception("대시보드 통계 조회 중 오류")
-        raise HTTPException(
-            status_code=500,
-            detail=f"대시보드 통계 조회 중 오류가 발생했습니다: {str(e)}"
-        )
-
-
-@router.get(
-    "/stats/{project_id}",
-    response_model=ProjectDetailResponse,
-    summary="프로젝트 상세 통계 조회",
-    description="특정 프로젝트의 상세 통계를 조회합니다.",
-    tags=["대시보드"]
-)
-async def get_project_detail_stats(
-    project_id: int,
-    current_user_id: str = Depends(get_current_user)
-):
-    """특정 프로젝트의 상세 통계를 반환합니다."""
-    user_id = int(current_user_id)
-    
-    try:
-        project = select_one(
-            table="projects",
-            where={"project_id": project_id, "user_id": user_id, "is_deleted": False}
-        )
-        
-        if not project:
-            raise HTTPException(
-                status_code=404,
-                detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
-            )
-        
-        question_count = get_question_counts_by_project_ids([project_id])
-        token_usage = get_token_usage_by_project_ids([project_id])
-        avg_feedback_score = get_avg_feedback_score_by_project_ids([project_id])
-        
-        mc_used = count("multiple_choice_questions", {"project_id": project_id, "is_used": True})
-        tf_used = count("true_false_questions", {"project_id": project_id, "is_used": True})
-        sa_used = count("short_answer_questions", {"project_id": project_id, "is_used": True})
-        used_question_count = mc_used + tf_used + sa_used
-        
-        detail_stats = ProjectDetailStats(
-            project_id=project["project_id"],
-            project_name=project["project_name"],
-            status=project["status"] or "WRITING",
-            question_count=question_count,
-            token_usage=token_usage,
-            avg_feedback_score=avg_feedback_score,
-            used_question_count=used_question_count,
-            created_at=project.get("created_at"),
-            updated_at=project.get("updated_at")
-        )
-        
-        return ProjectDetailResponse(
-            success=True,
-            message="프로젝트 상세 통계 조회 성공",
-            data=detail_stats
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("프로젝트 상세 통계 조회 중 오류")
-        raise HTTPException(
-            status_code=500,
-            detail=f"프로젝트 상세 통계 조회 중 오류가 발생했습니다: {str(e)}"
-        )
-
-
-@router.get(
     "/project",
     response_model=ProjectResponse,
     summary="프로젝트 조회",
@@ -603,15 +524,21 @@ async def get_project_detail_stats(
     tags=["대시보드"]
 )
 async def get_project_detail(
-    project_id: int, 
-    current_user_id: str = Depends(get_current_user)
-    ):
-    user_id = int(current_user_id)
+    project_id: int,
+    user_data: tuple[int, str] = Depends(get_current_user)
+):
+    user_id, role = user_data
     
-    project = select_one(
-        table="projects",
-        where={"project_id": project_id, "user_id": user_id, "is_deleted": False}
-    )
+    if role == "admin":
+        project = select_one(
+            table="projects",
+            where={"project_id": project_id, "is_deleted": False}
+        )
+    else:
+        project = select_one(
+            table="projects",
+            where={"project_id": project_id, "user_id": user_id, "is_deleted": False}
+        )
 
     if not project:
         raise HTTPException(
@@ -675,10 +602,10 @@ async def get_project_detail(
     tags=["대시보드"]
 )
 async def project_delete(
-    project_id: int, 
-    current_user_id: str = Depends(get_current_user)
-    ):
-    user_id = int(current_user_id)
+    project_id: int,
+    user_data: tuple[int, str] = Depends(get_current_user)
+):
+    user_id, role = user_data
 
     ## 프로젝트 아이디로 업데이트 is_deleted 를 True 로 변경
     update(
