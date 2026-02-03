@@ -106,9 +106,11 @@ class QuestionGenerationTask:
                                     valid_questions.append(question.model_dump())
                             
                             saved_ids = []
+                            question_type = getattr(requests[0], 'question_type', None)
                             if valid_questions:
                                 saved_ids = save_questions_batch_to_db(
                                     questions_data=valid_questions,
+                                    question_type=question_type,
                                     project_id=project_id,
                                     config_id=config_id,
                                     connection=connection

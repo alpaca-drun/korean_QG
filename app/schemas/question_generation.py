@@ -151,7 +151,7 @@ class LLMQuestion(BaseModel):
     """LLM이 생성하는 단일 문항 모델"""
     question_text: str = Field(..., description="문제 문장, 지문 제외")
     reference_text: Optional[str] = Field(default=None, description="보기 내용 (있는 경우)")
-    choices: List[Choice] = Field(..., description="5개의 선지 목록")
+    choices: Optional[List[Choice]] = Field(None, description="5개의 선지 목록")
     correct_answer: str = Field(..., description="정답  여러개인경우 ,로구분(1,2,3,4,5)")
     explanation: str = Field(..., description="정답 해설 및 오답 피하기를 포함한 해설")
     passage: Optional[str] = Field(default=None, description="필요한 경우 작성하며 줄바꿈(\\n)을 포함하여 가독성 있게 작성해야 한다.")
