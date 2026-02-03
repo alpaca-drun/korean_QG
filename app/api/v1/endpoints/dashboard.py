@@ -188,7 +188,7 @@ def get_question_type_label(question_type: str) -> str:
     description="대시보드 상단 카드에 표시할 요약 통계를 조회합니다.",
     tags=["대시보드"]
 )
-async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)):
+async def get_dashboard_summary(user_data: tuple[int, str] = Depends(get_current_user)):
     """
     대시보드 상단 요약 통계를 반환합니다.
     
@@ -198,7 +198,7 @@ async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)
     - 생성완료 프로젝트 수
     - 총 생성 문항 수
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
         # 프로젝트 ID 목록 조회
@@ -243,7 +243,7 @@ async def get_dashboard_summary(current_user_id: str = Depends(get_current_user)
     tags=["대시보드"]
 )
 async def get_project_list(
-    current_user_id: str = Depends(get_current_user),
+    user_data: tuple[int, str] = Depends(get_current_user),
     page: int = Query(1, ge=1, description="페이지 번호"),
     limit: int = Query(10, ge=1, le=100, description="페이지당 항목 수"),
     status: Optional[str] = Query(None, description="상태 필터 (WRITING, GENERATING, COMPLETED)"),
@@ -261,7 +261,7 @@ async def get_project_list(
     - 상태
     - 최종 수정일
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
         # 기본 쿼리 구성 (projects와 project_scopes, project_source_config JOIN)
@@ -382,7 +382,7 @@ async def get_project_list(
     description="대시보드 필터에 사용할 옵션 목록을 조회합니다.",
     tags=["대시보드"]
 )
-async def get_filter_options(current_user_id: str = Depends(get_current_user)):
+async def get_filter_options(user_data: tuple[int, str] = Depends(get_current_user)):
     """
     대시보드 필터에 사용할 옵션 목록을 반환합니다.
     
@@ -390,7 +390,7 @@ async def get_filter_options(current_user_id: str = Depends(get_current_user)):
     - 과목 목록
     - 상태 목록
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
         # 사용자의 프로젝트에서 사용된 과목 목록 조회
@@ -441,14 +441,14 @@ async def get_filter_options(current_user_id: str = Depends(get_current_user)):
     tags=["대시보드"]
 )
 async def search_projects(
-    current_user_id: str = Depends(get_current_user),
+    user_data: tuple[int, str] = Depends(get_current_user),
     keyword: str = Query(..., description="검색 키워드"),
     page: int = Query(1, ge=1, description="페이지 번호"),
     limit: int = Query(10, ge=1, le=100, description="페이지당 항목 수")
 ):
     """프로젝트명으로 검색합니다."""
     return await get_project_list(
-        current_user_id=current_user_id,
+        user_data=user_data,
         page=page,
         limit=limit,
         keyword=keyword
@@ -466,11 +466,11 @@ async def search_projects(
     description="현재 로그인한 사용자의 대시보드 통계를 조회합니다.",
     tags=["대시보드"]
 )
-async def get_dashboard_stats(current_user_id: str = Depends(get_current_user)):
+async def get_dashboard_stats(user_data: tuple[int, str] = Depends(get_current_user)):
     """
     JWT 토큰에서 user_id를 추출하여 해당 사용자의 대시보드 통계를 반환합니다.
     """
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
         project_ids = get_project_ids_for_user(user_id)
@@ -541,10 +541,10 @@ async def get_dashboard_stats(current_user_id: str = Depends(get_current_user)):
 )
 async def get_project_detail_stats(
     project_id: int,
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """특정 프로젝트의 상세 통계를 반환합니다."""
-    user_id = int(current_user_id)
+    user_id, role = user_data
     
     try:
         project = select_one(
@@ -603,10 +603,10 @@ async def get_project_detail_stats(
     tags=["대시보드"]
 )
 async def get_project_detail(
-    project_id: int, 
-    current_user_id: str = Depends(get_current_user)
-    ):
-    user_id = int(current_user_id)
+    project_id: int,
+    user_data: tuple[int, str] = Depends(get_current_user)
+):
+    user_id, role = user_data
     
     project = select_one(
         table="projects",
@@ -675,10 +675,10 @@ async def get_project_detail(
     tags=["대시보드"]
 )
 async def project_delete(
-    project_id: int, 
-    current_user_id: str = Depends(get_current_user)
-    ):
-    user_id = int(current_user_id)
+    project_id: int,
+    user_data: tuple[int, str] = Depends(get_current_user)
+):
+    user_id, role = user_data
 
     ## 프로젝트 아이디로 업데이트 is_deleted 를 True 로 변경
     update(
