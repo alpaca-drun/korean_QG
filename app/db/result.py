@@ -18,8 +18,9 @@ def get_project_info_admin(project_id: int, connection=None) -> Optional[Dict[st
         LEFT JOIN users u ON u.user_id = p.user_id
         WHERE p.project_id = %s AND p.is_deleted = FALSE AND u.role in ('admin', 'user')
     """
+    results = select_with_query(query, (project_id,), connection=connection)
 
-    return select_with_query(query, (project_id,), connection=connection)
+    return results[0] if results else None
 
 
 def get_passage_info_admin(project_id: int, connection=None) -> Optional[Dict[str, Any]]:
@@ -32,7 +33,8 @@ def get_passage_info_admin(project_id: int, connection=None) -> Optional[Dict[st
         LEFT JOIN users u ON u.user_id = p.user_id
         WHERE p.project_id = %s AND p.is_deleted = FALSE AND u.role in ('admin', 'user')
     """
-    return select_with_query(query, (project_id,), connection=connection)
+    results = select_with_query(query, (project_id,), connection=connection)
+    return results[0] if results else None
 
 
 def get_passages_for_project(project_id: int, connection=None) -> Optional[list[dict]]:

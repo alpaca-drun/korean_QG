@@ -70,7 +70,8 @@ def get_project_info_admin_dashboard(project_id: int, connection=None) -> Option
         WHERE p.project_id = %s AND p.is_deleted = FALSE AND u.role in ('admin', 'user')
     """
 
-    return select_with_query(query, (project_id,), connection=connection)
+    result = select_with_query(query, (project_id,), connection=connection)
+    return result[0] if result else None
 
 
 
