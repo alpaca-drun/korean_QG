@@ -49,7 +49,9 @@ def get_all_project_ids_admin() -> list:
         LEFT JOIN users u ON u.user_id = p.user_id
         WHERE p.is_deleted = FALSE AND u.role in ('admin', 'user')
     """
-    return select_with_query(query)
+    result = select_with_query(query)
+    return [p["project_id"] for p in result]
+
 
 def get_all_project_ids_master() -> list:
     """모든 프로젝트 ID 목록을 조회합니다."""

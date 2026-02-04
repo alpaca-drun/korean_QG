@@ -544,7 +544,8 @@ async def get_project_meta(
             )
             WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
         """
-    params = (project_id,) if role == "admin" else (project_id, user_id)
+    params = (project_id,) if role in ["admin", "master"] else (project_id, user_id)
+    
     project_result = select_with_query(project_query, params)
     
     if not project_result:
@@ -624,7 +625,7 @@ async def get_project_passages(
     
 
     # 프로젝트에서 사용된 지문 조회
-    passage_results = get_passage_info_admin(project_id)
+    passage_results = get_passages_for_project(project_id)
     
     if not passage_results:
         return ProjectPassageResponse(success=False, message="프로젝트에서 사용된 지문 목록 조회 실패", items=[], total=0)
