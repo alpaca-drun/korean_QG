@@ -191,9 +191,10 @@ def get_status_label(status: str) -> str:
     status_map = {
         "WRITING": "작성중",
         "GENERATING": "생성중",
-        "COMPLETED": "생성완료"
+        "COMPLETED": "생성완료",
+        "FAILED": "생성실패"
     }
-    return status_map.get(status, "작성중")
+    return status_map.get(status, "알 수 없음")
 
 
 def get_question_type_label(question_type: str) -> str:
