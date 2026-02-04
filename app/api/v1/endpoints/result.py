@@ -48,13 +48,13 @@ async def get_result(
         project = select_one(
             "projects",
             where={"project_id": project_id, "is_deleted": False},
-            columns="project_id",
+            columns="project_id, user_id",
         )
     else:
         project = select_one(
             "projects",
             where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
-            columns="project_id",
+            columns="project_id, user_id",
         )
 
     if not project:
@@ -77,8 +77,8 @@ async def get_result(
         items = [q for q in items if q.get("question_type") == question_type]
     
 
-
-    return ListResponse(items=items or [], total=len(items or []))
+    is_owner = project.get("user_id") == user_id
+    return ListResponse(items=items or [], total=len(items or []),is_owner=is_owner)
 
 
 
@@ -405,7 +405,10 @@ async def download_selected_results(
     # 데이터 조회
     try:
         # 내부에서도 user_id로 한번 더 검증/필터링
-        data_list = get_question_data_from_db(project_id, user_id=user_id)
+        if role == "admin":
+            data_list = get_question_data_from_db(project_id, user_id=None)
+        else:
+            data_list = get_question_data_from_db(project_id, user_id=user_id)
     except Exception as e:
         logger.exception("문항 조회 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"문항 조회 실패: {str(e)}")

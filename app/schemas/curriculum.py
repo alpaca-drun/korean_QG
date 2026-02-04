@@ -190,8 +190,10 @@ class PassageUpdateRequest(BaseModel):
 
 class ListResponse(BaseModel):
     """리스트 응답 스키마"""
-    items: List[dict]
     total: int
+    is_owner: Optional[bool] = None
+    items: List[dict]
+
 
 
 class ProjectPassageItem(BaseModel):
