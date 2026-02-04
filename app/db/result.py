@@ -12,6 +12,7 @@ def get_project_info_admin(project_id: int, connection=None) -> Optional[Dict[st
         SELECT 
             p.project_id,
             p.project_name,
+            p.user_id,
             ps.subject as category
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
