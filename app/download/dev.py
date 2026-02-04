@@ -485,7 +485,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
         # print(f"   DB 연결 시도 중...")
         # 프로젝트 소유권/삭제 여부 필터링(선택)
         if user_id is None:
-            base_filters = " AND 1=1"
+            base_filters = " AND 1=1 AND p.is_deleted = 0"
             params = (project_id_int, project_id_int, project_id_int)
         else:
             base_filters = " AND p.user_id = %s AND p.is_deleted = 0"

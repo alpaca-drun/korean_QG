@@ -405,7 +405,10 @@ async def download_selected_results(
     # 데이터 조회
     try:
         # 내부에서도 user_id로 한번 더 검증/필터링
-        data_list = get_question_data_from_db(project_id, user_id=user_id)
+        if role == "admin":
+            data_list = get_question_data_from_db(project_id, user_id=None)
+        else:
+            data_list = get_question_data_from_db(project_id, user_id=user_id)
     except Exception as e:
         logger.exception("문항 조회 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"문항 조회 실패: {str(e)}")
