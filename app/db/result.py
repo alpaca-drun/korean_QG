@@ -30,6 +30,7 @@ def get_passage_info_admin(project_id: int, connection=None) -> Optional[Dict[st
             p.project_name,
             ps.subject as category
         FROM projects p
+        LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
         LEFT JOIN users u ON u.user_id = p.user_id
         WHERE p.project_id = %s AND p.is_deleted = FALSE AND u.role in ('admin', 'user')
     """
