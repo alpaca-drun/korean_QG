@@ -45,8 +45,8 @@ class ProjectListItem(BaseModel):
     question_count: int = Field(default=0, description="문항 수")
     
     # 상태 및 일시
-    status: str = Field(default="WRITING", description="상태 (WRITING, GENERATING, COMPLETED)")
-    status_label: str = Field(default="작성중", description="상태 라벨")
+    status: str = Field(default="WRITING", description="상태 (WRITING, GENERATING, COMPLETED, FAILED)")
+    status_label: str = Field(default="알 수 없음", description="상태 라벨")
     updated_at: Optional[datetime] = Field(None, description="최종 수정일")
     created_at: Optional[datetime] = Field(None, description="생성일시")
 
@@ -82,6 +82,7 @@ class FilterOptionsResponse(BaseModel):
             FilterOption(value="WRITING", label="작성중"),
             FilterOption(value="GENERATING", label="생성중"),
             FilterOption(value="COMPLETED", label="생성완료"),
+            FilterOption(value="FAILED", label="생성실패"),
         ],
         description="상태 목록"
     )
@@ -96,7 +97,7 @@ class ProjectStatusCount(BaseModel):
     writing: int = Field(default=0, description="작성중 프로젝트 수")
     generating: int = Field(default=0, description="생성중 프로젝트 수")
     completed: int = Field(default=0, description="완료된 프로젝트 수")
-
+    failed: int = Field(default=0, description="실패한 프로젝트 수")
 
 class QuestionTypeCount(BaseModel):
     """문항 유형별 개수"""

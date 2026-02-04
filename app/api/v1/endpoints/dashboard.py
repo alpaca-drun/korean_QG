@@ -109,7 +109,7 @@ async def get_project_list(
     user_data: tuple[int, str] = Depends(get_current_user),
     page: int = Query(1, ge=1, description="페이지 번호"),
     limit: int = Query(10, ge=1, le=100, description="페이지당 항목 수"),
-    status: Optional[str] = Query(None, description="상태 필터 (WRITING, GENERATING, COMPLETED)"),
+    status: Optional[str] = Query(None, description="상태 필터 (WRITING, GENERATING, COMPLETED, FAILED)"),
     subject: Optional[str] = Query(None, description="과목 필터"),
     keyword: Optional[str] = Query(None, description="프로젝트명 검색 키워드")
 ):
@@ -211,7 +211,7 @@ async def get_project_list(
             params = [user_id]
 
         # 상태 필터
-        if status and status in ["WRITING", "GENERATING", "COMPLETED"]:
+        if status and status in ["WRITING", "GENERATING", "COMPLETED", "FAILED"]:
             base_query += " AND p.status = %s"
             params.append(status)
         
@@ -355,6 +355,7 @@ async def get_filter_options(user_data: tuple[int, str] = Depends(get_current_us
             FilterOption(value="WRITING", label="작성중"),
             FilterOption(value="GENERATING", label="생성중"),
             FilterOption(value="COMPLETED", label="생성완료"),
+            FilterOption(value="FAILED", label="생성실패"),
         ]
         
         return FilterOptionsResponse(
@@ -436,9 +437,6 @@ async def get_project_detail(
 
 
     config = select_one("project_source_config", {"project_id": project_id})
-    
-    # 더 깔끔하게 정리해서 쓸 수 있는 방법 예시입니다.
-
     
     is_modified = config.get("is_modified", None) if config else None
     resp_kwargs = dict(
