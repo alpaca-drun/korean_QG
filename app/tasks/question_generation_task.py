@@ -172,25 +172,34 @@ class QuestionGenerationTask:
                 # 사용자 이메일 가져오기
                 user_email = self._get_user_email(user_id)
                 
-                if user_email and success_count > 0:
+                if user_email:
                     email_client = get_email_client()
-                    email_sent = email_client.send_success_email(
-                        to_address=user_email,
-                        project_name=project_name,
-                        success_count=success_count,    
-                        total_count=total_count,
-                        total_questions=total_questions,
-                        result_url=result_url
-                    )
                     
-                    if email_sent:
-                        logger.info(f"📧 완료 메일 전송 성공: {user_email}")
+                    if success_count > 0:
+                        email_sent = email_client.send_success_email(
+                            to_address=user_email,
+                            project_name=project_name,
+                            success_count=success_count,    
+                            total_count=total_count,
+                            total_questions=total_questions,
+                            result_url=result_url
+                        )
+                        
+                        if email_sent:
+                            logger.info(f"📧 완료 메일 전송 성공: {user_email}")
+                        else:
+                            logger.warning(f"📧 완료 메일 전송 실패: {user_email}")
                     else:
-                        logger.warning(f"📧 완료 메일 전송 실패: {user_email}")
-                elif not user_email:
-                    logger.warning(f"⚠️ 사용자 이메일을 찾을 수 없음: user_id={user_id}")
+                        # 성공 건수가 0인 경우 실패 메일 전송
+                        logger.warning(f"⚠️ 성공한 배치가 없음 - 실패 메일 전송")
+                        email_client.send_failure_email(
+                            to_address=user_email,
+                            project_name=project_name,
+                            error_message="문항 생성에 실패했습니다. 생성된 문항이 없습니다."
+                        )
+                        logger.info(f"📧 실패 메일 전송 완료: {user_email}")
                 else:
-                    logger.info(f"⚠️ 성공한 배치가 없어 메일을 전송하지 않음")
+                    logger.warning(f"⚠️ 사용자 이메일을 찾을 수 없음: user_id={user_id}")
                     
             except Exception as e:
                 logger.error(f"⚠️ 완료 메일 전송 중 오류 발생 (작업은 성공): {e}")
