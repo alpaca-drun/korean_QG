@@ -136,7 +136,8 @@ class QuestionGenerationTask:
                         logger.info(f"✅ 배치 {idx+1} 문항 저장 완료: {len(saved_ids)}개 (DB ID 샘플: {[id for id in saved_ids[:3] if id]})")
                         
                     except Exception as e:
-                        update_project_status(project_id, "FAILED", connection=connection)
+                        # connection 인자 제거
+                        update_project_status(project_id, "FAILED")
                         logger.error(f"❌ 배치 {idx+1} DB 저장 실패: {e}", exc_info=True)
                 else:
                     logger.warning(f"⚠️ 배치 {idx+1}은 생성 실패하여 DB 저장 생략")
@@ -193,7 +194,8 @@ class QuestionGenerationTask:
                     else:
 
                         # 성공 건수가 0인 경우 실패 메일 전송
-                        update_project_status(project_id, "FAILED", connection=connection)
+                        # connection 객체 없이 호출 (내부에서 생성)
+                        update_project_status(project_id, "FAILED")
                         logger.warning(f"⚠️ 성공한 배치가 없음 - 실패 메일 전송")
                         email_client.send_failure_email(
                             to_address=user_email,
@@ -212,21 +214,42 @@ class QuestionGenerationTask:
             
             # ✉️ 실패 메일 전송
             try:
-                user_email = self._get_user_email(user_id)
-                project_name = requests[0].project_name if requests else "알 수 없는 프로젝트"
-                project_id = requests[0].project_id if requests else None
+                # 안전하게 정보 추출
+                project_name = "알 수 없는 프로젝트"
+                project_id = None
+                
+                if requests and len(requests) > 0:
+                    first_req = requests[0]
+                    project_name = getattr(first_req, 'project_name', "알 수 없는 프로젝트")
+                    project_id = getattr(first_req, 'project_id', None)
+                
+                logger.info(f"실패 처리 시작: project_id={project_id}, project_name={project_name}, user_id={user_id}")
+
                 if project_id:
-                    update_project_status(project_id, "FAILED", connection=connection)
+                    try:
+                        update_project_status(project_id, "FAILED")
+                        logger.info(f"프로젝트 상태 업데이트 완료: {project_id} -> FAILED")
+                    except Exception as db_err:
+                        logger.error(f"프로젝트 상태 업데이트 실패: {db_err}")
+
+                user_email = self._get_user_email(user_id)
                 if user_email:
+                    logger.info(f"실패 메일 전송 시도: {user_email}")
                     email_client = get_email_client()
-                    email_client.send_failure_email(
+                    is_sent = email_client.send_failure_email(
                         to_address=user_email,
                         project_name=project_name,
                         error_message=str(e)
                     )
-                    logger.info(f"📧 실패 메일 전송 완료: {user_email}")
+                    if is_sent:
+                        logger.info(f"📧 실패 메일 전송 완료: {user_email}")
+                    else:
+                        logger.error(f"⚠️ 실패 메일 전송 실패 (Send return False): {user_email}")
+                else:
+                    logger.warning(f"⚠️ 사용자 이메일을 찾을 수 없어 실패 메일 전송 불가: user_id={user_id}")
+                    
             except Exception as email_error:
-                logger.error(f"⚠️ 실패 메일 전송 중 오류 발생: {email_error}")
+                logger.error(f"⚠️ 실패 메일 전송 중 치명적 오류 발생: {email_error}", exc_info=True)
     
     def _get_user_email(self, user_id: str) -> Optional[str]:
         """
