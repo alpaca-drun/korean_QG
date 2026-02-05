@@ -412,7 +412,14 @@ async def download_selected_results(
             )
             WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
         """
-    download_params = (project_id,) if role == "admin" else (project_id, user_id)
+    # 튜플로 파라미터 전달 (role에 따라 분기)
+    if role == "admin":
+        download_params = (project_id,)
+    elif role == "master":
+        download_params = (project_id,)
+    else:
+        download_params = (project_id, user_id)
+        
     project_result = select_with_query(project_query, download_params)
     
     if not project_result:
