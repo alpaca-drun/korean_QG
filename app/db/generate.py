@@ -289,8 +289,8 @@ def save_question_to_db(
             batch_id = question_data.get("batch_index", None)
             question_text = question_data.get("question_text", {})
 
-            print("🟣🟣🟣🟣🟣🟣")
-            print(question_text)
+            # print("🟣🟣🟣🟣🟣🟣")
+            # print(question_text)
             
             # 'null' 문자열이나 빈 값을 None(NULL)으로 처리하는 헬퍼 함수
             def clean_val(v):
