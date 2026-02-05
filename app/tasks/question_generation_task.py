@@ -136,6 +136,7 @@ class QuestionGenerationTask:
                         logger.info(f"✅ 배치 {idx+1} 문항 저장 완료: {len(saved_ids)}개 (DB ID 샘플: {[id for id in saved_ids[:3] if id]})")
                         
                     except Exception as e:
+                        update_project_status(project_id, "FAILED", connection=connection)
                         logger.error(f"❌ 배치 {idx+1} DB 저장 실패: {e}", exc_info=True)
                 else:
                     logger.warning(f"⚠️ 배치 {idx+1}은 생성 실패하여 DB 저장 생략")
@@ -190,7 +191,9 @@ class QuestionGenerationTask:
                         else:
                             logger.warning(f"📧 완료 메일 전송 실패: {user_email}")
                     else:
+
                         # 성공 건수가 0인 경우 실패 메일 전송
+                        update_project_status(project_id, "FAILED", connection=connection)
                         logger.warning(f"⚠️ 성공한 배치가 없음 - 실패 메일 전송")
                         email_client.send_failure_email(
                             to_address=user_email,
@@ -211,7 +214,9 @@ class QuestionGenerationTask:
             try:
                 user_email = self._get_user_email(user_id)
                 project_name = requests[0].project_name if requests else "알 수 없는 프로젝트"
-                
+                project_id = requests[0].project_id if requests else None
+                if project_id:
+                    update_project_status(project_id, "FAILED", connection=connection)
                 if user_email:
                     email_client = get_email_client()
                     email_client.send_failure_email(
