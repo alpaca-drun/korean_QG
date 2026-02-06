@@ -56,21 +56,35 @@ async def get_dashboard_summary(user_data: tuple[int, str] = Depends(get_current
         if role == "admin":
             project_ids = get_all_project_ids_admin()
             total_projects = len(project_ids)
-            writing_count = count("projects", {"is_deleted": False, "status": "WRITING"})
-            completed_count = count("projects", {"is_deleted": False, "status": "COMPLETED"})
+            # admin은 admin, user 역할의 프로젝트만 집계
+            writing_query = """
+                SELECT COUNT(*) as count FROM projects p
+                LEFT JOIN users u ON p.user_id = u.user_id
+                WHERE p.is_deleted = FALSE AND p.status = 'WRITING' AND u.role IN ('admin', 'user')
+            """
+            completed_query = """
+                SELECT COUNT(*) as count FROM projects p
+                LEFT JOIN users u ON p.user_id = u.user_id
+                WHERE p.is_deleted = FALSE AND p.status = 'COMPLETED' AND u.role IN ('admin', 'user')
+            """
+            writing_result = select_with_query(writing_query)
+            writing_count = writing_result[0]["count"] if writing_result else 0
+            completed_result = select_with_query(completed_query)
+            completed_count = completed_result[0]["count"] if completed_result else 0
             total_questions = get_total_question_count_by_project_ids(project_ids)
         elif role == "master":
             project_ids = get_all_project_ids_master()
             total_projects = len(project_ids)
+            # master는 전체 프로젝트 집계
             writing_count = count("projects", {"is_deleted": False, "status": "WRITING"})
             completed_count = count("projects", {"is_deleted": False, "status": "COMPLETED"})
             total_questions = get_total_question_count_by_project_ids(project_ids)
         else:
             project_ids = get_project_ids_for_user(user_id)
-            # 통계 계산
+            # user, tester는 자기 프로젝트만 집계
             total_projects = len(project_ids)
-            writing_count = count("projects", {"is_deleted": False, "status": "WRITING"})
-            completed_count = count("projects", {"is_deleted": False, "status": "COMPLETED"})
+            writing_count = count("projects", {"is_deleted": False, "status": "WRITING", "user_id": user_id})
+            completed_count = count("projects", {"is_deleted": False, "status": "COMPLETED", "user_id": user_id})
             total_questions = get_total_question_count_by_project_ids(project_ids)
             
         summary = DashboardSummary(
