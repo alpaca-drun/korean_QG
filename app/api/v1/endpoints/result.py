@@ -433,6 +433,9 @@ async def download_selected_results(
         # 내부에서도 user_id로 한번 더 검증/필터링
         if role == "admin":
             data_list = get_question_data_from_db(project_id, user_id=None)
+
+        elif role == "master":
+            data_list = get_question_data_from_db(project_id, user_id=None)
         else:
             data_list = get_question_data_from_db(project_id, user_id=user_id)
     except Exception as e:
