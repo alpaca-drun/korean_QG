@@ -412,7 +412,14 @@ async def download_selected_results(
             )
             WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
         """
-    download_params = (project_id,) if role == "admin" else (project_id, user_id)
+    # 튜플로 파라미터 전달 (role에 따라 분기)
+    if role == "admin":
+        download_params = (project_id,)
+    elif role == "master":
+        download_params = (project_id,)
+    else:
+        download_params = (project_id, user_id)
+        
     project_result = select_with_query(project_query, download_params)
     
     if not project_result:
@@ -425,6 +432,9 @@ async def download_selected_results(
     try:
         # 내부에서도 user_id로 한번 더 검증/필터링
         if role == "admin":
+            data_list = get_question_data_from_db(project_id, user_id=None)
+
+        elif role == "master":
             data_list = get_question_data_from_db(project_id, user_id=None)
         else:
             data_list = get_question_data_from_db(project_id, user_id=user_id)

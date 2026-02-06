@@ -223,6 +223,7 @@ async def generate_questions_batch_async(
     except Exception as e:
         # 예외 발생 시 FAIL 응답
         logger.exception("배치 문항 생성 시작 실패")
+        update_project_status(requests.project_id, "FAILED")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

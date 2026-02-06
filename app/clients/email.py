@@ -269,34 +269,35 @@ class EmailClient:
 <html>
 <head>
     <meta charset="UTF-8">
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #f44336; color: white; padding: 20px; text-align: center; border-radius: 5px; }}
-        .content {{ background-color: #f9f9f9; padding: 20px; margin-top: 20px; border-radius: 5px; }}
-        .error {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #f44336; }}
-        .footer {{ margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }}
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>❌ 문항 생성 실패</h1>
-        </div>
-        <div class="content">
-            <p>안녕하세요,</p>
-            <p><strong>"{project_name}"</strong> 프로젝트의 문항 생성 중 오류가 발생했습니다.</p>
+<body style="margin: 0; padding: 0; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f7;">
+    <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border: 1px solid #e1e1e7; border-radius: 8px; overflow: hidden;">
+        <!-- 상단 강조 라인 (실패: 빨간색) -->
+        <div style="height: 4px; background-color: #EF4444;"></div>
+        
+        <div style="padding: 40px 30px;">
+            <h2 style="margin-top: 0; color: #111827; font-size: 22px;">문항 생성에 실패했습니다.</h2>
             
-            <div class="error">
-                <h3>❌ 오류 내용</h3>
-                <p>{error_message}</p>
+            <p style="font-size: 16px; color: #4b5563;">
+                안녕하세요, <br>
+                요청하신 <strong>{project_name}</strong> 프로젝트의 문항 생성 중 오류가 발생했습니다.
+            </p>
+            
+            <div style="margin: 30px 0; padding: 20px; background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;">
+                <h3 style="margin-top: 0; font-size: 16px; color: #991B1B; margin-bottom: 10px;">❌ 오류 내용</h3>
+                <p style="margin: 0; color: #B91C1C; font-size: 14px; word-break: break-all;">
+                    {error_message}
+                </p>
             </div>
+
+            <p style="font-size: 15px; color: #4b5563;">
+                잠시 후 다시 시도하시거나, 문제가 지속될 경우 관리자에게 문의해주세요.
+            </p>
             
-            <p>관리자에게 문의하거나 다시 시도해주세요.</p>
-            <p>감사합니다.</p>
         </div>
-        <div class="footer">
-            <p>이 메일은 자동으로 발송되었습니다.</p>
+        
+        <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e1e1e7;">
+            <p style="margin: 0; font-size: 12px; color: #9ca3af;">본 메일은 발신 전용입니다.</p>
         </div>
     </div>
 </body>
