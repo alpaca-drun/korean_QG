@@ -239,6 +239,19 @@ def save_batch_log(
                 sql,
                 (input_tokens, output_tokens, duration_seconds,total_attempts, success_count )
             )
+
+            if project_id:
+                update_sql = """
+                    UPDATE project_source_config 
+                    SET input_tokens = COALESCE(input_tokens, 0) + %s, 
+                        output_tokens = COALESCE(output_tokens, 0) + %s
+                    WHERE project_id = %s
+                    ORDER BY config_id DESC
+                    LIMIT 1
+                """
+                cursor.execute(update_sql, (input_tokens, output_tokens, project_id))
+
+            
             return cursor.lastrowid
 
     try:
