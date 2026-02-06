@@ -239,7 +239,7 @@ def save_batch_log(
                 sql,
                 (input_tokens, output_tokens, duration_seconds,total_attempts, success_count )
             )
-
+            last_row_id = cursor.lastrowid
             if project_id:
                 update_sql = """
                     UPDATE project_source_config 
@@ -252,7 +252,7 @@ def save_batch_log(
                 cursor.execute(update_sql, (input_tokens, output_tokens, project_id))
 
             
-            return cursor.lastrowid
+            return last_row_id
 
     try:
         if connection:
