@@ -589,6 +589,10 @@ def parse_markdown_table_data(table_lines):
 
 def parse_markdown_text(text):
     """텍스트에서 마크다운 표를 감지하여 텍스트와 표 데이터로 분리"""
+    # \n 리터럴을 실제 줄바꿈 문자로 변환
+    if text:
+        text = text.replace('\\n', '\n')
+        
     segments = []
     lines = text.split('\n')
     current_text = []
@@ -601,7 +605,7 @@ def parse_markdown_text(text):
         if stripped.startswith('|') and stripped.endswith('|'):
             if not in_table:
                 if current_text:
-                    segments.append({'type': 'text', 'content': '\\n'.join(current_text)})
+                    segments.append({'type': 'text', 'content': '\n'.join(current_text)})
                     current_text = []
                 in_table = True
             table_lines.append(stripped)
@@ -612,7 +616,7 @@ def parse_markdown_text(text):
                     if len(table_lines) >= 2 and re.match(r'^\s*\|?[\s\-:|]+\|?\s*$', table_lines[1]):
                          segments.append({'type': 'table', 'content': parse_markdown_table_data(table_lines)})
                     else:
-                         segments.append({'type': 'text', 'content': '\\n'.join(table_lines)})
+                         segments.append({'type': 'text', 'content': '\n'.join(table_lines)})
                     table_lines = []
                 in_table = False
             current_text.append(line)
@@ -622,57 +626,67 @@ def parse_markdown_text(text):
         if len(table_lines) >= 2 and re.match(r'^\s*\|?[\s\-:|]+\|?\s*$', table_lines[1]):
              segments.append({'type': 'table', 'content': parse_markdown_table_data(table_lines)})
         else:
-             segments.append({'type': 'text', 'content': '\\n'.join(table_lines)})
+             segments.append({'type': 'text', 'content': '\n'.join(table_lines)})
     elif current_text:
-        segments.append({'type': 'text', 'content': '\\n'.join(current_text)})
+        segments.append({'type': 'text', 'content': '\n'.join(current_text)})
         
     return segments
 
 def apply_inline_styles(paragraph, text, base_run=None):
     """
     텍스트 내의 인라인 스타일(<u>, **)을 파싱하여 paragraph에 run으로 추가
+    (줄바꿈 문자 \n 처리 포함)
     """
     if not text:
         return
         
-    # <u>...</u> 또는 **...** 패턴 찾기 (그룹핑으로 분리)
-    # 1. <u>...</u>
-    # 2. **...**
-    # re.split에서 괄호()를 쓰면 구분자도 결과 리스트에 포함됨
-    pattern = r'(<u>.*?</u>|\*\*.*?\*\*)'
-    parts = re.split(pattern, text)
+    # 줄바꿈 문자로 먼저 분리
+    lines = text.split('\n')
     
-    for part in parts:
-        if not part:
+    # <u>...</u> 또는 **...** 패턴 찾기 (그룹핑으로 분리)
+    pattern = r'(<u>.*?</u>|\*\*.*?\*\*)'
+    
+    for i, line in enumerate(lines):
+        # 첫 번째 줄이 아니면 줄바꿈(Shift+Enter 효과) 추가
+        if i > 0:
+            paragraph.add_run().add_break()
+            
+        if not line:
             continue
-            
-        run_text = part
-        is_underline = False
-        is_bold = False
+
+        parts = re.split(pattern, line)
         
-        # 태그 확인 및 제거
-        if part.startswith('<u>') and part.endswith('</u>'):
-            run_text = part[3:-4]
-            is_underline = True
-        elif part.startswith('**') and part.endswith('**'):
-            run_text = part[2:-2]
-            is_bold = True
+        for part in parts:
+            if not part:
+                continue
+                
+            run_text = part
+            is_underline = False
+            is_bold = False
             
-        if not run_text:
-            continue
+            # 태그 확인 및 제거
+            if part.startswith('<u>') and part.endswith('</u>'):
+                run_text = part[3:-4]
+                is_underline = True
+            elif part.startswith('**') and part.endswith('**'):
+                run_text = part[2:-2]
+                is_bold = True
+                
+            if not run_text:
+                continue
+                
+            # Run 추가
+            new_run = paragraph.add_run(run_text)
             
-        # Run 추가
-        new_run = paragraph.add_run(run_text)
-        
-        # 기본 서식 복사
-        if base_run:
-            copy_run_formatting(base_run, new_run)
-            
-        # 스타일 적용
-        if is_underline:
-            new_run.font.underline = True
-        if is_bold:
-            new_run.font.bold = True
+            # 기본 서식 복사
+            if base_run:
+                copy_run_formatting(base_run, new_run)
+                
+            # 스타일 적용
+            if is_underline:
+                new_run.font.underline = True
+            if is_bold:
+                new_run.font.bold = True
 
 def insert_markdown_content(cell, paragraph, markdown_segments, base_run=None):
     """셀 내의 특정 단락 뒤에 마크다운 세그먼트들을 삽입"""
