@@ -10,16 +10,31 @@ from app.db.database import (
 
 
 
-def get_all_users_with_usage():
-    """사용자 목록과 토큰 사용량 조회"""
-    query = """
+def get_all_users_with_usage(start_date: str = None, end_date: str = None):
+    """사용자 목록과 토큰 사용량 조회 (날짜 필터링 포함)"""
+    
+    params = []
+
+    
+    where_clause = ""
+    if start_date and end_date:
+        where_clause = "WHERE psc.updated_at BETWEEN %s AND %s"
+        params.extend([start_date, end_date])
+    elif start_date:
+        where_clause = "WHERE psc.updated_at >= %s"
+        params.append(start_date)
+    elif end_date:
+        where_clause = "WHERE psc.updated_at <= %s"
+        params.append(end_date)
+        
+    query = f"""
         SELECT 
             u.user_id, 
             u.email, 
             u.name, 
             u.role, 
             u.is_active, 
-            u.created_at,
+            psc.updated_at,
             u.subject,
             u.memo,
             COALESCE(SUM(psc.input_tokens), 0) as input_tokens,
@@ -27,10 +42,11 @@ def get_all_users_with_usage():
         FROM users u
         LEFT JOIN projects p ON u.user_id = p.user_id
         LEFT JOIN project_source_config psc ON p.project_id = psc.project_id
+        {where_clause}
         GROUP BY u.user_id
         ORDER BY u.created_at DESC
     """
-    users = select_with_query(query)
+    users = select_with_query(query, tuple(params) if params else None)
     return users
 
 

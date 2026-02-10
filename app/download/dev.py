@@ -1,6 +1,7 @@
 from docx import Document
 from copy import deepcopy
 import os
+import re
 from dotenv import load_dotenv
 import sys
 from docx.oxml.ns import qn
@@ -423,7 +424,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 saq.short_question_id AS qid,
                 saq.created_at AS created_at,
                 saq.question AS question,
-                NULL AS passage,
+                NULLIF(saq.modified_passage, '') AS passage,
                 NULL AS select1,
                 NULL AS select2,
                 NULL AS select3,
@@ -443,7 +444,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 tfq.ox_question_id AS qid,
                 tfq.created_at AS created_at,
                 tfq.question AS question,
-                NULL AS passage,
+                NULLIF(tfq.modified_passage, '') AS passage,
                 'O' AS select1,
                 'X' AS select2,
                 NULL AS select3,
@@ -572,6 +573,180 @@ def copy_run_formatting(source_run, target_run):
         logger.debug("서식 복사 중 오류: %s", e)
         pass
 
+def parse_markdown_table_data(table_lines):
+    """마크다운 표 라인을 파싱하여 2차원 리스트로 반환"""
+    data = []
+    for i, line in enumerate(table_lines):
+        # 구분선(---|---)은 건너뜀
+        if i == 1 and re.match(r'^\s*\|?[\s\-:|]+\|?\s*$', line):
+            continue
+        
+        # 셀 분리 (양끝 | 제거 후 split)
+        row_content = line.strip().strip('|')
+        cells = [c.strip() for c in row_content.split('|')]
+        data.append(cells)
+    return data
+
+def parse_markdown_text(text):
+    """텍스트에서 마크다운 표를 감지하여 텍스트와 표 데이터로 분리"""
+    segments = []
+    lines = text.split('\n')
+    current_text = []
+    table_lines = []
+    in_table = False
+    
+    for line in lines:
+        stripped = line.strip()
+        # 표 감지 로직
+        if stripped.startswith('|') and stripped.endswith('|'):
+            if not in_table:
+                if current_text:
+                    segments.append({'type': 'text', 'content': '\\n'.join(current_text)})
+                    current_text = []
+                in_table = True
+            table_lines.append(stripped)
+        else:
+            if in_table:
+                if table_lines:
+                    # 유효한 표인지 확인 (2줄 이상, 두 번째 줄이 구분선 패턴)
+                    if len(table_lines) >= 2 and re.match(r'^\s*\|?[\s\-:|]+\|?\s*$', table_lines[1]):
+                         segments.append({'type': 'table', 'content': parse_markdown_table_data(table_lines)})
+                    else:
+                         segments.append({'type': 'text', 'content': '\\n'.join(table_lines)})
+                    table_lines = []
+                in_table = False
+            current_text.append(line)
+            
+    # 잔여 처리
+    if in_table and table_lines:
+        if len(table_lines) >= 2 and re.match(r'^\s*\|?[\s\-:|]+\|?\s*$', table_lines[1]):
+             segments.append({'type': 'table', 'content': parse_markdown_table_data(table_lines)})
+        else:
+             segments.append({'type': 'text', 'content': '\\n'.join(table_lines)})
+    elif current_text:
+        segments.append({'type': 'text', 'content': '\\n'.join(current_text)})
+        
+    return segments
+
+def apply_inline_styles(paragraph, text, base_run=None):
+    """
+    텍스트 내의 인라인 스타일(<u>, **)을 파싱하여 paragraph에 run으로 추가
+    """
+    if not text:
+        return
+        
+    # <u>...</u> 또는 **...** 패턴 찾기 (그룹핑으로 분리)
+    # 1. <u>...</u>
+    # 2. **...**
+    # re.split에서 괄호()를 쓰면 구분자도 결과 리스트에 포함됨
+    pattern = r'(<u>.*?</u>|\*\*.*?\*\*)'
+    parts = re.split(pattern, text)
+    
+    for part in parts:
+        if not part:
+            continue
+            
+        run_text = part
+        is_underline = False
+        is_bold = False
+        
+        # 태그 확인 및 제거
+        if part.startswith('<u>') and part.endswith('</u>'):
+            run_text = part[3:-4]
+            is_underline = True
+        elif part.startswith('**') and part.endswith('**'):
+            run_text = part[2:-2]
+            is_bold = True
+            
+        if not run_text:
+            continue
+            
+        # Run 추가
+        new_run = paragraph.add_run(run_text)
+        
+        # 기본 서식 복사
+        if base_run:
+            copy_run_formatting(base_run, new_run)
+            
+        # 스타일 적용
+        if is_underline:
+            new_run.font.underline = True
+        if is_bold:
+            new_run.font.bold = True
+
+def insert_markdown_content(cell, paragraph, markdown_segments, base_run=None):
+    """셀 내의 특정 단락 뒤에 마크다운 세그먼트들을 삽입"""
+    current_element = paragraph._element
+    
+    # 전달받은 base_run이 없으면 paragraph의 첫 번째 run 사용
+    if base_run is None and paragraph.runs:
+        base_run = paragraph.runs[0]
+        
+    for segment in markdown_segments:
+        if segment['type'] == 'text':
+            content = segment['content']
+            if not content.strip():
+                continue
+            
+            try:
+                # 새 단락 생성
+                temp_p = cell.add_paragraph() 
+                
+                # 1. 단락 스타일(Style ID) 복사
+                if paragraph.style:
+                    temp_p.style = paragraph.style
+                
+                # 2. 단락 속성(pPr - 정렬, 줄간격 등) 복사
+                if paragraph._element.pPr is not None:
+                    if temp_p._element.pPr is not None:
+                        temp_p._element.remove(temp_p._element.pPr)
+                    temp_p._element.insert(0, deepcopy(paragraph._element.pPr))
+                
+                # 인라인 스타일 적용하여 텍스트 추가
+                apply_inline_styles(temp_p, content, base_run)
+                
+                temp_elm = temp_p._element
+                temp_elm.getparent().remove(temp_elm)
+                current_element.addnext(temp_elm)
+                current_element = temp_elm
+            except Exception as e:
+                logger.error(f"마크다운 텍스트 삽입 실패: {e}")
+
+        elif segment['type'] == 'table':
+            table_data = segment['content']
+            if not table_data:
+                continue
+            
+            try:
+                rows = len(table_data)
+                cols = max(len(row) for row in table_data) if rows > 0 else 0
+                
+                if rows > 0 and cols > 0:
+                    temp_table = cell.add_table(rows=rows, cols=cols)
+                    temp_table.style = 'Table Grid'
+                    
+                    for r, row_data in enumerate(table_data):
+                        for c, cell_text in enumerate(row_data):
+                            if c < cols:
+                                cell_obj = temp_table.cell(r, c)
+                                cell_obj.text = cell_text
+                                # 폰트 스타일 설정 (필요시 추가)
+                                # for p in cell_obj.paragraphs:
+                                #     if p.runs and base_run:
+                                #         copy_run_formatting(base_run, p.runs[0])
+
+                    tbl_elm = temp_table._element
+                    tbl_elm.getparent().remove(tbl_elm)
+                    current_element.addnext(tbl_elm)
+                    current_element = tbl_elm
+                    
+                    # 표 뒤에 빈 줄 추가
+                    spacer_p = OxmlElement('w:p')
+                    current_element.addnext(spacer_p)
+                    current_element = spacer_p
+            except Exception as e:
+                logger.error(f"마크다운 표 삽입 실패: {e}")
+
 def replace_table_text(table, data, num):
     """
     표의 플레이스홀더를 실제 데이터로 교체하는 함수 (서식 유지)
@@ -599,26 +774,44 @@ def replace_table_text(table, data, num):
     
     # 1. 값이 비어있는 경우 해당 행 삭제 처리
     rows_to_delete = []
-    # 삭제 대상이 될 수 있는 플레이스홀더들
+    
+    # 1-1. 일반 플레이스홀더 목록 ({passage} 제외)
+    # 이 목록에 있는 플레이스홀더는 값이 비어있으면 해당 행을 삭제함
     check_placeholders = [
         '{question}', '{select1}', '{select2}', '{select3}', '{select4}', '{select5}', 
-        '{answer}', '{answer_explain}', '{passage}', '{boxcontent}'
+        '{answer}', '{answer_explain}', '{boxcontent}'
     ]
     
     for row in table.rows:
         row_text = "".join(cell.text for cell in row.cells)
         should_delete_row = False
         
+        # 일반 플레이스홀더 체크
         for placeholder in check_placeholders:
             if placeholder in row_text:
                 value = replacements.get(placeholder, '')
                 # 값이 없거나, 빈 문자열이거나, '-' 이거나, 문자열 "None"인 경우 행 삭제
-                if not value or value.strip() == '' or value.strip() == '-' or value.strip().lower() == 'none':
+                if not value or str(value).strip() == '' or str(value).strip() == '-' or str(value).strip().lower() == 'none':
                     should_delete_row = True
                     break
         
         if should_delete_row:
-            rows_to_delete.append(row)
+             rows_to_delete.append(row)
+             continue 
+
+        # 1-2. {passage} 별도 체크
+        # {passage}는 마크다운 표 등이 들어올 수 있으므로 값이 있을 때는 삭제하지 않음
+        # 값이 없을 때만 삭제
+        if '{passage}' in row_text:
+             val = replacements.get('{passage}', '')
+             # 디버깅: {passage} 값 로깅
+             logger.debug(f"[DEBUG] passage 행 확인: 값='{val}'")
+             
+             if not val or str(val).strip() == '' or str(val).strip() == '-' or str(val).strip().lower() == 'none':
+                 logger.debug("[DEBUG] passage 행 삭제 대상 포함됨 (값이 비어있음)")
+                 rows_to_delete.append(row)
+            
+    # 행 제거 (뒤에서부터 삭제하여 인덱스 꼬임 방지)
             
     # 행 제거 (뒤에서부터 삭제하여 인덱스 꼬임 방지)
     # 삭제 시 인접한 행들의 테두리도 정리
@@ -654,8 +847,76 @@ def replace_table_text(table, data, num):
     # 2. 남은 표 내의 모든 셀을 순회하며 플레이스홀더 교체
     for row_idx, row in enumerate(table.rows):
         for col_idx, cell in enumerate(row.cells):
-            # 각 단락을 순회
+            
+            # 2-1. 마크다운/인라인 스타일이 포함된 플레이스홀더 처리
+            processed_paragraphs = [] # 이미 처리된 단락 추적
+            
+            # 셀 내의 모든 단락을 순회하며 처리
+            # list()로 복사하여 순회 중 수정에 대비
+            for p in list(cell.paragraphs):
+                p_text = p.text
+                if not p_text: continue
+                
+                # 해당 단락에 어떤 플레이스홀더가 있는지 확인
+                found_placeholders = []
+                for ph, val in replacements.items():
+                    if ph in p_text:
+                        found_placeholders.append((ph, val))
+                
+                if not found_placeholders:
+                    continue
+                
+                # 발견된 플레이스홀더 중 마크다운/스타일 처리가 필요한 것 확인
+                needs_special_processing = False
+                target_ph = None
+                target_val = None
+
+                for ph, val in found_placeholders:
+                    # 마크다운 표(|...|) 또는 인라인 스타일(<u>, **)이 있는지 확인
+                    # 표는 최소 2줄 이상이어야 하므로 newline 체크
+                    has_markdown_table = ('|' in val and '\n' in val)
+                    has_inline_style = ('<u>' in val or '**' in val)
+                    
+                    if has_markdown_table or has_inline_style:
+                        needs_special_processing = True
+                        target_ph = ph
+                        target_val = val
+                        break
+                
+                if needs_special_processing and target_ph:
+                    # 1. 서식(폰트, 크기 등) 보존을 위해 원본 Run 객체 확보
+                    # 플레이스홀더가 포함된 run을 우선적으로 찾음
+                    base_run = None
+                    if p.runs:
+                        for run in p.runs:
+                            if target_ph in run.text:
+                                base_run = run
+                                break
+                        # 없으면 첫 번째 run 사용
+                        if base_run is None:
+                            base_run = p.runs[0]
+                    
+                    # 2. 플레이스홀더 제거 (단락 내 텍스트 치환)
+                    # p.text = ""를 하면 p.runs도 모두 사라질 수 있으므로 base_run을 미리 확보해야 함
+                    if p.text.strip() == target_ph:
+                            p.text = "" 
+                    else:
+                            p.text = p.text.replace(target_ph, "")
+                    
+                    # 3. 마크다운 파싱 및 삽입 (base_run 전달)
+                    segments = parse_markdown_text(target_val)
+                    insert_markdown_content(cell, p, segments, base_run=base_run)
+                    
+                    processed_paragraphs.append(p)
+                    # 한 단락에 여러 특수 처리가 필요한 경우 복잡해질 수 있으므로
+                    # 일단 하나 처리하면 해당 단락 처리는 완료된 것으로 간주 (단순화)
+                    continue
+            
+            # 2-2. 일반 텍스트 치환 (기존 로직)
+            # 마크다운 처리가 안 된 단락들만 대상
             for paragraph in cell.paragraphs:
+                if paragraph in processed_paragraphs:
+                    continue
                 # 단락의 전체 텍스트 확인
                 para_text = paragraph.text
                 if not para_text:

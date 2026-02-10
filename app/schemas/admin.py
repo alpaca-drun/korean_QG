@@ -14,7 +14,8 @@ class UserListItem(BaseModel):
     price_won: int = Field(0, description="예상 비용 (원)")
     status: bool = Field(True, description="활성화 여부 (True | False)")
     memo: Optional[str] = Field(None, description="메모")
-
+    updated_at: Optional[str] = Field(None, description="업데이트 일시")
+    
 class UserUpdateRoleRequest(BaseModel):
     role: str = Field(..., description="접근 권한 (admin | master | user | tester)")
 
