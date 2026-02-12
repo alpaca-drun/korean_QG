@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body
 
 
@@ -6,7 +7,8 @@ from app.utils.dependencies import get_current_user
 from app.core.config import settings
 from app.core.logger import logger
 from app.db.admin import *
-from app.schemas.admin import UserListItem, UserUpdateRoleRequest, UserUpdateStatusRequest, UserUpdateMemoRequest
+from app.schemas.admin import UserListItem,UserListResponse, UserUpdateRoleRequest, UserUpdateStatusRequest, UserUpdateMemoRequest
+import requests
 
 
 router = APIRouter()
@@ -14,12 +16,12 @@ router = APIRouter()
 
 @router.get(
     "/list",
-    response_model=List[UserListItem],
+    response_model=UserListResponse,
     summary="사용자 목록 조회",
     description="모든 사용자의 목록과 토큰 사용량, 예상 비용을 조회합니다. 날짜 필터링 가능 (YYYY-MM-DD)"
 )
 async def get_users_list(
-    exchange_rate: Optional[float] = 1450.0,
+    exchange_rate: Optional[float] = Query(None, description="환율"),
     start_date: Optional[str] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="종료 날짜 (YYYY-MM-DD)"),
     user_data: tuple[int, str] = Depends(get_current_user)
@@ -53,6 +55,38 @@ async def get_users_list(
     if role != "master":
         raise HTTPException(status_code=403, detail="관리자 권한(Master)이 필요합니다.")
 
+    if not exchange_rate:
+        target_date = datetime.now()
+        # 최대 10일 전까지만 조회 (무한 루프 방지)
+        for _ in range(10):
+            search_date = target_date.strftime("%Y%m%d")
+            try:
+                response = requests.get(f"https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey=cSoiQgL0NfNwRz9uuEpFDykoEA73y9rV&searchdate={search_date}&data=AP01", timeout=5)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    # 데이터가 비어있지 않고 리스트인 경우
+                    if isinstance(data, list) and data:
+                        for item in data:
+                            if item.get("cur_unit") == "USD":
+                                exchange_rate = float(item.get("deal_bas_r").replace(",", ""))
+                                break
+                        
+                        # 환율을 찾았으면 루프 종료
+                        if exchange_rate:
+                            break
+            except Exception as e:
+                logger.error(f"환율 정보 조회 중 오류 발생 ({search_date}): {e}")
+            
+            # 실패했거나 데이터가 없으면 하루 전으로 이동
+            target_date -= timedelta(days=1)
+            
+        # 10일간 조회해도 실패하면 기본값 사용
+        if not exchange_rate:
+            logger.warning("환율 API 응답에서 USD 정보를 찾을 수 없습니다. 기본값을 사용합니다.")
+            exchange_rate = 1450.0
+
+    print(f"exchange_rate: {exchange_rate}")
     for u in users:
         input_t = int(u.get("input_tokens") or 0)
         output_t = int(u.get("output_tokens") or 0)
@@ -82,8 +116,8 @@ async def get_users_list(
             memo=u.get("memo"),
             updated_at=u.get("updated_at").strftime("%Y-%m-%d %H:%M:%S") if u.get("updated_at") else None
         ))
-        
-    return result
+
+    return UserListResponse(items=result, exchange_rate=exchange_rate)
 
 @router.patch(
     "/role/{user_id}",
