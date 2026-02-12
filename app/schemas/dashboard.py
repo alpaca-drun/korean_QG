@@ -104,6 +104,7 @@ class QuestionTypeCount(BaseModel):
     multiple_choice: int = Field(default=0, description="객관식 문항 수")
     true_false: int = Field(default=0, description="OX 문항 수")
     short_answer: int = Field(default=0, description="단답형 문항 수")
+    matching: int = Field(default=0, description="선긋기 문항 수")
     total: int = Field(default=0, description="총 문항 수")
 
 
