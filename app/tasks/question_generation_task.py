@@ -1,4 +1,5 @@
 from typing import Optional, List
+import logging
 from fastapi import BackgroundTasks
 from app.schemas.question_generation import (
     QuestionGenerationRequest,
@@ -8,6 +9,9 @@ from app.schemas.question_generation import (
 from app.services.question_generation_service import QuestionGenerationService
 from app.db.generate import save_batch_log, save_questions_batch_to_db
 from app.db.generate import update_project_status
+from app.clients.email import get_email_client
+from app.core.logger import logger
+
 class QuestionGenerationTask:
     """문항 생성 비동기 작업"""
     
@@ -29,20 +33,20 @@ class QuestionGenerationTask:
             provider: LLM 제공자
         """
         try:
-            print(f"🚀 배치 문항 생성 백그라운드 작업 시작 (요청 수: {len(requests)})")
+            logger.info(f"🚀 배치 문항 생성 백그라운드 작업 시작 (요청 수: {len(requests)})")
             
             # 서비스를 통해 배치 생성
             results = await self.service.generate_questions_batch(requests, user_id, provider)
             
-            print(f"✅ 배치 생성 완료 (결과 수: {len(results)})")
+            logger.info(f"✅ 배치 생성 완료 (결과 수: {len(results)})")
             
             # DB에 저장
             for idx, result in enumerate(results):
                 # 에러 응답 처리
                 if not isinstance(result, QuestionGenerationSuccessResponse) or not result.success:
-                    print(f"⚠️ 배치 {idx+1} 생성 실패 - DB 저장 생략")
+                    logger.warning(f"⚠️ 배치 {idx+1} 생성 실패 - DB 저장 생략")
                     if isinstance(result, QuestionGenerationErrorResponse):
-                        print(f"  에러: {result.error.message if hasattr(result, 'error') else 'Unknown error'}")
+                        logger.error(f"  에러: {result.error.message if hasattr(result, 'error') else 'Unknown error'}")
                     continue
                 
                 # 성공 응답만 처리
@@ -54,131 +58,230 @@ class QuestionGenerationTask:
                         config_id = None
                         if idx < len(requests) and hasattr(requests[idx], 'project_id'):
                             project_id = requests[idx].project_id
-                            print(f"📌 배치 {idx+1} - project_id: {project_id}")
+                            logger.debug(f"📌 배치 {idx+1} - project_id: {project_id}")
                             config_id = requests[idx].config_id
-                            print(f"📌 배치 {idx+1} - config_id: {config_id}")
+                            logger.debug(f"📌 배치 {idx+1} - config_id: {config_id}")
                         else:
-                            print(f"⚠️ 배치 {idx+1} - project_id 없음, 기본값 사용")
+                            logger.warning(f"⚠️ 배치 {idx+1} - project_id 없음, 기본값 사용")
                             project_id = 1  # 기본값
                         
                         # 1단계: 배치 로그를 DB에 저장하고 매핑 테이블 생성
                         batch_index_mapping = {}  # {원래_batch_number: DB_batch_id}
-                        batch_log_success = True
                         
-                        print(f"📊 배치 로그 저장 시작: {len(batch_log_data)}개 배치")
-                        for batch_log in batch_log_data:
-                            # 배치 로그 DB 저장 후 ID 반환
-                            batch_id = save_batch_log(
-                                batch_log_data=batch_log.model_dump(),
-                                project_id=project_id
-                            )
-                            
-                            # 원래 batch_number와 DB의 batch_id 매핑
-                            original_batch_number = batch_log.batch_number
-                            
-                            if batch_id is None:
-                                print(f"  ⚠️ 배치 로그 저장 실패: {original_batch_number} → 숫자로 사용")
-                                # 실패 시 원래 번호를 숫자로 변환 (문자열이면 0)
-                                if isinstance(original_batch_number, int):
+                        logger.info(f"📊 배치 로그 및 문항 저장 시작: {len(batch_log_data)}개 배치")
+                        
+                        from app.db.database import get_db_connection
+                        with get_db_connection() as connection:
+                            for batch_log in batch_log_data:
+                                # 배치 로그 DB 저장 후 ID 반환
+                                batch_id = save_batch_log(
+                                    batch_log_data=batch_log.model_dump(),
+                                    project_id=project_id,
+                                    connection=connection
+                                )
+                                
+                                # 원래 batch_number와 DB의 batch_id 매핑
+                                original_batch_number = batch_log.batch_number
+                                
+                                if batch_id is None:
+                                    logger.warning(f"  ⚠️ 배치 로그 저장 실패: {original_batch_number}")
                                     batch_index_mapping[original_batch_number] = original_batch_number
                                 else:
-                                    try:
-                                        batch_index_mapping[original_batch_number] = int(original_batch_number)
-                                    except:
-                                        batch_index_mapping[original_batch_number] = 0
-                                batch_log_success = False
-                            else:
-                                batch_index_mapping[original_batch_number] = batch_id
-                                print(f"  ✅ 배치 로그 저장: {original_batch_number} → DB ID {batch_id}")
-                        
-                        if not batch_log_success:
-                            print(f"⚠️ 일부 배치 로그 저장 실패 - 원래 번호 사용")
-                        print(f"📊 배치 매핑 테이블: {batch_index_mapping}")
-                        print("--------------------------------")
-                        
-                        # 2단계: 각 question의 batch_index를 DB ID로 업데이트
-                        for question in result.questions:
-                            original_batch_index = None
+                                    batch_index_mapping[original_batch_number] = batch_id
                             
-                            # 기존 batch_index 값 가져오기
-                            if hasattr(question, 'batch_index'):
-                                original_batch_index = question.batch_index
-                            elif isinstance(question, dict) and 'batch_index' in question:
-                                original_batch_index = question['batch_index']
-                            
-                            print(f"  🔍 문항 {question.question_id}: 원래 batch_index={original_batch_index} (타입: {type(original_batch_index).__name__})")
-                            
-                            # 매핑 테이블에서 새 batch_id 찾아서 업데이트
-                            if original_batch_index in batch_index_mapping:
-                                new_batch_id = batch_index_mapping[original_batch_index]
+                            # 2단계: 각 question의 batch_index를 DB ID로 업데이트
+                            for question in result.questions:
+                                original_batch_index = getattr(question, 'batch_index', None)
                                 
-                                if hasattr(question, 'batch_index'):
+                                # 매핑 테이블에서 새 batch_id 찾아서 업데이트
+                                if original_batch_index in batch_index_mapping:
+                                    new_batch_id = batch_index_mapping[original_batch_index]
                                     question.batch_index = new_batch_id
-                                elif isinstance(question, dict) and 'batch_index' in question:
-                                    question['batch_index'] = new_batch_id
-                                
-                                print(f"  ✅ 문항 {question.question_id}: batch_index {original_batch_index} → {new_batch_id}")
-                            else:
-                                print(f"  ⚠️ 문항 {question.question_id}: batch_index {original_batch_index}가 매핑 테이블에 없음!")
-                                print(f"     매핑 테이블 키: {list(batch_index_mapping.keys())}")
-                        
-                        print("--------------------------------")
-                        
-                        # 3단계: 업데이트된 questions를 DB에 저장
-                        # batch_index가 정수인 문항만 필터링
-                        valid_questions = []
-                        for question in result.questions:
-                            batch_idx = question.batch_index if hasattr(question, 'batch_index') else None
-                            if batch_idx is not None and isinstance(batch_idx, int):
-                                valid_questions.append(question)
-                            else:
-                                print(f"  ⚠️ 문항 {question.question_id} 건너뜀: batch_index={batch_idx} (정수 아님)")
-                        
-                        if len(valid_questions) < len(result.questions):
-                            print(f"⚠️ {len(result.questions) - len(valid_questions)}개 문항이 유효하지 않은 batch_index로 인해 제외됨")
-                        
-                        questions_data = [question.model_dump() for question in valid_questions]
-                        
-                        # 데이터 확인 (첫 번째 문항만)
-                        if questions_data:
-                            print(f"📝 저장할 데이터 샘플 (첫 번째 문항):")
-                            sample = questions_data[0]
-                            print(f"  - batch_index: {sample.get('batch_index')}")
-                            print(f"  - question_text.text: {sample.get('question_text', {}).get('text', 'N/A')[:50]}...")
-                            print(f"  - correct_answer: {sample.get('correct_answer')}")
-                            print(f"  - explanation: {sample.get('explanation', 'N/A')[:50]}...")
-                            print(f"  - is_used: {sample.get('is_used')}")
-                            print(f"  - project_id: {project_id}")
-                        
-                        saved_ids = save_questions_batch_to_db(
-                            questions_data=questions_data,
-                            project_id=project_id,
-                            config_id=config_id
-                        )
+                            
+                            # 3단계: 업데이트된 questions를 DB에 저장
+                            valid_questions = []
+                            for question in result.questions:
+                                batch_idx = getattr(question, 'batch_index', None)
+                                if isinstance(batch_idx, int):
+                                    valid_questions.append(question.model_dump())
+                            
+                            saved_ids = []
+                            question_type = getattr(requests[0], 'question_type', None)
+                            if valid_questions:
+                                saved_ids = save_questions_batch_to_db(
+                                    questions_data=valid_questions,
+                                    question_type=question_type,
+                                    project_id=project_id,
+                                    config_id=config_id,
+                                    connection=connection
+                                )
+                            
+                            connection.commit()
+                            logger.info("✅ 모든 배치 로그 및 문항 저장 완료")
 
-                        ## 📢 project 테이블 상태값 업데이트
-                        update_project_status(project_id, "COMPLETED")
+                            ## 📢 project 테이블 상태값 업데이트
+                            update_project_status(project_id, "COMPLETED", connection=connection)
+                            logger.info(f"✅ 프로젝트 상태 업데이트 완료: {project_id} (COMPLETED)")
                         
                         # 반환된 DB ID를 문항 객체에 매핑
-                        for question, db_id in zip(result.questions, saved_ids):
-                            if db_id:
-                                question.db_question_id = db_id
+                        saved_idx = 0
+                        for question in result.questions:
+                            batch_idx = getattr(question, 'batch_index', None)
+                            if isinstance(batch_idx, int) and saved_idx < len(saved_ids):
+                                db_id = saved_ids[saved_idx]
+                                if db_id:
+                                    question.db_question_id = db_id
+                                saved_idx += 1
                         
-                        print(f"✅ 배치 {idx+1} 문항 저장 완료: {len(saved_ids)}개 (DB ID 샘플: {[id for id in saved_ids[:3] if id]})")
+                        logger.info(f"✅ 배치 {idx+1} 문항 저장 완료: {len(saved_ids)}개 (DB ID 샘플: {[id for id in saved_ids[:3] if id]})")
                         
                     except Exception as e:
-                        print(f"❌ 배치 {idx+1} DB 저장 실패: {e}")
-                        import traceback
-                        traceback.print_exc()
+                        # connection 인자 제거
+                        update_project_status(project_id, "FAILED")
+                        logger.error(f"❌ 배치 {idx+1} DB 저장 실패: {e}", exc_info=True)
                 else:
-                    print(f"⚠️ 배치 {idx+1}은 생성 실패하여 DB 저장 생략")
+                    logger.warning(f"⚠️ 배치 {idx+1}은 생성 실패하여 DB 저장 생략")
             
-            print(f"🎉 배치 문항 생성 및 DB 저장 완료!")
-            
+            logger.info(f"🎉 배치 문항 생성 및 DB 저장 완료!")
+
+            # ✉️ 완료 메일 전송
+            try:
+                # 성공/실패 집계
+                success_count = sum(
+                    1 for r in results 
+                    if isinstance(r, QuestionGenerationSuccessResponse) and r.success
+                )
+                total_count = len(results)
+                total_questions = sum(
+                    r.total_questions for r in results 
+                    if isinstance(r, QuestionGenerationSuccessResponse) and r.success
+                )
+                
+                # 프로젝트 이름 및 ID 가져오기 (첫 번째 요청에서)
+                project_name = getattr(requests[0], 'project_name', None) if requests else None
+                project_id = getattr(requests[0], 'project_id', None) if requests else None
+                if not project_name:
+                    project_name = "알 수 없는 프로젝트"
+                
+                # 결과 URL 생성
+                from app.core.config import settings
+                result_url = None
+                if project_id:
+                    # CORS origins 중 첫 번째를 베이스 URL로 사용
+                    base_url = settings.cors_origins.split(",")[0]
+                    result_url = f"{base_url}/question-result/{project_id}"
+                
+                # 사용자 이메일 가져오기
+                user_email = self._get_user_email(user_id)
+                
+                if user_email:
+                    email_client = get_email_client()
+                    
+                    if success_count > 0:
+                        email_sent = email_client.send_success_email(
+                            to_address=user_email,
+                            project_name=project_name,
+                            success_count=success_count,    
+                            total_count=total_count,
+                            total_questions=total_questions,
+                            result_url=result_url
+                        )
+                        
+                        if email_sent:
+                            logger.info(f"📧 완료 메일 전송 성공: {user_email}")
+                        else:
+                            logger.warning(f"📧 완료 메일 전송 실패: {user_email}")
+                    else:
+
+                        # 성공 건수가 0인 경우 실패 메일 전송
+                        # connection 객체 없이 호출 (내부에서 생성)
+                        update_project_status(project_id, "FAILED")
+                        logger.warning(f"⚠️ 성공한 배치가 없음 - 실패 메일 전송")
+                        email_client.send_failure_email(
+                            to_address=user_email,
+                            project_name=project_name,
+                            error_message="문항 생성에 실패했습니다. 생성된 문항이 없습니다."
+                        )
+                        logger.info(f"📧 실패 메일 전송 완료: {user_email}")
+                else:
+                    logger.warning(f"⚠️ 사용자 이메일을 찾을 수 없음: user_id={user_id}")
+                    
+            except Exception as e:
+                logger.error(f"⚠️ 완료 메일 전송 중 오류 발생 (작업은 성공): {e}")
+
         except Exception as e:
-            print(f"❌ 배치 백그라운드 작업 중 오류 발생: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ 배치 백그라운드 작업 중 오류 발생: {e}", exc_info=True)
+            
+            # ✉️ 실패 메일 전송
+            try:
+                # 안전하게 정보 추출
+                project_name = "알 수 없는 프로젝트"
+                project_id = None
+                
+                if requests and len(requests) > 0:
+                    first_req = requests[0]
+                    project_name = getattr(first_req, 'project_name', "알 수 없는 프로젝트")
+                    project_id = getattr(first_req, 'project_id', None)
+                
+                logger.info(f"실패 처리 시작: project_id={project_id}, project_name={project_name}, user_id={user_id}")
+
+                if project_id:
+                    try:
+                        update_project_status(project_id, "FAILED")
+                        logger.info(f"프로젝트 상태 업데이트 완료: {project_id} -> FAILED")
+                    except Exception as db_err:
+                        logger.error(f"프로젝트 상태 업데이트 실패: {db_err}")
+
+                user_email = self._get_user_email(user_id)
+                if user_email:
+                    logger.info(f"실패 메일 전송 시도: {user_email}")
+                    email_client = get_email_client()
+                    is_sent = email_client.send_failure_email(
+                        to_address=user_email,
+                        project_name=project_name,
+                        error_message=str(e)
+                    )
+                    if is_sent:
+                        logger.info(f"📧 실패 메일 전송 완료: {user_email}")
+                    else:
+                        logger.error(f"⚠️ 실패 메일 전송 실패 (Send return False): {user_email}")
+                else:
+                    logger.warning(f"⚠️ 사용자 이메일을 찾을 수 없어 실패 메일 전송 불가: user_id={user_id}")
+                    
+            except Exception as email_error:
+                logger.error(f"⚠️ 실패 메일 전송 중 치명적 오류 발생: {email_error}", exc_info=True)
+    
+    def _get_user_email(self, user_id: str) -> Optional[str]:
+        """
+        사용자 ID로 이메일 주소 조회
+        
+        Args:
+            user_id: 사용자 ID
+            
+        Returns:
+            Optional[str]: 사용자 이메일 (없으면 None)
+        """
+        try:
+            from app.db.database import select_one
+            
+            logger.info("사용자 이메일 조회: user_id=%s", user_id)
+            
+            # select_one 사용 (훨씬 간단!)
+            user = select_one(
+                table="users",
+                where={"user_id": user_id, "is_active": 1},
+                columns="email"
+            )
+            
+            if user and user.get('email'):
+                return user['email']
+            else:
+                logger.warning("사용자를 찾을 수 없음: user_id=%s", user_id)
+                return None
+                
+        except Exception as e:
+            logger.warning("사용자 이메일 조회 실패: %s", e)
+            return None
     
     async def generate_async(
         self,
@@ -206,6 +309,7 @@ class QuestionGenerationTask:
             return result
             
         except Exception as e:
+            logger.exception("비동기 문항 생성 중 오류")
             # 에러 처리
             if callback_url:
                 from app.schemas.question_generation import (
@@ -233,7 +337,7 @@ class QuestionGenerationTask:
                 await client.post(callback_url, json=result.dict())
         except Exception as e:
             # 콜백 실패는 로깅만 (작업 자체는 성공)
-            print(f"콜백 전송 실패: {e}")
+            logger.warning("콜백 전송 실패: %s", e)
 
 
 # Celery를 사용하는 경우 (선택사항)

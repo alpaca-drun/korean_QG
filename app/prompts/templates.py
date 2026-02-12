@@ -1,63 +1,25 @@
-from typing import Dict, Any, Optional
+from typing import Optional
+from pathlib import Path
 from app.schemas.question_generation import QuestionGenerationRequest
-from app.prompts.writing_prompts import WRITING_SYSTEM_PROMPT, WRITING_USER_PROMPT_TEMPLATE
-from app.prompts.listening_speaking_prompts import LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT, LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
+from app.prompts.common_templates import (
+    COMMON_SYSTEM_PROMPT, 
+    COMMON_USER_PROMPT,
+    COMMON_SYSTEM_PROMPT_SHORT_ANSWER, 
+    COMMON_USER_PROMPT_SHORT_ANSWER
+)
+from app.core.logger import logger
+
+# difficulty.md 파일 읽어오기
+current_dir = Path(__file__).parent
+difficulty_path = current_dir / "difficulty.md"
+
+with open(difficulty_path, "r", encoding="utf-8") as f:
+    difficulty_content = f.read()
+    logger.debug("difficulty_content: %s", difficulty_content)
 
 
 class PromptTemplate:
     """프롬프트 템플릿 관리"""
-    
-    BASE_TEMPLATE = """
-당신은 교육 문항 생성 전문가입니다. 주어진 지문과 교육과정 정보를 바탕으로 고품질의 객관식 문항을 생성해주세요.
-
-## 지문
-{passage}
-
-## 학습목표
-{learning_objective}
-
-## 교육과정 정보
-- 성취기준: {achievement_standard}
-- 대상학년: {grade_level}
-- 대단원: {main_unit}
-- 소단원: {sub_unit}
-
-## 요구사항
-1. 생성할 문항 수: {generation_count}개
-2. 각 문항은 4-5개의 선지를 가져야 합니다.
-3. 정답과 해설을 포함해야 합니다.
-4. 지문을 원본 그대로 사용하거나 변형하여 사용할 수 있습니다.
-5. 보기를 포함할 수 있습니다.
-
-## 출력 형식
-JSON 형식으로 출력해주세요:
-{{
-  "questions": [
-    {{
-      "question_id": "고유ID",
-      "question_number": 1,
-      "passage_info": {{
-        "original_used": true/false,
-        "source_type": "original/modified/none"
-      }},
-      "question_text": {{
-        "text": "발문 내용",
-        "modified_passage": "변형된 지문 (있는 경우)",
-        "box_content": "보기 내용 (있는 경우)"
-      }},
-      "choices": [
-        {{"number": 1, "text": "선지1"}},
-        {{"number": 2, "text": "선지2"}},
-        {{"number": 3, "text": "선지3"}},
-        {{"number": 4, "text": "선지4"}},
-        {{"number": 5, "text": "선지5"}}
-      ],
-      "correct_answer": "정답 번호",
-      "explanation": "해설"
-    }}
-  ]
-}}
-"""
     
     @classmethod
     def build_prompt(
@@ -77,6 +39,8 @@ JSON 형식으로 출력해주세요:
         Returns:
             (system_prompt, user_prompt) 튜플
         """
+
+        logger.debug("question_type: %s", request.question_type)
         # 성취기준 정보 텍스트 생성 (여러 개일 수 있음)
         achievement_text = ""
         if request.curriculum_info and len(request.curriculum_info) > 0:
@@ -91,29 +55,43 @@ JSON 형식으로 출력해주세요:
                 )
         else:
             achievement_text = "성취기준 정보 없음"
-        print("🟣🟣🟣")
-        print(achievement_text)
+        logger.debug("achievement_text: %s", achievement_text)
 
-        # 매체 타입에 따라 프롬프트 선택
         if system_prompt is None:
-            if request.study_area == "매체":
-                system_prompt_template = WRITING_SYSTEM_PROMPT
-            elif request.study_area == "말하기/듣기":
-                system_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_SYSTEM_PROMPT
+            if request.question_type == "5지선다":
+                system_prompt_template = COMMON_SYSTEM_PROMPT
+            elif request.question_type == "단답형":
+                system_prompt_template = COMMON_SYSTEM_PROMPT_SHORT_ANSWER
             else:
-                # 기본 프롬프트 (다른 매체 타입은 추후 추가)
-                system_prompt_template = cls.BASE_TEMPLATE
-        
-        # media_type에 따라 프롬프트 템플릿 변경
+                system_prompt_template = COMMON_SYSTEM_PROMPT
         if user_prompt_template is None:
-            if request.study_area == "매체":
-                user_prompt_template = WRITING_USER_PROMPT_TEMPLATE
-            elif request.study_area == "말하기/듣기":
-                user_prompt_template = LISTENING_SPEAKING_MULTIPLE_CHOICE_USER_PROMPT
+            if request.question_type == "5지선다":
+                user_prompt_template = COMMON_USER_PROMPT
+            elif request.question_type == "단답형":
+                user_prompt_template = COMMON_USER_PROMPT_SHORT_ANSWER
             else:
-                # 기본 템플릿
-                user_prompt_template = cls.BASE_TEMPLATE
-        
+                user_prompt_template = COMMON_USER_PROMPT
+
+        # 사용자 발문 유형 처리
+        stem_directive = getattr(request, 'stem_directive', None)
+        if stem_directive:
+            # 사용자가 발문 유형을 입력한 경우, 해당 유형을 우선순위로 추가
+            stem_directive_section = f'\n\n**💡 사용자 요청 발문 유형 (최우선 적용):**\n- "{stem_directive}"\n\n위 발문 유형을 최우선으로 적용하되, 필요 시 아래 예시도 참고하라:\n'
+            stem_directive_instruction = f'\n4. **🎯 중요:** 사용자가 요청한 발문 유형 "{stem_directive}"을 최우선으로 적용하여 문항을 출제하라.'
+        else:
+            stem_directive_section = '\n'
+            stem_directive_instruction = ''
+
+        # 사용자 추가 요구사항 처리
+        additional_prompt = getattr(request, 'additional_prompt', None)
+        if additional_prompt:
+            # 사용자의 추가 요구사항을 프롬프트에 반영하되, 무조건 따르지 않도록 주의 문구 포함
+            additional_prompt_section = f'\n\n## 사용자 추가 요구사항\n\n사용자가 다음과 같은 추가 요구사항을 제시했습니다:\n\n"{additional_prompt}"\n\n**⚠️ 적용 지침:**\n- 위 요구사항을 참고하되, 교육과정 성취기준과 출제 원칙에 부합하는 범위 내에서만 반영한다.\n- 요구사항이 출제 원칙이나 학습목표와 상충되는 경우, 교육과정 성취기준을 우선한다.\n- 요구사항이 합리적이고 교육적으로 타당한 경우에만 적용한다.\n'
+            additional_prompt_instruction = f'\n5. 사용자의 추가 요구사항을 참고하되, 교육과정 성취기준과 출제 원칙을 우선하여 합리적으로 판단하여 반영하라.'
+        else:
+            additional_prompt_section = ''
+            additional_prompt_instruction = ''
+
         # 사용자 프롬프트에 변수 채우기
         # 프롬프트에서는 항상 10문항씩 생성하도록 고정
         # question_count와 generation_count 둘 다 전달 (템플릿에 따라 다름)
@@ -123,59 +101,32 @@ JSON 형식으로 출력해주세요:
             semester=request.semester,
             large_unit_name=request.large_unit,
             small_unit_name=request.small_unit,
+            study_area=request.study_area,
             achievement_text=achievement_text,
             learning_objective=request.learning_objective,
             learning_activity=getattr(request, 'learning_activity', ''),
             learning_element=getattr(request, 'learning_element', ''),
-            passage=request.passage
+            passage=request.passage,
+            passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
+            passage_author=request.passage_author if hasattr(request, 'passage_author') else None,
+            difficulty_content=difficulty_content,
+            stem_directive_section=stem_directive_section,
+            additional_prompt_section=additional_prompt_section
         )
         user_prompt = user_prompt_template.format(
-            school_level=request.school_level if hasattr(request, 'school_level') else None,
-            grade_level=request.grade_level if hasattr(request, 'grade_level') else None,
-            semester=request.semester if hasattr(request, 'semester') else None,
+            school_level=request.school_level,
+            grade_level=request.grade_level,
+            semester=request.semester,
             generation_count=request.generation_count,
+            study_area=request.study_area,
             passage=request.passage,
             learning_objective=request.learning_objective,
             learning_activity=getattr(request, 'learning_activity', ''),
-            learning_element=getattr(request, 'learning_element', '')
+            learning_element=getattr(request, 'learning_element', ''),
+            stem_directive=stem_directive or "",
+            stem_directive_instruction=stem_directive_instruction,
+            additional_prompt_instruction=additional_prompt_instruction
         )
 
         return system_prompt, user_prompt
-    
-    @classmethod
-    def build_custom_prompt(
-        cls,
-        passage: str,
-        learning_objective: str,
-        curriculum_info: Dict[str, Any],
-        generation_count: int,
-        custom_instructions: str = ""
-    ) -> str:
-        """
-        커스텀 프롬프트 생성
-        
-        Args:
-            passage: 지문
-            learning_objective: 학습목표
-            curriculum_info: 교육과정 정보 딕셔너리
-            generation_count: 생성할 문항 수
-            custom_instructions: 추가 지시사항
-            
-        Returns:
-            완성된 프롬프트 문자열
-        """
-        prompt = cls.BASE_TEMPLATE.format(
-            passage=passage,
-            learning_objective=learning_objective,
-            achievement_standard=curriculum_info.get("achievement_standard", ""),
-            grade_level=curriculum_info.get("grade_level", ""),
-            main_unit=curriculum_info.get("main_unit", ""),
-            sub_unit=curriculum_info.get("sub_unit", ""),
-            generation_count=generation_count
-        )
-        
-        if custom_instructions:
-            prompt += f"\n\n## 추가 지시사항\n{custom_instructions}"
-        
-        return prompt
 

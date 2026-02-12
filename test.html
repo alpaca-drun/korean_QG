@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 페이지 - 국어 문항 생성 프로젝트</title>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+            --bg-body: #f3f4f6;
+            --bg-card: #ffffff;
+            --border-color: #e5e7eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* 사이드바 */
+        .sidebar {
+            width: 250px;
+            background-color: #111827;
+            color: white;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 40px;
+            color: #fff;
+        }
+
+        .menu-item {
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 5px;
+            transition: 0.2s;
+            color: #9ca3af;
+        }
+
+        .menu-item:hover, .menu-item.active {
+            background-color: #374151;
+            color: white;
+        }
+
+        /* 메인 컨텐츠 */
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+        }
+
+        /* 통계 카드 섹션 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .stat-title {
+            color: var(--text-sub);
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--text-main);
+        }
+
+        /* 필터 및 테이블 섹션 */
+        .table-container {
+            background: var(--bg-card);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .team-filter {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            color: var(--text-sub);
+            font-weight: 600;
+            border-bottom: 2px solid var(--bg-body);
+            font-size: 0.9rem;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        /* 유저 정보 스타일 */
+        .user-info div:first-child {
+            font-weight: 600;
+        }
+        .user-info div:last-child {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+        }
+
+        /* 권한 선택 Select */
+        .role-select {
+            padding: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        /* 상태 뱃지 */
+        .badge {
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .badge.active {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge.suspended {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* 액션 버튼 */
+        .btn-action {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: 0.2s;
+        }
+
+        .btn-revoke {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+        .btn-revoke:hover { background-color: #fca5a5; }
+
+        .btn-restore {
+            background-color: #dbeafe;
+            color: #2563eb;
+        }
+        .btn-restore:hover { background-color: #93c5fd; }
+
+    </style>
+</head>
+<body>
+
+    <nav class="sidebar">
+        <div class="logo">K-Question Admin</div>
+        <div class="menu-item active">사용자 관리</div>
+        <div class="menu-item">팀 설정</div>
+        <div class="menu-item">토큰 통계</div>
+        <div class="menu-item" style="margin-top: auto;">로그아웃</div>
+    </nav>
+
+    <main class="main-content">
+        <header class="header">
+            <h1>사용자 권한 및 토큰 관리</h1>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-weight: bold;">현동호(Admin)</span>
+                <div style="width: 32px; height: 32px; background: #ddd; border-radius: 50%;"></div>
+            </div>
+        </header>
+
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">전체 사용자</div>
+                <div class="stat-value" id="totalUsers">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">이번 달 총 토큰 사용량</div>
+                <div class="stat-value" id="totalTokens">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">활성 사용자 비율</div>
+                <div class="stat-value" id="activeRatio">0%</div>
+            </div>
+        </section>
+
+        <section class="table-container">
+            <div class="controls">
+                <h3 style="margin: auto 0;">팀별 조회</h3>
+                <select id="teamFilter" class="team-filter">
+                    <option value="all">전체 팀 보기</option>
+                    <option value="콘텐츠기획팀">콘텐츠기획팀</option>
+                    <option value="국어개발팀">국어개발팀</option>
+                    <option value="수학개발팀">수학개발팀</option>
+                </select>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>사용자 정보</th>
+                        <th>소속 팀</th>
+                        <th>권한(Role)</th>
+                        <th>누적 토큰 사용량</th>
+                        <th>상태</th>
+                        <th>관리</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script>
+        // 1. Mock Data (실제 DB 데이터 예시)
+        let users = [
+            { id: 1, name: '현동호', email: 'hdh@chunjae.co.kr', team: '콘텐츠기획팀', role: 'admin', tokenUsage: 25400, status: 'active' },
+            { id: 2, name: '김철수', email: 'kim@chunjae.co.kr', team: '국어개발팀', role: 'editor', tokenUsage: 12000, status: 'active' },
+            { id: 3, name: '이영희', email: 'lee@chunjae.co.kr', team: '국어개발팀', role: 'viewer', tokenUsage: 450, status: 'suspended' },
+            { id: 4, name: '박민수', email: 'park@chunjae.co.kr', team: '수학개발팀', role: 'editor', tokenUsage: 8900, status: 'active' },
+            { id: 5, name: '최지은', email: 'choi@chunjae.co.kr', team: '콘텐츠기획팀', role: 'viewer', tokenUsage: 2100, status: 'active' }
+        ];
+
+        // 2. DOM 요소 선택
+        const tableBody = document.getElementById('userTableBody');
+        const teamFilter = document.getElementById('teamFilter');
+        const totalUsersEl = document.getElementById('totalUsers');
+        const totalTokensEl = document.getElementById('totalTokens');
+        const activeRatioEl = document.getElementById('activeRatio');
+
+        // 3. 렌더링 함수
+        function renderTable(filterTeam = 'all') {
+            tableBody.innerHTML = '';
+            
+            // 필터링
+            const filteredUsers = filterTeam === 'all' 
+                ? users 
+                : users.filter(user => user.team === filterTeam);
+
+            // 통계 업데이트
+            updateStats(filteredUsers);
+
+            // 테이블 로우 생성
+            filteredUsers.forEach(user => {
+                const tr = document.createElement('tr');
+                
+                tr.innerHTML = `
+                    <td>
+                        <div class="user-info">
+                            <div>${user.name}</div>
+                            <div>${user.email}</div>
+                        </div>
+                    </td>
+                    <td>${user.team}</td>
+                    <td>
+                        <select class="role-select" onchange="changeRole(${user.id}, this.value)">
+                            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>관리자 (Admin)</option>
+                            <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>편집자 (Editor)</option>
+                            <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>뷰어 (Viewer)</option>
+                        </select>
+                    </td>
+                    <td>${user.tokenUsage.toLocaleString()} T</td>
+                    <td>
+                        <span class="badge ${user.status}">
+                            ${user.status === 'active' ? '사용중' : '사용정지'}
+                        </span>
+                    </td>
+                    <td>
+                        <button 
+                            class="btn-action ${user.status === 'active' ? 'btn-revoke' : 'btn-restore'}"
+                            onclick="toggleStatus(${user.id})">
+                            ${user.status === 'active' ? '사용권 박탈' : '권한 복구'}
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // 4. 통계 계산 함수
+        function updateStats(data) {
+            const total = data.length;
+            const totalToken = data.reduce((acc, cur) => acc + cur.tokenUsage, 0);
+            const activeCount = data.filter(u => u.status === 'active').length;
+            
+            totalUsersEl.innerText = total + '명';
+            totalTokensEl.innerText = totalToken.toLocaleString();
+            activeRatioEl.innerText = total === 0 ? '0%' : Math.round((activeCount / total) * 100) + '%';
+        }
+
+        // 5. 이벤트 핸들러 기능들
+
+        // 권한 변경
+        window.changeRole = (id, newRole) => {
+            const user = users.find(u => u.id === id);
+            if(user) {
+                user.role = newRole;
+                // 실제 API 호출 로직이 들어갈 자리
+                console.log(`[API Call] User ${id} role changed to ${newRole}`);
+                alert(`${user.name}님의 권한이 ${newRole}(으)로 변경되었습니다.`);
+            }
+        };
+
+        // 상태 변경 (박탈/복구)
+        window.toggleStatus = (id) => {
+            const user = users.find(u => u.id === id);
+            if(user) {
+                const newStatus = user.status === 'active' ? 'suspended' : 'active';
+                const actionName = newStatus === 'active' ? '복구' : '박탈';
+                
+                if(confirm(`${user.name}님의 사용권을 ${actionName} 하시겠습니까?`)) {
+                    user.status = newStatus;
+                    // 실제 API 호출 로직이 들어갈 자리
+                    renderTable(teamFilter.value); // 화면 갱신
+                }
+            }
+        };
+
+        // 팀 필터 변경 이벤트
+        teamFilter.addEventListener('change', (e) => {
+            renderTable(e.target.value);
+        });
+
+        // 초기 렌더링
+        renderTable();
+
+    </script>
+</body>
+</html>

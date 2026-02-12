@@ -36,7 +36,10 @@ class QuestionGenerationRequest(BaseModel):
     """문항 생성 요청 스키마"""
     config_id: int = Field(..., description="설정 ID")
     project_id: int = Field(..., description="프로젝트 ID")
+    project_name: Optional[str] = Field(None, description="프로젝트 이름 (메일 전송용)")
     passage: str = Field(..., description="원본 지문 텍스트")
+    passage_title: Optional[str] = Field(None, description="작품 이름")
+    passage_author: Optional[str] = Field(None, description="작품 저자")
     learning_objective: str = Field(..., description="학습목표")
     learning_activity: str = Field(default="", description="학습활동")
     learning_element: str = Field(default="", description="학습요소")
@@ -49,6 +52,12 @@ class QuestionGenerationRequest(BaseModel):
     curriculum_info: List[CurriculumInfo] = Field(..., description="교육과정 정보")
     generation_count: int = Field(..., ge=1, le=50, description="생성할 문항 수", example=15)
     study_area: str = Field(default="writing", description="매체 타입 (writing, speaking, listening, reading)", example="writing")
+    
+    # 문항 생성 관련 필드
+    question_type: str = Field(..., description="문항유형(예:5지선다)")
+    stem_directive: Optional[str] = Field(None, description="발문 유형(예:~로 옳은것은)")
+    use_negative_word: bool = Field(default=False, description="부정어 사용 여부")
+    additional_prompt: Optional[str] = Field(None, description="추가 지시사항 (선택사항)")
     file_paths: Optional[List[str]] = Field(
         None, 
         description="업로드할 파일 경로 리스트 (파일명 또는 상대 경로, school_level에 따라 자동으로 분리된 폴더 사용)",
@@ -74,6 +83,10 @@ class QuestionGenerationRequest(BaseModel):
                 }],
                 "generation_count": 30,
                 "study_area": "writing",
+                "question_type": "5지선다",
+                "stem_directive": "~로 옳은것은",
+                "use_negative_word": False,
+                "additional_prompt": "추가 지시사항",
                 "file_paths": ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"],
                 "file_display_names": ["교과서론 1권", "교과서론 2권"]
             }
@@ -124,8 +137,8 @@ class Question(BaseModel):
     question_number: int = Field(..., description="문제번호")
     passage_info: PassageInfo = Field(..., description="지문 정보")
     question_text: QuestionText = Field(..., description="문제 텍스트")
-    choices: List[Choice] = Field(..., description="선지 목록", min_length=4, max_length=5)
-    correct_answer: str = Field(..., description="정답 여러개인경우 ,로구분(1,2,3,4,5) ")
+    choices: Optional[List[Choice]] = Field(None, description="선지 목록 (5지선다: 4~5개, 단답형: null)")
+    correct_answer: str = Field(..., description="정답 (5지선다: 번호, 단답형: 텍스트, 여러개인경우 ,로구분)")
     explanation: str = Field(..., description="해설")
     db_question_id: Optional[int] = Field(None, description="데이터베이스에 저장된 문항 ID")
     batch_index: Optional[Union[int, str]] = Field(None, description="배치 인덱스 (숫자 또는 'retry_N')")
@@ -138,8 +151,8 @@ class LLMQuestion(BaseModel):
     """LLM이 생성하는 단일 문항 모델"""
     question_text: str = Field(..., description="문제 문장, 지문 제외")
     reference_text: Optional[str] = Field(default=None, description="보기 내용 (있는 경우)")
-    choices: List[Choice] = Field(..., description="5개의 선지 목록")
-    correct_answer: str = Field(..., description="정답  여러개인경우 ,로구분(1,2,3,4,5)")
+    choices: Optional[List[Choice]] = Field(None, description="선지 목록 (5지선다: 5개, 단답형: null)")
+    correct_answer: str = Field(..., description="정답 (5지선다: 번호 1~5, 단답형: 답안 텍스트, 복수 답안은 쉼표로 구분)")
     explanation: str = Field(..., description="정답 해설 및 오답 피하기를 포함한 해설")
     passage: Optional[str] = Field(default=None, description="필요한 경우 작성하며 줄바꿈(\\n)을 포함하여 가독성 있게 작성해야 한다.")
     llm_difficulty: Optional[int] = Field(default=None, description="문항 난이도 (1: 쉬움, 2: 보통, 3: 어려움)")

@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     result,
     dashboard,
     scopes,
+    admin,
 )
 
 api_router = APIRouter()
@@ -69,3 +70,8 @@ api_router.include_router(
     tags=["결과 관리"]
 )
 
+api_router.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["관리자 페이지"]
+)

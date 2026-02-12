@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends
+from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends, status
 from typing import Optional, List
 import json
 from app.schemas.question_generation import (
@@ -13,7 +13,7 @@ from app.schemas.question_generation import (
 from app.services.question_generation_service import QuestionGenerationService
 from app.tasks.question_generation_task import QuestionGenerationTask
 from app.utils.dependencies import get_current_user
-
+from app.core.logger import logger
 from app.db.generate import get_generation_config, update_project_status, update_project_generation_config
 
 router = APIRouter()
@@ -21,14 +21,14 @@ router = APIRouter()
 @router.post(
     "/batch",
     response_model=List[QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse],
-    summary="배치 문항 생성 (동기)",
+    summary="배치 문항 생성 (동기)(미사용)",
     description="여러 문항 생성 요청을 배치로 처리합니다. (결과를 즉시 반환)",
     tags=["문항 생성"]
 )
 async def generate_questions_batch(
     requests: List[QuestionGeneration],
     provider: Optional[str] = Query(None, description="LLM 제공자", example="gemini"),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     배치 문항 생성 API (동기 처리)
@@ -82,23 +82,23 @@ async def generate_questions_batch(
         obj_dict["small_unit"] = generation_configs.get("small_unit_name") or ""
         obj_dict["generation_count"] = request.target_count
         obj_dict["study_area"] = generation_configs.get("study_area")
-        obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
-        obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
+        # obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
+        # obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
 
 
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
-        print("🟣")
-        print(question_generation_requests)
+        logger.debug("question_generation_requests: %s", question_generation_requests)
 
+    user_id, role = user_data
     service = QuestionGenerationService()
-    results = await service.generate_questions_batch(question_generation_requests, current_user_id, provider)
+    results = await service.generate_questions_batch(question_generation_requests, str(user_id), provider)
     
     return results
 
 
 @router.post(
     "/batch-async",
-    response_model=BatchJobStartResponse | BatchJobErrorResponse,
+    response_model=BatchJobStartResponse,
     summary="배치 문항 생성 (비동기)",
     description="여러 문항 생성 요청을 백그라운드에서 처리합니다. 완료 후 자동으로 DB에 저장됩니다.",
     tags=["문항 생성"]
@@ -107,7 +107,7 @@ async def generate_questions_batch_async(
     background_tasks: BackgroundTasks,
     requests: QuestionGeneration,
     provider: Optional[str] = Query(None, description="LLM 제공자", example="gemini"),
-    current_user_id: str = Depends(get_current_user)
+    user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
     배치 문항 생성 API (비동기 처리)
@@ -121,23 +121,41 @@ async def generate_questions_batch_async(
     try:
         # 요청 검증
         if requests.target_count > 30:
-            return BatchJobErrorResponse(
-                success=False,
-                message="요청 문항수는 최대 30개까지 가능합니다.",
-                error=ErrorDetail(
-                    code="VALIDATION_ERROR",
-                    message="요청 문항수는 최대 30개까지 가능합니다."
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "message": "요청 문항수는 최대 30개까지 가능합니다.",
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "요청 문항수는 최대 30개까지 가능합니다."
+                    }
+                }
             )
         
         # QuestionGeneration 객체를 QuestionGenerationRequest로 변환
         question_generation_requests = []
         ## DB에서 프로젝트 정보 조회
         generation_configs = get_generation_config(requests.project_id)
-
+        
+        # generation_configs가 None인 경우 처리
+        if not generation_configs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "success": False,
+                    "message": f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                    "error": {
+                        "code": "PROJECT_NOT_FOUND",
+                        "message": f"프로젝트 ID {requests.project_id}의 설정을 찾을 수 없습니다.",
+                        "details": "프로젝트가 존재하지 않거나 설정이 완료되지 않았습니다."
+                    }
+                }
+            )
         
         obj_dict = requests.model_dump()
         obj_dict["config_id"] = generation_configs.get("config_id")
+        obj_dict["project_name"] = generation_configs.get("project_name", "알 수 없는 프로젝트")
         obj_dict["passage"] = generation_configs.get("passage")
         obj_dict["learning_objective"] = generation_configs.get("learning_objective")
         obj_dict["learning_activity"] = generation_configs.get("learning_activity") or ""
@@ -162,34 +180,39 @@ async def generate_questions_batch_async(
         obj_dict["small_unit"] = generation_configs.get("small_unit_name") or ""
         obj_dict["generation_count"] = requests.target_count
         obj_dict["study_area"] = generation_configs.get("study_area")
-        obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
-        obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
+        # obj_dict["file_paths"] = ["국어과_교과서론_1권 요약.md", "국어과_교과서론_2권 요약본.md"]
+        # obj_dict["file_display_names"] = ["교과서론 1권", "교과서론 2권"]
 
         question_generation_requests.append(QuestionGenerationRequest(**obj_dict))
 
         # 백그라운드 작업 등록
+        user_id, role = user_data
         task = QuestionGenerationTask()
         background_tasks.add_task(
             task.generate_batch_async,
             requests=question_generation_requests,
-            user_id=current_user_id,
+            user_id=str(user_id),
             provider=provider
         )
         
-        ## ⌛프로젝트 상태 생성중으로 변경
-        update_project_status(requests.project_id, "GENERATING")
+        from app.db.database import get_db_connection
+        with get_db_connection() as connection:
+            ## ⌛프로젝트 상태 생성중으로 변경
+            update_project_status(requests.project_id, "GENERATING", connection=connection)
 
-        use_ai_model = 1
-        ## 📢생성 설정 데이터 업데이트
-        update_project_generation_config(
-            requests.project_id,
-            requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
-            requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
-            requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,
-            use_ai_model
-        )
+            use_ai_model = 1
+            ## 📢생성 설정 데이터 업데이트
+            update_project_generation_config(
+                requests.project_id,
+                requests.question_type if hasattr(requests, "question_type") and requests.question_type is not None else None,
+                requests.target_count if hasattr(requests, "target_count") and requests.target_count is not None else None,
+                requests.stem_directive if hasattr(requests, "stem_directive") and requests.stem_directive is not None else None,
+                requests.additional_prompt if hasattr(requests, "additional_prompt") and requests.additional_prompt is not None else None,
+                use_ai_model,
+                connection=connection
+            )
 
-        print("🟣")
+        logger.debug("배치 문항 생성 백그라운드 시작")
         # 즉시 SUCCESS 응답 반환
         return BatchJobStartResponse(
             success=True,
@@ -199,71 +222,20 @@ async def generate_questions_batch_async(
         
     except Exception as e:
         # 예외 발생 시 FAIL 응답
-        import traceback
-        traceback.print_exc()
-        
-        return BatchJobErrorResponse(
-            success=False,
-            message="배치 작업 시작 중 오류가 발생했습니다.",
-            error=ErrorDetail(
-                code="INTERNAL_ERROR",
-                message=str(e),
-                details=traceback.format_exc()
-            )
+        logger.exception("배치 문항 생성 시작 실패")
+        update_project_status(requests.project_id, "FAILED")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "message": "배치 작업 시작 중 오류가 발생했습니다.",
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(e),
+                    "details": "배치 문항 생성 시작 실패"
+                }
+            }
         )
-
-
-
-@router.post(
-    "",
-    response_model=QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse,
-    summary="문항 생성",
-    description="LLM API를 사용하여 문항을 생성합니다.",
-    tags=["문항 생성"]
-)
-async def generate_questions(
-    request: QuestionGenerationRequest,
-    background_tasks: BackgroundTasks,
-    token: Optional[str] = Header(None, alias="token", description="인증 토큰"),
-    provider: Optional[str] = Query(None, description="LLM 제공자 (gemini, openai)", example="gemini"),
-    async_mode: bool = Query(False, description="비동기 모드 사용 여부"),
-    current_user_id: str = Depends(get_current_user)
-):
-    """
-    문항 생성 API
-    
-    - **passage**: 원본 지문 텍스트
-    - **learning_objective**: 학습목표
-    - **curriculum_info**: 교육과정 정보
-    - **generation_count**: 생성할 문항 수 (1-50)
-    
-    비동기 모드를 사용하면 백그라운드에서 처리됩니다.
-    """
-    # TODO: 토큰 검증 로직 추가
-    
-    service = QuestionGenerationService()
-    
-    if async_mode:
-        # 비동기 모드 (BackgroundTasks 사용)
-        task = QuestionGenerationTask()
-        background_tasks.add_task(
-            task.generate_async,
-            request=request,
-            user_id=current_user_id,
-            provider=provider
-        )
-        
-        # 즉시 응답 반환 (작업은 백그라운드에서 진행)
-        return QuestionGenerationSuccessResponse(
-            success=True,
-            total_questions=0,
-            questions=[],
-            message="문항 생성이 백그라운드에서 시작되었습니다."
-        )
-    else:
-        # 동기 모드
-        result = await service.generate_questions(request, current_user_id, provider)
-        return result
 
 
 @router.get(
@@ -283,3 +255,36 @@ async def get_available_providers():
         "default": "gemini"
     }
 
+
+from app.clients.email import get_email_client
+@router.post(
+    "/send-email",
+    summary="이메일 전송",
+    description="이메일을 전송합니다. (인증 필요)",
+    tags=["이메일"]
+)
+async def send_email(
+    to_address: str,
+    project_name: str,
+    success_count: int,
+    total_count: int,
+    total_questions: int,
+    result_url: Optional[str] = None,
+    user_data: tuple[int, str] = Depends(get_current_user)
+):
+    """인증된 사용자만 이메일 전송 가능"""
+    user_id, role = user_data
+    email_client = get_email_client()
+    email_client.send_success_email(
+        to_address=to_address, 
+        project_name=project_name, 
+        success_count=success_count, 
+        total_count=total_count, 
+        total_questions=total_questions,
+        result_url=result_url
+    )
+    logger.info("이메일 전송 요청 (user_id=%s, to=%s)", user_id, to_address)
+    return {
+        "success": True,
+        "message": "이메일 전송 성공"
+    }

@@ -2,72 +2,78 @@
 DB CRUD 함수 사용 예시
 """
 from app.db.database import (
-    
     select_one, select_all, select_with_query, count, search,
-    insert_one, insert_many,
-    update,
-    delete, soft_delete,
-    get_db_connection,
-    update_with_query
+    insert_one, insert_many, update, delete, soft_delete,
+    get_db_connection, update_with_query
 )
 from typing import Optional, Dict, Any
 from threading import Lock
 import json
+from app.core.logger import logger
 # ===========================
 # dong
 # ===========================
 
-def update_project_status(project_id: int, status: str):
+def update_project_status(project_id: int, status: str, connection=None):
     """프로젝트 상태 업데이트 (KST 기준)"""
     query = """
         UPDATE projects SET status = %s, updated_at = NOW() WHERE project_id = %s
     """
-    return update_with_query(query, (status, project_id))
+    return update_with_query(query, (status, project_id), connection=connection)
 
 def update_project_generation_config(
     project_id: int,
+    question_type=None,
     target_count=None,
     stem_directive=None,
     additional_prompt=None,
-    use_ai_model=1
+    use_ai_model=1,
+    connection=None
 ):
     """
     프로젝트 생성 설정 데이터 업데이트
-
-    값이 옵션이여서 없는 경우(=None)에는 해당 컬럼은 업데이트 대상에서 제외함
     """
-    # 업데이트할 필드/값 동적 생성
     set_clauses = []
     params = []
 
     if target_count is not None:
         set_clauses.append("target_count = %s")
         params.append(target_count)
+    
+    if question_type is not None:
+        set_clauses.append("question_type = %s")
+        params.append(question_type)
+    
     if stem_directive is not None:
         set_clauses.append("stem_directive = %s")
         params.append(stem_directive)
+    
     if additional_prompt is not None:
         set_clauses.append("additional_prompt = %s")
         params.append(additional_prompt)
+    
     if use_ai_model is not None:
         set_clauses.append("use_ai_model = %s")
         params.append(use_ai_model)
+
+    if not set_clauses:
+        return True
+
     # updated_at은 항상 업데이트
     set_clauses.append("updated_at = NOW()")
 
-    if len(set_clauses) == 1:  # updated_at만 있는 경우
-        # 업데이트할 값이 없음
-        raise ValueError("업데이트할 값이 없어 쿼리를 실행할 수 없습니다.")
+    set_clause_str = ", ".join(set_clauses)
 
-    set_clause_str = ",\n        ".join(set_clauses)
     query = f"""
-        UPDATE project_source_config
-        SET 
-        {set_clause_str}
+        UPDATE project_source_config 
+        SET {set_clause_str}
         WHERE project_id = %s
+        ORDER BY config_id DESC
+        LIMIT 1
     """
     params.append(project_id)
-    return update_with_query(query, tuple(params))
+    
+    return update_with_query(query, tuple(params), connection=connection)
 
 
 def get_generation_config(project_id: int):
@@ -76,9 +82,10 @@ def get_generation_config(project_id: int):
     query = """
         SELECT 
             psc.config_id,
-            COALESCE(cp.context, p.context) AS passage,
-            COALESCE(cp.title, p.title) AS title,
-            COALESCE(cp.auth, p.auth) AS auth,
+            pr.project_name,
+            COALESCE(NULLIF(cp.context, ''), NULLIF(p.context, ''), '-') AS passage,
+            COALESCE(NULLIF(cp.title, ''), NULLIF(p.title, ''), '-') AS title,
+            COALESCE(NULLIF(cp.auth, ''), NULLIF(p.auth, ''), '-') AS auth,
             ps.school_level,
             ps.grade,
             ps.semester,
@@ -111,12 +118,10 @@ def get_generation_config(project_id: int):
         LEFT JOIN passages p ON psc.passage_id = p.passage_id
         LEFT JOIN passage_custom cp ON psc.custom_passage_id = cp.custom_passage_id
         WHERE psc.project_id = %s
+        ORDER BY psc.config_id DESC
     """
     results = select_with_query(query, (project_id,))
     return results[0] if results else None
-import json
-print("tett")
-print(json.dumps(get_generation_config(1), ensure_ascii=False, indent=4))
 
 # ===========================
 # 프로젝트 관련 조회
@@ -146,7 +151,11 @@ def get_project_detail(project_id: int):
             psc.stem_directive
         FROM projects p
         LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-        LEFT JOIN project_source_config psc ON p.project_id = psc.project_id
+        LEFT JOIN project_source_config psc ON psc.config_id = (
+            SELECT MAX(config_id)
+            FROM project_source_config
+            WHERE project_id = p.project_id
+        )
         WHERE p.project_id = %s AND p.is_deleted = FALSE
     """
     results = select_with_query(query, (project_id,))
@@ -194,7 +203,8 @@ def get_user_projects(user_id: int, status: str = None):
 
 def save_batch_log(
     batch_log_data: Dict[str, Any],
-    project_id: Optional[int] = None
+    project_id: Optional[int] = None,
+    connection=None
 ) -> Optional[int]:
     """
     배치 로그를 데이터베이스에 저장
@@ -202,49 +212,68 @@ def save_batch_log(
     Args:
         batch_log_data: 배치 로그 데이터 딕셔너리
         project_id: 프로젝트 ID
+        connection: 외부에서 전달된 DB 연결
         
     Returns:
         저장된 batch_id 또는 None
     """
-    try:
-        with get_db_connection() as connection:
-            with connection.cursor() as cursor:
-                # 배치 로그 테이블에 저장 (최소 컬럼)
-                sql = """
-                    INSERT INTO batch_logs (
-                        input_token, output_token, 
-                        total_duration,total_attempts,success_count
-                    ) VALUES (%s, %s, %s, %s, %s)
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            # 배치 로그 테이블에 저장 (최소 컬럼)
+            sql = """
+                INSERT INTO batch_logs (
+                    input_token, output_token, 
+                    total_duration,total_attempts,success_count
+                ) VALUES (%s, %s, %s, %s, %s)
+            """
+            
+            input_tokens = batch_log_data.get("input_tokens", 0)
+            output_tokens = batch_log_data.get("output_tokens", 0)
+            total_tokens = batch_log_data.get("total_tokens", 0)
+            duration_seconds = batch_log_data.get("duration_seconds", 0.0)
+            total_attempts = batch_log_data.get("requested_count", 0)
+            success_count = batch_log_data.get("generated_count", 0)
+            logger.debug("배치 로그 저장 시도: tokens=%s", total_tokens)
+            
+            cursor.execute(
+                sql,
+                (input_tokens, output_tokens, duration_seconds,total_attempts, success_count )
+            )
+            last_row_id = cursor.lastrowid
+            if project_id:
+                update_sql = """
+                    UPDATE project_source_config 
+                    SET input_tokens = COALESCE(input_tokens, 0) + %s, 
+                        output_tokens = COALESCE(output_tokens, 0) + %s
+                    WHERE project_id = %s
+                    ORDER BY config_id DESC
+                    LIMIT 1
                 """
-                
-                input_tokens = batch_log_data.get("input_tokens", 0)
-                output_tokens = batch_log_data.get("output_tokens", 0)
-                total_tokens = batch_log_data.get("total_tokens", 0)
-                duration_seconds = batch_log_data.get("duration_seconds", 0.0)
-                total_attempts = batch_log_data.get("requested_count", 0)
-                success_count = batch_log_data.get("generated_count", 0)
-                print(f"  🔹 배치 로그 저장 시도: tokens={total_tokens}")
-                
-                cursor.execute(
-                    sql,
-                    (input_tokens, output_tokens, duration_seconds,total_attempts, success_count )
-                )
+                cursor.execute(update_sql, (input_tokens, output_tokens, project_id))
+
+            
+            return last_row_id
+
+    try:
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as connection:
+                result = _execute(connection)
                 connection.commit()
-                batch_id = cursor.lastrowid
-                
-                return batch_id
+                return result
             
     except Exception as e:
-        print(f"배치 로그 DB 저장 실패: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("배치 로그 DB 저장 실패: %s", e)
         return None
 
 ### 문항 데이터 저장
 def save_question_to_db(
     question_data: Dict[str, Any],
+    question_type: Optional[str] = None,
     project_id: Optional[int] = None,
-    config_id: Optional[int] = None
+    config_id: Optional[int] = None,
+    connection=None
 ) -> Optional[int]:
     """
     문항을 데이터베이스에 저장
@@ -252,13 +281,60 @@ def save_question_to_db(
     Args:
         question_data: 문항 데이터 딕셔너리
         project_id: 프로젝트 ID
+        config_id: 설정 ID
+        connection: 외부에서 전달된 DB 연결 (트랜잭션 유지용)
     Returns:
         저장된 question_id 또는 None
     """
-    try:
-        with get_db_connection() as connection:
-            with connection.cursor() as cursor:
-                # 문항 테이블에 저장
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            
+
+
+            # # 문항 테이블에 저장
+            # sql = """
+            #     INSERT INTO multiple_choice_questions (
+            #         config_id, project_id, batch_id, question, box_content, modified_passage,
+            #         option1, option2, option3, option4, option5, 
+            #         answer, answer_explain, is_used, llm_difficulty, created_at
+            #     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            # """
+            batch_id = question_data.get("batch_index", None)
+            question_text = question_data.get("question_text", {})
+
+            # print("🟣🟣🟣🟣🟣🟣")
+            # print(question_text)
+            
+            # 'null' 문자열이나 빈 값을 None(NULL)으로 처리하는 헬퍼 함수
+            def clean_val(v):
+                if v is None or str(v).lower() == 'null' or v == '':
+                    return None
+                return v
+
+            # Question 스키마의 필드명에 맞춤: "text"
+            question = clean_val(question_text.get("text"))
+            modified_passage = clean_val(question_text.get("modified_passage"))
+            box_content = clean_val(question_text.get("box_content"))
+            
+            options = question_data.get("choices", [])
+            option1 = clean_val(options[0]["text"]) if len(options) > 0 and "text" in options[0] else None
+            option2 = clean_val(options[1]["text"]) if len(options) > 1 and "text" in options[1] else None
+            option3 = clean_val(options[2]["text"]) if len(options) > 2 and "text" in options[2] else None
+            option4 = clean_val(options[3]["text"]) if len(options) > 3 and "text" in options[3] else None
+            option5 = clean_val(options[4]["text"]) if len(options) > 4 and "text" in options[4] else None
+            
+            # Question 스키마의 필드명에 맞춤: "correct_answer", "explanation"
+            answer = clean_val(question_data.get("correct_answer"))
+            answer_explain = clean_val(question_data.get("explanation"))
+            is_used = question_data.get("is_used", 1)  # 기본값 1 (사용)
+            
+            # llm_difficulty 변환: 1 -> "쉬움", 2 -> "보통", 3 -> "어려움"
+            llm_difficulty_raw = question_data.get("llm_difficulty", None)
+            llm_difficulty_map = {1: "쉬움", 2: "보통", 3: "어려움"}
+            llm_difficulty = llm_difficulty_map.get(llm_difficulty_raw, None) if llm_difficulty_raw else None
+            llm_difficulty = clean_val(llm_difficulty)
+
+            if question_type == "5지선다":
                 sql = """
                     INSERT INTO multiple_choice_questions (
                         config_id, project_id, batch_id, question, box_content, modified_passage,
@@ -266,67 +342,78 @@ def save_question_to_db(
                         answer, answer_explain, is_used, llm_difficulty, created_at
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 """
-                batch_id = question_data.get("batch_index", None)
-                question_text = question_data.get("question_text", {})
-                # Question 스키마의 필드명에 맞춤: "text"
-                question = question_text.get("text", "")
-                modified_passage = question_text.get("modified_passage", "")
-                box_content = question_text.get("box_content", "")
-                
-                options = question_data.get("choices", [])
-                option1 = options[0]["text"] if len(options) > 0 and "text" in options[0] else ""
-                option2 = options[1]["text"] if len(options) > 1 and "text" in options[1] else ""
-                option3 = options[2]["text"] if len(options) > 2 and "text" in options[2] else ""
-                option4 = options[3]["text"] if len(options) > 3 and "text" in options[3] else ""
-                option5 = options[4]["text"] if len(options) > 4 and "text" in options[4] else ""
-                # Question 스키마의 필드명에 맞춤: "correct_answer", "explanation"
-                answer = question_data.get("correct_answer", "")
-                answer_explain = question_data.get("explanation", "")
-                is_used = question_data.get("is_used", 1)  # 기본값 1 (사용)
-                
-                # llm_difficulty 변환: 1 -> "쉬움", 2 -> "보통", 3 -> "어려움"
-                llm_difficulty_raw = question_data.get("llm_difficulty", None)
-                llm_difficulty_map = {1: "쉬움", 2: "보통", 3: "어려움"}
-                llm_difficulty = llm_difficulty_map.get(llm_difficulty_raw, None) if llm_difficulty_raw else None
-
                 cursor.execute(
-                    sql,
-                    (config_id, project_id, batch_id, question, box_content, modified_passage, option1, option2, option3, option4, option5, answer, answer_explain, is_used, llm_difficulty)
+                sql,
+                (config_id, project_id, batch_id, question, box_content, modified_passage, option1, option2, option3, option4, option5, answer, answer_explain, is_used, llm_difficulty)
+            )
+            elif question_type == "단답형":
+                sql = """
+                    INSERT INTO short_answer_questions (
+                        config_id, project_id, batch_id, question, box_content, modified_passage,
+                        answer, answer_explain, is_used, llm_difficulty, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """
+                cursor.execute(
+                sql,
+                (config_id, project_id, batch_id, question, box_content, modified_passage, answer, answer_explain, is_used, llm_difficulty)
                 )
+
+
+
+            return cursor.lastrowid
+
+    try:
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as connection:
+                result = _execute(connection)
                 connection.commit()
-                question_id = cursor.lastrowid
-                
-                return question_id
+                return result
             
     except Exception as e:
-        print(f"문항 DB 저장 실패: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("문항 DB 저장 실패: %s", e)
         return None
+
+
+
 
 
 def save_questions_batch_to_db(
     questions_data: list[Dict[str, Any]],
+    question_type: Optional[str] = None,
     project_id: Optional[int] = None,
-    config_id: Optional[int] = None
+    config_id: Optional[int] = None,
+    connection=None
 ) -> list[Optional[int]]:
     """
-    여러 문항을 배치로 데이터베이스에 저장
-    
-    Args:
-        questions_data: 문항 데이터 리스트
-        project_id: 프로젝트 ID
-        
-    Returns:
-        저장된 question_id 리스트
+    여러 문항을 배치로 데이터베이스에 저장 (단일 트랜잭션 사용)
     """
-    question_ids = []
     
-    for question_data in questions_data:
-        question_id = save_question_to_db(question_data, project_id=project_id, config_id=config_id)
-        question_ids.append(question_id)
-    
-    return question_ids
+    def _execute(conn):
+        ids = []
+        for question_data in questions_data:
+            question_id = save_question_to_db(
+                question_data, 
+                question_type=question_type,
+                project_id=project_id, 
+                config_id=config_id, 
+                connection=conn
+            )
+            ids.append(question_id)
+        return ids
+
+    try:
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as connection:
+                result = _execute(connection)
+                connection.commit()
+                return result
+    except Exception as e:
+        logger.exception("배치 문항 DB 저장 실패: %s", e)
+        return []
 
 
 
@@ -337,49 +424,79 @@ def save_questions_batch_to_db(
 
 def get_project_all_questions(project_id: int):
     """프로젝트의 모든 문항 조회 (객관식, OX, 단답형 통합)"""
-    # 객관식 문항
+    # 객관식 문항 (추가 필드 포함)
     mc_query = """
         SELECT 
             'multiple_choice' as question_type,
-            question_id as id,
-            question,
-            answer,
-            answer_explain,
-            feedback_score,
-            is_used,
-            created_at
-        FROM multiple_choice_questions
-        WHERE project_id = %s
+            mcq.question_id as id,
+            NULLIF(mcq.question, 'null') as question,
+            NULLIF(mcq.answer, 'null') as answer,
+            NULLIF(mcq.answer_explain, 'null') as answer_explain,
+            mcq.feedback_score,
+            mcq.is_used,
+            mcq.is_checked,
+            mcq.created_at,
+            NULLIF(mcq.box_content, 'null') as box_content,
+            NULLIF(mcq.option1, 'null') as option1,
+            NULLIF(mcq.option2, 'null') as option2,
+            NULLIF(mcq.option3, 'null') as option3,
+            NULLIF(mcq.option4, 'null') as option4,
+            NULLIF(mcq.option5, 'null') as option5,
+            NULLIF(mcq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(mcq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(mcq.modified_passage, 'null') as modified_passage
+        FROM multiple_choice_questions mcq
+        WHERE mcq.project_id = %s AND IFNULL(mcq.is_used, 1) = 1
     """
     
     # OX 문항
     tf_query = """
         SELECT 
             'true_false' as question_type,
-            ox_question_id as id,
-            question,
-            answer,
-            answer_explain,
-            feedback_score,
-            is_used,
-            created_at
-        FROM true_false_questions
-        WHERE project_id = %s
+            tfq.ox_question_id as id,
+            NULLIF(tfq.question, 'null') as question,
+            NULLIF(tfq.answer, 'null') as answer,
+            NULLIF(tfq.answer_explain, 'null') as answer_explain,
+            tfq.feedback_score,
+            tfq.is_used,
+            tfq.is_checked,
+            tfq.created_at,
+            NULLIF(tfq.box_content, 'null') as box_content,
+            NULL as option1,
+            NULL as option2,
+            NULL as option3,
+            NULL as option4,
+            NULL as option5,
+            NULLIF(tfq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(tfq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(tfq.modified_passage, 'null') as modified_passage
+        FROM true_false_questions tfq
+        WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
     
     # 단답형 문항
     sa_query = """
         SELECT 
             'short_answer' as question_type,
-            short_question_id as id,
-            question,
-            answer,
-            answer_explain,
-            feedback_score,
-            is_used,
-            created_at
-        FROM short_answer_questions
-        WHERE project_id = %s
+            saq.short_question_id as id,
+            NULLIF(saq.question, 'null') as question,
+            NULLIF(saq.answer, 'null') as answer,
+            NULLIF(saq.answer_explain, 'null') as answer_explain,
+            saq.feedback_score,
+            saq.is_used,
+            saq.is_checked,
+            saq.created_at,
+            NULLIF(saq.box_content, 'null') as box_content,
+            NULL as option1,
+            NULL as option2,
+            NULL as option3,
+            NULL as option4,
+            NULL as option5,
+            NULLIF(saq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(saq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(saq.modified_passage, 'null') as modified_passage
+        FROM short_answer_questions saq
+        WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
     """
     
     # UNION으로 통합
@@ -389,7 +506,7 @@ def get_project_all_questions(project_id: int):
         {tf_query}
         UNION ALL
         {sa_query}
-        ORDER BY created_at DESC
+        ORDER BY created_at ASC, id ASC
     """
     
     results = select_with_query(union_query, (project_id, project_id, project_id))
@@ -549,6 +666,8 @@ def get_project_source_info(project_id: int):
         LEFT JOIN passages p ON psc.passage_id = p.passage_id
         LEFT JOIN custom_passage cp ON psc.custom_passage_id = cp.custom_passage_id
         WHERE psc.project_id = %s
+        ORDER BY psc.config_id DESC
+        LIMIT 1
     """
     results = select_with_query(query, (project_id,))
     return results[0] if results else None
@@ -707,4 +826,3 @@ def get_download_history(project_id: int):
     """
     results = select_with_query(query, (project_id,))
     return results
-

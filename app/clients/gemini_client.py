@@ -8,6 +8,17 @@ from app.clients.base import LLMClientBase
 from app.clients.api_key_manager import APIKeyManager
 from app.schemas.question_generation import Question
 from app.core.config import settings
+from app.core.logger import logger
+
+
+def _cleanup_uploaded_files(uploaded_files: List) -> None:
+    """업로드된 파일 정리 (메모리 누수 방지)"""
+    for uploaded_file in uploaded_files:
+        try:
+            genai.delete_file(uploaded_file.name)
+            logger.debug("업로드 파일 삭제 완료: %s", uploaded_file.name)
+        except Exception as e:
+            logger.warning("업로드 파일 삭제 실패: %s - %s", getattr(uploaded_file, 'name', 'unknown'), e)
 
 
 class GeminiClient(LLMClientBase):
@@ -45,8 +56,10 @@ class GeminiClient(LLMClientBase):
             return False
         return len(self.api_keys) > 0
     
-    def _get_model(self, api_key: str, model_name: str = "gemini-2.0-flash-exp"):
+    def _get_model(self, api_key: str, model_name: Optional[str] = None):
         """특정 API 키로 모델 생성"""
+        if model_name is None:
+            model_name = settings.gemini_model_name
         genai.configure(api_key=api_key)
         return genai.GenerativeModel(model_name)
     
@@ -58,7 +71,7 @@ class GeminiClient(LLMClientBase):
         max_retries: int = 3,
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         return_metadata: bool = False,
         **kwargs
     ):
@@ -82,6 +95,10 @@ class GeminiClient(LLMClientBase):
         """
         if not self.api_key_manager:
             raise ValueError("Gemini API 키가 설정되지 않았습니다.")
+        
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
         
         # 빠른 실패 전환 활성화 시 여러 키를 동시에 시도
         if settings.enable_fast_failover and len(self.api_keys) > 1:
@@ -144,16 +161,16 @@ class GeminiClient(LLMClientBase):
                     }
                     
                     # usage_metadata 추출
-                    print(f"🔍 [DEBUG] response 객체 확인: hasattr(usage_metadata) = {hasattr(response_obj, 'usage_metadata')}")
+                    logger.debug(f"🔍 [DEBUG] response 객체 확인: hasattr(usage_metadata) = {hasattr(response_obj, 'usage_metadata')}")
                     if hasattr(response_obj, 'usage_metadata'):
                         usage = response_obj.usage_metadata
-                        print(f"📊 [토큰 정보] usage_metadata: {usage}")
+                        logger.info(f"📊 [토큰 정보] usage_metadata: {usage}")
                         metadata['input_tokens'] = getattr(usage, 'prompt_token_count', 0)
                         metadata['output_tokens'] = getattr(usage, 'candidates_token_count', 0)
                         metadata['total_tokens'] = getattr(usage, 'total_token_count', 0)
-                        print(f"✅ [토큰 추출] input={metadata['input_tokens']}, output={metadata['output_tokens']}, total={metadata['total_tokens']}, duration={metadata['duration_seconds']}초")
+                        logger.info(f"✅ [토큰 추출] input={metadata['input_tokens']}, output={metadata['output_tokens']}, total={metadata['total_tokens']}, duration={metadata['duration_seconds']}초")
                     else:
-                        print(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response_obj)}")
+                        logger.warning(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response_obj)}")
                     
                     return {
                         'questions': questions,
@@ -200,12 +217,16 @@ class GeminiClient(LLMClientBase):
         count: int,
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         **kwargs
     ) -> List[Question]:
         """
         빠른 실패 전환: 여러 API 키를 동시에 시도하고 가장 빠른 응답 사용
         """
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
+        
         available_keys = self.api_key_manager._get_available_keys()
         if not available_keys:
             raise ValueError("사용 가능한 API 키가 없습니다.")
@@ -325,7 +346,7 @@ class GeminiClient(LLMClientBase):
             batch_counts = counts[i:i+batch_size]
             batch_file_paths_list = file_paths_list[i:i+batch_size] if file_paths_list else [None] * len(batch_sys_prompts)
             batch_file_display_names_list = file_display_names_list[i:i+batch_size] if file_display_names_list else [None] * len(batch_sys_prompts)
-            batch_model_names = model_names[i:i+batch_size] if model_names else ["gemini-3-flash-preview"] * len(batch_sys_prompts)
+            batch_model_names = model_names[i:i+batch_size] if model_names else [settings.gemini_model_name] * len(batch_sys_prompts)
             
             # 이번 배치에 사용할 API 키 가져오기
             batch_api_keys = self.api_key_manager.get_keys_for_batch(len(batch_sys_prompts))
@@ -339,7 +360,7 @@ class GeminiClient(LLMClientBase):
                     api_key = batch_api_keys[j % len(batch_api_keys)]
                     file_paths = batch_file_paths_list[j] if j < len(batch_file_paths_list) else None
                     file_display_names = batch_file_display_names_list[j] if j < len(batch_file_display_names_list) else None
-                    model_name = batch_model_names[j] if j < len(batch_model_names) else "gemini-3-flash-preview"
+                    model_name = batch_model_names[j] if j < len(batch_model_names) else settings.gemini_model_name
                     
                     future = loop.run_in_executor(
                         executor,
@@ -367,7 +388,7 @@ class GeminiClient(LLMClientBase):
                         batch_results.append(result)
                     except asyncio.TimeoutError:
                         # 타임아웃 발생 시 빈 결과 반환
-                        print(f"⚠️ API 호출 타임아웃 ({settings.api_call_timeout}초 초과)")
+                        logger.warning(f"⚠️ API 호출 타임아웃 ({settings.api_call_timeout}초 초과)")
                         batch_results.append({
                             'questions': [],
                             'metadata': {
@@ -379,7 +400,7 @@ class GeminiClient(LLMClientBase):
                             }
                         })
                     except Exception as e:
-                        print(f"⚠️ API 호출 실패: {str(e)[:100]}")
+                        logger.error(f"⚠️ API 호출 실패: {str(e)[:100]}")
                         batch_results.append({
                             'questions': [],
                             'metadata': {
@@ -404,7 +425,7 @@ class GeminiClient(LLMClientBase):
         count: int,
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -422,6 +443,9 @@ class GeminiClient(LLMClientBase):
                 }
             }
         """
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
         import time
         start_time = time.time()
         
@@ -455,7 +479,7 @@ class GeminiClient(LLMClientBase):
                             )
                             uploaded_files.append(uploaded_file)
                         except Exception as e:
-                            print(f"⚠️ 파일 업로드 실패: {path} - {e}")
+                            logger.error(f"⚠️ 파일 업로드 실패: {path} - {e}")
             
             # 구조화된 출력 설정
             generation_config = genai.GenerationConfig(
@@ -494,17 +518,17 @@ class GeminiClient(LLMClientBase):
             }
             
             # Gemini API의 usage_metadata에서 토큰 정보 추출
-            print(f"🔍 [DEBUG] response 객체 확인: hasattr(usage_metadata) = {hasattr(response, 'usage_metadata')}")
+            logger.debug(f"🔍 [DEBUG] response 객체 확인: hasattr(usage_metadata) = {hasattr(response, 'usage_metadata')}")
             if hasattr(response, 'usage_metadata'):
                 usage = response.usage_metadata
-                print(f"📊 [토큰 정보] usage_metadata: {usage}")
+                logger.info(f"📊 [토큰 정보] usage_metadata: {usage}")
                 metadata['input_tokens'] = getattr(usage, 'prompt_token_count', 0)
                 metadata['output_tokens'] = getattr(usage, 'candidates_token_count', 0)
                 metadata['total_tokens'] = getattr(usage, 'total_token_count', 0)
-                print(f"✅ [토큰 추출] input={metadata['input_tokens']}, output={metadata['output_tokens']}, total={metadata['total_tokens']}, duration={metadata['duration_seconds']}초")
+                logger.info(f"✅ [토큰 추출] input={metadata['input_tokens']}, output={metadata['output_tokens']}, total={metadata['total_tokens']}, duration={metadata['duration_seconds']}초")
             else:
-                print(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response)}")
-                print(f"⚠️ [WARNING] response 속성: {dir(response)}")
+                logger.warning(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response)}")
+                logger.debug(f"⚠️ [WARNING] response 속성: {dir(response)}")
             
             questions = self._parse_response(response.text, count)
             
@@ -547,6 +571,10 @@ class GeminiClient(LLMClientBase):
                     'error': str(e)
                 }
             }
+        finally:
+            # 업로드된 파일 정리 (메모리 누수 방지)
+            if uploaded_files:
+                _cleanup_uploaded_files(uploaded_files)
     
     async def _call_api(self, prompt: str, model) -> str:
         """Gemini API 호출 (비동기 래퍼)"""
@@ -567,7 +595,7 @@ class GeminiClient(LLMClientBase):
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
         count: int = 10,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: Optional[str] = None,
         return_response_obj: bool = False,
         **kwargs
     ):
@@ -579,6 +607,10 @@ class GeminiClient(LLMClientBase):
         Returns:
             response 객체 또는 response.text
         """
+        # model_name이 지정되지 않은 경우 기본값 사용
+        if model_name is None:
+            model_name = settings.gemini_model_name
+        
         import os
         from app.schemas.question_generation import MultipleQuestion
         
@@ -605,7 +637,7 @@ class GeminiClient(LLMClientBase):
                         )
                         uploaded_files.append(uploaded_file)
                     except Exception as e:
-                        print(f"⚠️ 파일 업로드 실패: {path} - {e}")
+                        logger.warning("파일 업로드 실패: %s - %s", path, e)
         
         # 구조화된 출력 설정
         temperature = kwargs.get("temperature", 0.7) if kwargs else 0.7
@@ -642,6 +674,10 @@ class GeminiClient(LLMClientBase):
                 None,
                 lambda: structured_model.generate_content(full_prompt)
             )
+        
+        # 업로드된 파일 정리 (메모리 누수 방지)
+        if uploaded_files:
+            _cleanup_uploaded_files(uploaded_files)
         
         # return_response_obj에 따라 반환 형식 결정
         if return_response_obj:
@@ -682,10 +718,10 @@ class GeminiClient(LLMClientBase):
                     if question:
                         questions.append(question)
         except json.JSONDecodeError as e:
-            print(f"⚠️ JSON 파싱 실패: {e}")
-            print(f"응답 텍스트: {response_text[:500]}")
+            logger.warning("JSON 파싱 실패: %s", e)
+            logger.debug("응답 텍스트: %s", response_text[:500])
         except Exception as e:
-            print(f"⚠️ 응답 파싱 중 오류: {e}")
+            logger.warning("응답 파싱 중 오류: %s", e)
         
         return questions
     
@@ -741,7 +777,7 @@ class GeminiClient(LLMClientBase):
                 llm_difficulty=llm_question.llm_difficulty
             )
         except Exception as e:
-            print(f"⚠️ 문항 변환 실패 [Q{question_number}]: {e}")
+            logger.warning("문항 변환 실패 [Q%s]: %s", question_number, e)
             return None
     
     def _convert_schema_for_google_genai(self, schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -868,8 +904,6 @@ class GeminiClient(LLMClientBase):
                 explanation=data.get("explanation", "")
             )
         except Exception as e:
-            print(f"⚠️ _parse_question 에러: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning("_parse_question 에러: %s", e, exc_info=True)
             return None
 

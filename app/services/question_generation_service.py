@@ -1,5 +1,6 @@
 from typing import List, Optional
 from threading import Lock
+import logging
 from app.schemas.question_generation import (
     QuestionGeneration,
     QuestionGenerationRequest,
@@ -16,6 +17,7 @@ from app.prompts.templates import PromptTemplate
 from app.db.storage import save_questions_batch_to_db
 from app.utils.file_path import resolve_file_paths, ensure_storage_directory
 from app.core.config import settings
+from app.core.logger import logger
 
 
 class QuestionGenerationService:
@@ -30,7 +32,7 @@ class QuestionGenerationService:
         
     async def generate_questions_batch(
         self,
-        requests: List[QuestionGeneration],
+        requests: List[QuestionGenerationRequest],
         current_user_id: str,
         provider: Optional[str] = None
     ) -> List[QuestionGenerationSuccessResponse | QuestionGenerationErrorResponse]:
@@ -72,8 +74,8 @@ class QuestionGenerationService:
             # school_level 추출
             school_level = req.school_level if hasattr(req, 'school_level') else None
 
-            print(f"🟣🟣 요청 {req_idx}: {total_count}개 문항 → {num_batches}개 배치")
-            print(f"🟣🟣 School Level: {school_level}")
+            logger.info(f"🟣🟣 요청 {req_idx}: {total_count}개 문항 → {num_batches}개 배치")
+            logger.debug(f"🟣🟣 School Level: {school_level}")
 
             
             # 파일 저장 디렉토리 확인 및 생성 (school_level에 따라 경로 결정)
@@ -100,7 +102,7 @@ class QuestionGenerationService:
                 current_batch_size = min(batch_size, remaining)
                 batch_request.generation_count = current_batch_size
                 
-                print(f"  📦 배치 {batch_idx + 1}/{num_batches}: {current_batch_size}개 문항")
+                logger.info(f"  📦 배치 {batch_idx + 1}/{num_batches}: {current_batch_size}개 문항")
                 
                 # user_prompt만 다시 생성 (문항 개수가 반영됨)
                 _, user_prompt = PromptTemplate.build_prompt(batch_request)
@@ -145,8 +147,8 @@ class QuestionGenerationService:
                 questions = batch_result.get('questions', []) if isinstance(batch_result, dict) else batch_result
                 metadata = batch_result.get('metadata', {}) if isinstance(batch_result, dict) else {}
                 
-                print(f"🔍 [배치 결과] req_idx={req_idx}, batch_idx={batch_idx}, 문항수={len(questions)}")
-                print(f"📊 [메타데이터] {metadata}")
+                logger.debug("[배치 결과] req_idx=%s, batch_idx=%s, 문항수=%s", req_idx, batch_idx, len(questions))
+                logger.debug("[메타데이터] %s", metadata)
                 
                 if questions:
                     # 각 문항에 배치 정보 추가
@@ -171,7 +173,7 @@ class QuestionGenerationService:
                     if 'error' in metadata:
                         batch_info['error'] = metadata['error']
                     
-                    print(f"✅ [배치 정보 저장] {batch_info}")
+                    logger.info("[배치 정보 저장] %s", batch_info)
                     request_batch_info[req_idx].append(batch_info)
             
             # 응답 생성 및 DB 저장
@@ -189,7 +191,7 @@ class QuestionGenerationService:
                     shortage = request.generation_count - len(questions)
                     retry_count += 1
                     
-                    print(f"🔄 재요청 {retry_count}/{max_retries}: {shortage}개 부족 (요청 {request.generation_count}개 → 생성 {len(questions)}개)")
+                    logger.info("재요청 %s/%s: %s개 부족 (요청 %s개 → 생성 %s개)", retry_count, max_retries, shortage, request.generation_count, len(questions))
                     
                     try:
                         # 재요청을 위한 프롬프트 생성
@@ -218,7 +220,7 @@ class QuestionGenerationService:
                         retry_questions = retry_result.get('questions', []) if isinstance(retry_result, dict) else retry_result
                         retry_metadata = retry_result.get('metadata', {}) if isinstance(retry_result, dict) else {}
                         
-                        print(f"🔍 [재요청 결과] 문항수={len(retry_questions)}, 메타데이터={retry_metadata}")
+                        logger.debug("[재요청 결과] 문항수=%s, 메타데이터=%s", len(retry_questions), retry_metadata)
                         
                         if retry_questions:
                             # 재요청 결과를 dict로 변환하여 추가
@@ -247,24 +249,22 @@ class QuestionGenerationService:
                             
                             request_batch_info[req_idx].append(retry_batch_info)
                             
-                            print(f"✅ 재요청 완료: {len(retry_questions)}개 추가 생성 (누적 {len(questions)}개)")
-                            print(f"📊 [재요청 배치 정보] {retry_batch_info}")
+                            logger.info("재요청 완료: %s개 추가 생성 (누적 %s개)", len(retry_questions), len(questions))
+                            logger.debug("[재요청 배치 정보] %s", retry_batch_info)
                         else:
-                            print(f"⚠️ 재요청 실패: 결과 없음")
+                            logger.warning("재요청 실패: 결과 없음")
                             break
                             
                     except Exception as e:
-                        print(f"❌ 재요청 에러 ({retry_count}회차): {e}")
-                        import traceback
-                        traceback.print_exc()
+                        logger.exception("재요청 에러 (%s회차): %s", retry_count, e)
                         break
                 
                 # 최종 결과 확인
                 if len(questions) < request.generation_count:
                     final_shortage = request.generation_count - len(questions)
-                    print(f"⚠️ 최종 부족: {final_shortage}개 (요청 {request.generation_count}개 → 최종 {len(questions)}개)")
+                    logger.warning("최종 부족: %s개 (요청 %s개 → 최종 %s개)", final_shortage, request.generation_count, len(questions))
                 else:
-                    print(f"✅ 목표 달성: {len(questions)}개 생성 완료")
+                    logger.info("목표 달성: %s개 생성 완료", len(questions))
                 
                 # 초과 생성된 경우 is_used 필드 추가 (0, 1 태깅)
                 if len(questions) > request.generation_count:
@@ -323,10 +323,10 @@ class QuestionGenerationService:
                                 "questions": questions  # 이미 dict로 변환됨
                             }, f, ensure_ascii=False, indent=2)
                         
-                        print(f"✅ JSON 파일 저장 완료 (배치 {req_idx}): {filepath}")
+                        logger.info("JSON 파일 저장 완료 (배치 %s): %s", req_idx, filepath)
                         
                     except Exception as e:
-                        print(f"⚠️ JSON 저장 실패 (배치 {req_idx}): {e}")
+                        logger.warning("JSON 저장 실패 (배치 %s): %s", req_idx, e)
                     
                     # dict를 Question 객체로 변환
                     question_objects = []
@@ -352,7 +352,7 @@ class QuestionGenerationService:
                             question_obj = Question(**q_dict)
                             question_objects.append(question_obj)
                         except Exception as e:
-                            print(f"⚠️ 문항 변환 실패 [{q_idx}]: {e}")
+                            logger.warning("문항 변환 실패 [%s]: %s", q_idx, e)
                             continue
                     
                     # 메타데이터 생성 (JSON 저장과 동일한 구조)
@@ -391,7 +391,7 @@ class QuestionGenerationService:
                             question_obj = Question(**q_dict)
                             question_objects.append(question_obj)
                         except Exception as e:
-                            print(f"⚠️ 문항 변환 실패 [{q_idx}]: {e}")
+                            logger.warning("문항 변환 실패 [%s]: %s", q_idx, e)
                             continue
                     
                     responses.append(
@@ -417,6 +417,7 @@ class QuestionGenerationService:
             return responses
             
         except Exception as e:
+            logger.exception("배치 문항 생성 중 오류")
             # 전체 실패 시 모든 요청에 대해 에러 응답 반환
             return [
                 QuestionGenerationErrorResponse(

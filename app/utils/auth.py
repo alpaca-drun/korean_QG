@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
+from app.core.logger import logger
 from fastapi import Header, HTTPException, status
 
 # 비밀번호 해싱 컨텍스트
@@ -99,16 +100,16 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def verify_token(token: str, token_type: str = "access") -> Optional[str]:
+def verify_token(token: str, token_type: str = "access") -> Optional[Tuple[int, Optional[str]]]:
     """
-    JWT 토큰을 검증하고 사용자 ID를 반환합니다.
+    JWT 토큰을 검증하고 (user_id, role) 튜플을 반환합니다.
     
     Args:
         token: JWT 토큰 문자열
         token_type: 토큰 타입 ("access" 또는 "refresh")
         
     Returns:
-        사용자 ID 또는 None (유효하지 않은 경우)
+        (user_id, role) 튜플 또는 None (유효하지 않은 경우)
     """
     payload = decode_token(token)
     
@@ -120,21 +121,14 @@ def verify_token(token: str, token_type: str = "access") -> Optional[str]:
         return None
     
     # 사용자 ID 추출
-    user_id: str = payload.get("sub")
+    user_id = payload.get("sub")
+    role = payload.get("role")
     if user_id is None:
         return None
     
-    return user_id
+    return (user_id, role)
 
 
 
 
-def create_temp_token_for_user_1() -> str:
-    """
-    임시 함수: user_id가 1인 액세스 토큰을 생성합니다.
-    """
-    return create_refresh_token(data={"sub": "1"})
-
-# 테스트용 토큰 생성
-token = create_temp_token_for_user_1()
-print(f"Token: {token}")
+# 테스트용 코드 제거됨 (프로덕션 보안 위험)

@@ -6,18 +6,22 @@ from typing import Optional, List
 class Settings(BaseSettings):
     app_name: str = "Curriculum API"
     app_version: str = "1.0.0"
-    debug: bool = True
+    debug: bool = False  # 프로덕션 기본값: False
     host: str = "0.0.0.0"
     port: int = 8000
+    
+    # CORS 설정
+    cors_origins: str = "https://korean.chunjae-it-edu.com"  # 콤마로 구분된 허용 origins
     
     # LLM API 설정
     gemini_api_key: Optional[str] = None
     gemini_api_keys: Optional[str] = None  # 콤마로 구분된 여러 키 (예: "key1,key2,key3")
+    gemini_model_name: str = "gemini-3-flash-preview"  # 사용할 Gemini 모델 이름
     openai_api_key: Optional[str] = None
     default_llm_provider: str = "gemini"  # gemini, openai
     
     # API 키 로테이션 설정
-    api_key_rotation_strategy: str = "round_robin"  # round_robin, random, failover
+    api_key_rotation_strategy: str = "random"  # round_robin, random, failover
     max_parallel_api_keys: int = 5  # 병렬 처리에 사용할 최대 API 키 수
     
     # 비동기 작업 설정
@@ -51,6 +55,13 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30  # 액세스 토큰 만료 시간 (분)
     jwt_refresh_token_expire_days: int = 7  # 리프레시 토큰 만료 시간 (일)
     
+    # AWS SES 이메일 설정
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    aws_ses_region: str = "ap-northeast-2"  # 서울 리전 (기본값)
+    aws_ses_sender_email: str = "no-reply@example.com"  # 발신자 이메일 (반드시 SES에서 인증된 이메일이어야 함)
+    aws_ses_bcc_email: Optional[str] = None  # BCC로 받을 이메일 (관리자/모니터링 용도, 콤마로 구분하여 여러 개 가능)
+    
     @field_validator('max_parallel_api_keys', 'max_batch_size', 'batch_timeout', 
                      'api_call_timeout', 'api_retry_timeout', 'db_port', mode='before')
     @classmethod
@@ -81,6 +92,14 @@ class Settings(BaseSettings):
                 return keys
         if self.gemini_api_key:
             return [self.gemini_api_key]
+        return []
+    
+    @property
+    def aws_ses_bcc_email_list(self) -> List[str]:
+        """AWS SES BCC 이메일 리스트 반환"""
+        if self.aws_ses_bcc_email:
+            emails = [email.strip() for email in self.aws_ses_bcc_email.split(",") if email.strip()]
+            return emails
         return []
     
     class Config:
