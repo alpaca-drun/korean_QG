@@ -16,10 +16,12 @@ router = APIRouter()
     "/list",
     response_model=List[UserListItem],
     summary="사용자 목록 조회",
-    description="모든 사용자의 목록과 토큰 사용량, 예상 비용을 조회합니다."
+    description="모든 사용자의 목록과 토큰 사용량, 예상 비용을 조회합니다. 날짜 필터링 가능 (YYYY-MM-DD)"
 )
 async def get_users_list(
     exchange_rate: Optional[float] = 1450.0,
+    start_date: Optional[str] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료 날짜 (YYYY-MM-DD)"),
     user_data: tuple[int, str] = Depends(get_current_user)
 ):
     """
@@ -29,7 +31,23 @@ async def get_users_list(
     # if current_user.get("role") != "admin":
     #     raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
     user_id, role = user_data
-    users = get_all_users_with_usage()
+    
+    # 날짜 포맷 검증 (간단하게)
+    if start_date and len(start_date) != 10:
+        start_date = None
+    if end_date and len(end_date) != 10:
+        end_date = None
+        
+    # 종료 날짜가 있으면 23:59:59까지로 설정하기 위해 하루 더하거나 시간을 붙여야 하는데,
+    # DB 쿼리에서 BETWEEN은 inclusive이므로 문자열 비교 시 시간까지 고려해야 함.
+    # 여기서는 입력받은 YYYY-MM-DD를 그대로 넘기되, DB 쿼리에서 처리하거나
+    # 단순 문자열 비교를 위해 end_date에 " 23:59:59"를 붙여주는 것이 좋음.
+    if end_date:
+        end_date = f"{end_date} 23:59:59"
+    if start_date:
+        start_date = f"{start_date} 00:00:00"
+
+    users = get_all_users_with_usage(start_date, end_date)
     result = []
 
     if role != "master":
@@ -61,7 +79,8 @@ async def get_users_list(
             price_dollers=round(cost_usd, 4),
             price_won=cost_won,
             status=u.get("is_active"),
-            memo=u.get("memo")
+            memo=u.get("memo"),
+            updated_at=u.get("updated_at").strftime("%Y-%m-%d %H:%M:%S") if u.get("updated_at") else None
         ))
         
     return result
