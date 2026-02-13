@@ -73,6 +73,7 @@ class GeminiClient(LLMClientBase):
         file_display_names: Optional[List[str]] = None,
         model_name: Optional[str] = None,
         return_metadata: bool = False,
+        response_schema_class: Optional[Any] = None,
         **kwargs
     ):
         """
@@ -87,6 +88,7 @@ class GeminiClient(LLMClientBase):
             file_display_names: 파일 표시 이름 리스트
             model_name: 사용할 모델 이름
             return_metadata: True이면 메타데이터 포함한 Dict 반환, False면 List[Question] 반환
+            response_schema_class: 응답 스키마 클래스 (Optional)
             **kwargs: 추가 파라미터
             
         Returns:
@@ -104,7 +106,7 @@ class GeminiClient(LLMClientBase):
         if settings.enable_fast_failover and len(self.api_keys) > 1:
             return await self._generate_with_fast_failover(
                 system_prompt, user_prompt, count, 
-                file_paths, file_display_names, model_name, **kwargs
+                file_paths, file_display_names, model_name, response_schema_class, **kwargs
             )
         
         # 일반적인 순차 재시도 방식
@@ -128,7 +130,9 @@ class GeminiClient(LLMClientBase):
                         self._call_api_with_files(
                             system_prompt, user_prompt, model, 
                             file_paths, file_display_names, count, model_name,
-                            return_response_obj=return_metadata
+                            return_response_obj=return_metadata,
+                            response_schema_class=response_schema_class,
+                            **kwargs
                         ),
                         timeout=timeout
                     )
@@ -139,7 +143,7 @@ class GeminiClient(LLMClientBase):
                     else:
                         response_text = response_obj
                     
-                    questions = self._parse_response(response_text, count)
+                    questions = self._parse_response(response_text, count, response_schema_class)
                 except asyncio.TimeoutError:
                     # 타임아웃 발생 시 해당 키를 일시적으로 차단
                     self.api_key_manager.mark_error(api_key, "timeout")
@@ -218,6 +222,7 @@ class GeminiClient(LLMClientBase):
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
         model_name: Optional[str] = None,
+        response_schema_class: Optional[Any] = None,
         **kwargs
     ) -> List[Question]:
         """
@@ -242,7 +247,8 @@ class GeminiClient(LLMClientBase):
             task = asyncio.create_task(
                 self._call_api_with_files(
                     system_prompt, user_prompt, model,
-                    file_paths, file_display_names, count, model_name
+                    file_paths, file_display_names, count, model_name,
+                    response_schema_class=response_schema_class
                 )
             )
             tasks.append((task, api_key))
@@ -260,9 +266,9 @@ class GeminiClient(LLMClientBase):
                 try:
                     result = await task
                     if result:
-                        questions, used_key = result
+                        questions = self._parse_response(result, count, response_schema_class)
                         # 성공한 키 표시
-                        self.api_key_manager.mark_success(used_key)
+                        self.api_key_manager.mark_success(api_key)
                         # 나머지 작업 취소
                         for pending_task, _ in tasks:
                             if pending_task not in done:
@@ -285,11 +291,12 @@ class GeminiClient(LLMClientBase):
                     response = await asyncio.wait_for(
                         self._call_api_with_files(
                             system_prompt, user_prompt, model,
-                            file_paths, file_display_names, count, model_name
+                            file_paths, file_display_names, count, model_name,
+                            response_schema_class=response_schema_class
                         ),
                         timeout=settings.api_retry_timeout
                     )
-                    questions = self._parse_response(response, count)
+                    questions = self._parse_response(response, count, response_schema_class)
                     self.api_key_manager.mark_success(api_key)
                     return questions
                 except Exception as e:
@@ -308,6 +315,7 @@ class GeminiClient(LLMClientBase):
         file_paths_list: Optional[List[Optional[List[str]]]] = None,
         file_display_names_list: Optional[List[Optional[List[str]]]] = None,
         model_names: Optional[List[str]] = None,
+        response_schema_classes: Optional[List[Optional[Any]]] = None,
         **kwargs
     ) -> List[Dict[str, Any]]:
         """
@@ -347,6 +355,7 @@ class GeminiClient(LLMClientBase):
             batch_file_paths_list = file_paths_list[i:i+batch_size] if file_paths_list else [None] * len(batch_sys_prompts)
             batch_file_display_names_list = file_display_names_list[i:i+batch_size] if file_display_names_list else [None] * len(batch_sys_prompts)
             batch_model_names = model_names[i:i+batch_size] if model_names else [settings.gemini_model_name] * len(batch_sys_prompts)
+            batch_response_schema_classes = response_schema_classes[i:i+batch_size] if response_schema_classes else [None] * len(batch_sys_prompts)
             
             # 이번 배치에 사용할 API 키 가져오기
             batch_api_keys = self.api_key_manager.get_keys_for_batch(len(batch_sys_prompts))
@@ -361,6 +370,7 @@ class GeminiClient(LLMClientBase):
                     file_paths = batch_file_paths_list[j] if j < len(batch_file_paths_list) else None
                     file_display_names = batch_file_display_names_list[j] if j < len(batch_file_display_names_list) else None
                     model_name = batch_model_names[j] if j < len(batch_model_names) else settings.gemini_model_name
+                    response_schema_class = batch_response_schema_classes[j] if j < len(batch_response_schema_classes) else None
                     
                     future = loop.run_in_executor(
                         executor,
@@ -372,6 +382,7 @@ class GeminiClient(LLMClientBase):
                         file_paths,
                         file_display_names,
                         model_name,
+                        response_schema_class,
                         **kwargs
                     )
                     futures.append(future)
@@ -426,6 +437,7 @@ class GeminiClient(LLMClientBase):
         file_paths: Optional[List[str]] = None,
         file_display_names: Optional[List[str]] = None,
         model_name: Optional[str] = None,
+        response_schema_class: Optional[Any] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -457,7 +469,9 @@ class GeminiClient(LLMClientBase):
             from app.schemas.question_generation import MultipleQuestion
             
             # JSON 스키마 생성
-            question_schema_raw = MultipleQuestion.model_json_schema()
+            # response_schema_class가 없으면 기본값(MultipleQuestion) 사용
+            schema_class = response_schema_class if response_schema_class else MultipleQuestion
+            question_schema_raw = schema_class.model_json_schema()
             question_schema = self._convert_schema_for_google_genai(question_schema_raw)
             
             # 파일 업로드
@@ -530,7 +544,7 @@ class GeminiClient(LLMClientBase):
                 logger.warning(f"⚠️ [WARNING] response에 usage_metadata 없음. response 타입: {type(response)}")
                 logger.debug(f"⚠️ [WARNING] response 속성: {dir(response)}")
             
-            questions = self._parse_response(response.text, count)
+            questions = self._parse_response(response.text, count, schema_class)
             
             # 성공 표시
             self.api_key_manager.mark_success(api_key)
@@ -597,6 +611,7 @@ class GeminiClient(LLMClientBase):
         count: int = 10,
         model_name: Optional[str] = None,
         return_response_obj: bool = False,
+        response_schema_class: Optional[Any] = None,
         **kwargs
     ):
         """파일이 포함된 Gemini API 호출 (구조화된 출력)
@@ -615,7 +630,9 @@ class GeminiClient(LLMClientBase):
         from app.schemas.question_generation import MultipleQuestion
         
         # JSON 스키마 생성
-        question_schema_raw = MultipleQuestion.model_json_schema()
+        # response_schema_class가 없으면 기본값(MultipleQuestion) 사용
+        schema_class = response_schema_class if response_schema_class else MultipleQuestion
+        question_schema_raw = schema_class.model_json_schema()
         question_schema = self._convert_schema_for_google_genai(question_schema_raw)
         
         # 파일 업로드
@@ -685,18 +702,32 @@ class GeminiClient(LLMClientBase):
         else:
             return response.text  # text만 반환
     
-    def _parse_response(self, response_text: str, expected_count: int) -> List[Question]:
+    def _parse_response(self, response_text: str, expected_count: int, schema_class: Optional[Any] = None) -> List[Question]:
         """
         API 응답을 Question 객체 리스트로 파싱
-        MultipleQuestion 형식으로 응답이 오는 경우 처리
+        MultipleQuestion 또는 다른 형식으로 응답이 오는 경우 처리
         """
-        from app.schemas.question_generation import MultipleQuestion, LLMQuestion
+        from app.schemas.question_generation import MultipleQuestion, LLMQuestion, MultipleMatchingQuestion, MatchingLLMQuestion
         
+        # 기본값 설정
+        if not schema_class:
+            schema_class = MultipleQuestion
+            
         questions = []
         
         try:
             # JSON 파싱
             data = json.loads(response_text)
+            
+            # MultipleMatchingQuestion 형식인 경우
+            if schema_class == MultipleMatchingQuestion:
+                if "questions" in data:
+                    multiple_question = MultipleMatchingQuestion(**data)
+                    for idx, llm_question in enumerate(multiple_question.questions[:expected_count], 1):
+                        question = self._convert_matching_llm_question_to_question(llm_question, idx)
+                        if question:
+                            questions.append(question)
+                return questions
             
             # MultipleQuestion 형식인 경우
             if "questions" in data:
@@ -778,6 +809,54 @@ class GeminiClient(LLMClientBase):
             )
         except Exception as e:
             logger.warning("문항 변환 실패 [Q%s]: %s", question_number, e)
+            return None
+
+    def _convert_matching_llm_question_to_question(
+        self, 
+        llm_question, 
+        question_number: int
+    ) -> Optional[Question]:
+        """MatchingLLMQuestion을 Question 형식으로 변환"""
+        try:
+            from app.schemas.question_generation import (
+                Question, PassageInfo, QuestionText, MatchingLLMQuestion, Choice
+            )
+            
+            # dict인 경우 MatchingLLMQuestion으로 변환
+            if isinstance(llm_question, dict):
+                llm_question = MatchingLLMQuestion(**llm_question)
+            
+            # pairs 처리
+            pairs = llm_question.pairs
+            choices = []
+            right_items = []
+            
+            for idx, pair in enumerate(pairs, 1):
+                choices.append(Choice(number=idx, text=pair.left_item))
+                right_items.append(pair.right_item)
+            
+            # correct_answer에 오른쪽 아이템들을 JSON 문자열로 저장 (안전성 확보)
+            correct_answer = json.dumps(right_items, ensure_ascii=False)
+            
+            return Question(
+                question_id=str(question_number),
+                question_number=question_number,
+                passage_info=PassageInfo(
+                    original_used=True if llm_question.passage else False,
+                    source_type="modified" if llm_question.passage else "none"
+                ),
+                question_text=QuestionText(
+                    text=llm_question.question_text,
+                    modified_passage=llm_question.passage,
+                    box_content=None
+                ),
+                choices=choices,
+                correct_answer=correct_answer,
+                explanation=llm_question.explanation,
+                llm_difficulty=llm_question.llm_difficulty
+            )
+        except Exception as e:
+            logger.warning("선긋기 문항 변환 실패 [Q%s]: %s", question_number, e)
             return None
     
     def _convert_schema_for_google_genai(self, schema: Dict[str, Any]) -> Dict[str, Any]:

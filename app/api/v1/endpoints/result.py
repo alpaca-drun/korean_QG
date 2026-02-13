@@ -23,6 +23,7 @@ from app.schemas.curriculum import (
 from app.db.result import *
 from app.utils.dependencies import get_current_user
 from app.core.logger import logger
+import json
 router = APIRouter()
 
 
@@ -75,6 +76,18 @@ async def get_result(
 
 
     items = get_project_all_questions(project_id=project_id)
+    
+    # 선긋기 문항의 JSON 필드 파싱
+    for item in items:
+        if item.get("question_type") == "matching":
+            for field in ["left_items", "right_items", "sort_order"]:
+                val = item.get(field)
+                if isinstance(val, str):
+                    try:
+                        item[field] = json.loads(val)
+                    except Exception:
+                        item[field] = []
+                        
     # question_type이 제공된 경우에만 필터링
     if question_type:
         items = [q for q in items if q.get("question_type") == question_type]
@@ -176,7 +189,8 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
         table_configs = [
             ("multiple_choice_questions", "question_id", "multiple_choice"),
             ("short_answer_questions", "short_question_id", "short_answer"),
-            ("ox_questions", "ox_question_id", "true_false"),
+            ("true_false_questions", "ox_question_id", "true_false"),
+            ("matching_questions", "question_id", "matching"),
         ]
     
     # 각 문항 업데이트 (단일 트랜잭션으로 처리)
@@ -321,6 +335,7 @@ async def update_selected_results(request: QuestionMetaUpdateRequest, user_data:
         "multiple_choice": ("multiple_choice_questions", "question_id"),
         "true_false": ("true_false_questions", "ox_question_id"),
         "short_answer": ("short_answer_questions", "short_question_id"),
+        "matching": ("matching_questions", "question_id"),
     }
     if request.question_type not in table_map:
         raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다.")

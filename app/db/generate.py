@@ -357,6 +357,46 @@ def save_question_to_db(
                 sql,
                 (config_id, project_id, batch_id, question, box_content, modified_passage, answer, answer_explain, is_used, llm_difficulty)
                 )
+            elif question_type == "선긋기":
+                import random
+                
+                # 1. 원본 데이터 (정답 짝)
+                left_items = [opt.get("text") for opt in options] if options else []
+                
+                # JSON 파싱 시도 (실패 시 하위 호환성을 위해 기존 split 방식 사용)
+                try:
+                    right_items = json.loads(answer) if answer else []
+                    if not isinstance(right_items, list):
+                        right_items = str(answer).split(" | ")
+                except (json.JSONDecodeError, TypeError):
+                    right_items = str(answer).split(" | ") if answer else []
+                
+                # 2. 인덱스 섞기 (0, 1, 2, 3...) -> (2, 0, 3, 1...)
+                # 이 인덱스는 "오른쪽 항목"을 어떤 순서로 보여줄지를 결정함
+                # 예: sort_order가 [2, 0, 1]이면 
+                # 화면에는 right_items[2], right_items[0], right_items[1] 순서로 표시
+                n = min(len(left_items), len(right_items))
+                indices = list(range(n))
+                random.shuffle(indices)
+                
+                # JSON 변환
+                left_json = json.dumps(left_items, ensure_ascii=False)
+                right_json = json.dumps(right_items, ensure_ascii=False)
+                sort_order_json = json.dumps(indices, ensure_ascii=False)
+
+                sql = """
+                    INSERT INTO matching_questions (
+                        config_id, project_id, batch_id, question, box_content, modified_passage,
+                        left_items, right_items, sort_order,
+                        answer_explain, is_used, llm_difficulty, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """
+                cursor.execute(
+                    sql,
+                    (config_id, project_id, batch_id, question, box_content, modified_passage, 
+                     left_json, right_json, sort_order_json,
+                     answer_explain, is_used, llm_difficulty)
+                )
 
 
 
@@ -444,7 +484,8 @@ def get_project_all_questions(project_id: int):
             NULLIF(mcq.option5, 'null') as option5,
             NULLIF(mcq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(mcq.modified_difficulty, 'null') as modified_difficulty,
-            NULLIF(mcq.modified_passage, 'null') as modified_passage
+            NULLIF(mcq.modified_passage, 'null') as modified_passage,
+            NULL as left_items, NULL as right_items, NULL as sort_order
         FROM multiple_choice_questions mcq
         WHERE mcq.project_id = %s AND IFNULL(mcq.is_used, 1) = 1
     """
@@ -469,7 +510,8 @@ def get_project_all_questions(project_id: int):
             NULL as option5,
             NULLIF(tfq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(tfq.modified_difficulty, 'null') as modified_difficulty,
-            NULLIF(tfq.modified_passage, 'null') as modified_passage
+            NULLIF(tfq.modified_passage, 'null') as modified_passage,
+            NULL as left_items, NULL as right_items, NULL as sort_order
         FROM true_false_questions tfq
         WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
@@ -494,9 +536,34 @@ def get_project_all_questions(project_id: int):
             NULL as option5,
             NULLIF(saq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(saq.modified_difficulty, 'null') as modified_difficulty,
-            NULLIF(saq.modified_passage, 'null') as modified_passage
+            NULLIF(saq.modified_passage, 'null') as modified_passage,
+            NULL as left_items, NULL as right_items, NULL as sort_order
         FROM short_answer_questions saq
         WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
+    """
+
+    # 선긋기 문항
+    mq_query = """
+        SELECT 
+            'matching' as question_type,
+            mq.matching_question_id as id,
+            NULLIF(mq.question, 'null') as question,
+            NULL as answer,
+            NULLIF(mq.answer_explain, 'null') as answer_explain,
+            mq.feedback_score,
+            mq.is_used,
+            mq.is_checked,
+            mq.created_at,
+            NULLIF(mq.box_content, 'null') as box_content,
+            NULL as option1, NULL as option2, NULL as option3, NULL as option4, NULL as option5,
+            NULLIF(mq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(mq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(mq.modified_passage, 'null') as modified_passage,
+            mq.left_items,
+            mq.right_items,
+            mq.sort_order
+        FROM matching_questions mq
+        WHERE mq.project_id = %s AND IFNULL(mq.is_used, 1) = 1
     """
     
     # UNION으로 통합
@@ -506,10 +573,12 @@ def get_project_all_questions(project_id: int):
         {tf_query}
         UNION ALL
         {sa_query}
+        UNION ALL
+        {mq_query}
         ORDER BY created_at ASC, id ASC
     """
     
-    results = select_with_query(union_query, (project_id, project_id, project_id))
+    results = select_with_query(union_query, (project_id, project_id, project_id, project_id))
     return results
 
 
@@ -580,10 +649,22 @@ def get_questions_by_feedback_score(project_id: int, min_score: float = 7.0):
             is_used
         FROM short_answer_questions
         WHERE project_id = %s AND feedback_score >= %s
+
+        UNION ALL
+        
+        SELECT 
+            'matching' as question_type,
+            question_id as id,
+            question,
+            NULL as answer,
+            feedback_score,
+            is_used
+        FROM matching_questions
+        WHERE project_id = %s AND feedback_score >= %s
         
         ORDER BY feedback_score DESC
     """
-    results = select_with_query(query, (project_id, min_score, project_id, min_score, project_id, min_score))
+    results = select_with_query(query, (project_id, min_score, project_id, min_score, project_id, min_score, project_id, min_score))
     return results
 
 
@@ -704,14 +785,19 @@ def get_project_statistics(project_id: int):
             (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id = %s) as mc_count,
             (SELECT COUNT(*) FROM true_false_questions WHERE project_id = %s) as tf_count,
             (SELECT COUNT(*) FROM short_answer_questions WHERE project_id = %s) as sa_count,
+            (SELECT COUNT(*) FROM matching_questions WHERE project_id = %s) as mq_count,
+            
             (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id = %s AND is_used = TRUE) as mc_used_count,
             (SELECT COUNT(*) FROM true_false_questions WHERE project_id = %s AND is_used = TRUE) as tf_used_count,
             (SELECT COUNT(*) FROM short_answer_questions WHERE project_id = %s AND is_used = TRUE) as sa_used_count,
+            (SELECT COUNT(*) FROM matching_questions WHERE project_id = %s AND is_used = TRUE) as mq_used_count,
+            
             (SELECT AVG(feedback_score) FROM multiple_choice_questions WHERE project_id = %s) as avg_mc_score,
             (SELECT AVG(feedback_score) FROM true_false_questions WHERE project_id = %s) as avg_tf_score,
-            (SELECT AVG(feedback_score) FROM short_answer_questions WHERE project_id = %s) as avg_sa_score
+            (SELECT AVG(feedback_score) FROM short_answer_questions WHERE project_id = %s) as avg_sa_score,
+            (SELECT AVG(feedback_score) FROM matching_questions WHERE project_id = %s) as avg_mq_score
     """
-    results = select_with_query(query, (project_id,) * 9)
+    results = select_with_query(query, (project_id,) * 12)
     return results[0] if results else None
 
 
@@ -737,10 +823,12 @@ def get_batch_logs_by_project(project_id: int):
             SELECT DISTINCT batch_id FROM true_false_questions WHERE project_id = %s
             UNION
             SELECT DISTINCT batch_id FROM short_answer_questions WHERE project_id = %s
+            UNION
+            SELECT DISTINCT batch_id FROM matching_questions WHERE project_id = %s
         )
         ORDER BY bl.batch_id DESC
     """
-    results = select_with_query(query, (project_id, project_id, project_id))
+    results = select_with_query(query, (project_id, project_id, project_id, project_id))
     return results
 
 
