@@ -7,6 +7,7 @@ import sys
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+import json
 from app.db.database import select_one
 
 # 실행 위치에 상관없이 import 되도록 경로 보정
@@ -381,6 +382,134 @@ def get_project_passage_text(project_id: int, user_id: int | None = None) -> str
     return (row.get("custom_context") or row.get("passage_context") or "").strip()
 
 
+
+def get_matching_question_data(project_id: int | None = None, user_id: int | None = None):
+    """
+    선긋기 전용 데이터를 DB에서 조회하여 반환하는 함수 (정답 포맷팅 포함)
+    """
+    project_id_int = project_id
+    
+    query = """
+        SELECT
+            mq.matching_question_id AS qid,
+            mq.created_at AS created_at,
+            mq.question AS question,
+            NULLIF(mq.modified_passage, '') AS passage,
+            NULL AS answer,
+            mq.answer_explain AS answer_explain,
+            NULL AS box_content,
+            4 AS qtype,
+            mq.left_items AS left_items,
+            mq.right_items AS right_items,
+            mq.sort_order AS sort_order
+        FROM matching_questions mq
+        JOIN projects p ON p.project_id = mq.project_id
+        WHERE mq.project_id = %s
+    """
+    
+    try:
+        if user_id is None:
+            base_filters = " AND 1=1 AND p.is_deleted = 0"
+            params = (project_id_int,)
+        else:
+            base_filters = " AND p.user_id = %s AND p.is_deleted = 0"
+            params = (project_id_int, user_id)
+
+        filtered_query = query.replace("WHERE mq.project_id = %s", f"WHERE mq.project_id = %s{base_filters} AND IFNULL(mq.is_checked, 0) = 1")
+        filtered_query += " ORDER BY qid ASC"
+        
+        results = execute_query_via_app_db(filtered_query, params=params, fetch=True)
+        
+        if not results:
+            logger.warning("project_id=%s에 해당하는 선긋기 문항 데이터가 없습니다.", project_id_int)
+            return []
+            
+        data_list = []
+        left_symbols = ['Ⓐ', 'Ⓑ', 'Ⓒ', 'Ⓓ', 'Ⓔ']
+        right_symbols = ['①', '②', '③', '④', '⑤']
+
+        for idx, row in enumerate(results, 1):
+            selects = {}
+            extra_data = {}
+            formatted_answer = ""
+            
+            try:
+                left_items = json.loads(row.get('left_items') or '[]')
+                right_items = json.loads(row.get('right_items') or '[]')
+                sort_order = row.get('sort_order')
+                
+                if isinstance(sort_order, str):
+                    try:
+                        sort_order = json.loads(sort_order)
+                    except:
+                        sort_order = []
+                
+                display_rights = []
+                # sort_order 유효성 검사 및 정렬
+                if sort_order and isinstance(sort_order, list) and len(sort_order) == len(right_items):
+                     display_rights = [right_items[i] for i in sort_order]
+                else:
+                     display_rights = right_items
+                     sort_order = list(range(len(right_items)))
+                
+                # 데이터 채우기 (left1~5, right1~5)
+                for i in range(5):
+                    l_item = left_items[i] if i < len(left_items) else ""
+                    r_item = display_rights[i] if i < len(display_rights) else ""
+                    
+                    extra_data[f'left{i+1}'] = l_item
+                    extra_data[f'right{i+1}'] = r_item
+                    
+                    selects[f'select{i+1}'] = f"{l_item}   ----------------   {r_item}" if l_item and r_item else ""
+
+                # 정답 포맷팅 (Ⓐ-②, Ⓑ-①)
+                answer_parts = []
+                for i in range(len(left_items)):
+                    # 왼쪽 i번째 항목의 짝은 right_items[i]임.
+                    # right_items[i]가 화면의 몇 번째(k)에 있는지 찾아야 함.
+                    # 즉, sort_order[k] == i 인 k를 찾아야 함.
+                    try:
+                        if i in sort_order:
+                            k = sort_order.index(i)
+                            # 기호 매핑 (범위 체크)
+                            l_sym = left_symbols[i] if i < len(left_symbols) else f"L{i+1}"
+                            r_sym = right_symbols[k] if k < len(right_symbols) else f"R{k+1}"
+                            answer_parts.append(f"{l_sym}-{r_sym}")
+                    except ValueError:
+                        pass
+                
+                if answer_parts:
+                    formatted_answer = ", ".join(answer_parts)
+                else:
+                    formatted_answer = row.get('answer', '')
+
+            except Exception as e:
+                logger.error(f"선긋기 데이터 파싱 오류: {e}")
+                formatted_answer = row.get('answer', '')
+
+            item = {
+                'nu': idx,
+                'question': row.get('question', ''),
+                'select1': selects.get('select1') or '',
+                'select2': selects.get('select2') or '',
+                'select3': selects.get('select3') or '',
+                'select4': selects.get('select4') or '',
+                'select5': selects.get('select5') or '',
+                'answer': formatted_answer,
+                'answer_explain': row.get('answer_explain', ''),
+                'passage': row.get('passage', ''),
+                'boxcontent': row.get('box_content', '')
+            }
+            item.update(extra_data)
+            data_list.append(item)
+            
+        return data_list
+
+    except Exception as e:
+        logger.exception("[DB 연결 오류] 예상치 못한 오류: %s", e)
+        raise
+
+
 def get_question_data_from_db(project_id: int | None = None, user_id: int | None = None):
     """
     DB에서 질문(객관식/단답형/OX) 데이터를 가져오는 함수
@@ -396,7 +525,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
     # passage_text = get_project_passage_text(project_id_int, user_id=user_id)
     # logger.debug("passage_text: %s", passage_text)
     
-    # ✅ 현재 DB 스키마 기반: multiple_choice_questions / short_answer_questions / true_false_questions
+    # ✅ 현재 DB 스키마 기반: multiple_choice_questions / short_answer_questions / true_false_questions / matching_questions
     # seq는 생성시간 기준으로 부여
     query = """
         (
@@ -413,7 +542,10 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 mcq.answer AS answer,
                 mcq.answer_explain AS answer_explain,
                 mcq.box_content AS box_content,
-                1 AS qtype
+                1 AS qtype,
+                NULL AS left_items,
+                NULL AS right_items,
+                NULL AS sort_order
             FROM multiple_choice_questions mcq
             JOIN projects p ON p.project_id = mcq.project_id
             WHERE mcq.project_id = %s
@@ -433,7 +565,10 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 saq.answer AS answer,
                 saq.answer_explain AS answer_explain,
                 saq.box_content AS box_content,
-                2 AS qtype
+                2 AS qtype,
+                NULL AS left_items,
+                NULL AS right_items,
+                NULL AS sort_order
             FROM short_answer_questions saq
             JOIN projects p2 ON p2.project_id = saq.project_id
             WHERE saq.project_id = %s
@@ -453,10 +588,36 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 tfq.answer AS answer,
                 tfq.answer_explain AS answer_explain,
                 NULL AS box_content,
-                3 AS qtype
+                3 AS qtype,
+                NULL AS left_items,
+                NULL AS right_items,
+                NULL AS sort_order
             FROM true_false_questions tfq
             JOIN projects p3 ON p3.project_id = tfq.project_id
             WHERE tfq.project_id = %s
+        )
+        UNION ALL
+        (
+            SELECT
+                mq.matching_question_id AS qid,
+                mq.created_at AS created_at,
+                mq.question AS question,
+                NULLIF(mq.modified_passage, '') AS passage,
+                NULL AS select1,
+                NULL AS select2,
+                NULL AS select3,
+                NULL AS select4,
+                NULL AS select5,
+                mq.answer AS answer,
+                mq.answer_explain AS answer_explain,
+                NULL AS box_content,
+                4 AS qtype,
+                mq.left_items AS left_items,
+                mq.right_items AS right_items,
+                mq.sort_order AS sort_order
+            FROM matching_questions mq
+            JOIN projects p4 ON p4.project_id = mq.project_id
+            WHERE mq.project_id = %s
         )
         ORDER BY qid ASC
     """
@@ -487,11 +648,11 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
         # 프로젝트 소유권/삭제 여부 필터링(선택)
         if user_id is None:
             base_filters = " AND 1=1 AND p.is_deleted = 0"
-            params = (project_id_int, project_id_int, project_id_int)
+            params = (project_id_int, project_id_int, project_id_int, project_id_int)
         else:
             base_filters = " AND p.user_id = %s AND p.is_deleted = 0"
-            # p2/p3도 동일하게 적용되도록 문자열 치환
-            params = (project_id_int, user_id, project_id_int, user_id, project_id_int, user_id)
+            # p2/p3/p4도 동일하게 적용되도록 문자열 치환
+            params = (project_id_int, user_id, project_id_int, user_id, project_id_int, user_id, project_id_int, user_id)
 
         filtered_query = (
             query
@@ -508,6 +669,12 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 if user_id is not None
                 else "WHERE tfq.project_id = %s AND IFNULL(tfq.is_checked, 0) = 1"
             )
+            .replace(
+                "WHERE mq.project_id = %s",
+                (f"WHERE mq.project_id = %s AND p4.user_id = %s AND p4.is_deleted = 0 AND IFNULL(mq.is_checked, 0) = 1")
+                if user_id is not None
+                else "WHERE mq.project_id = %s AND IFNULL(mq.is_checked, 0) = 1"
+            )
         )
 
         results = execute_query_via_app_db(filtered_query, params=params, fetch=True)
@@ -522,21 +689,61 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
         logger.info("[데이터 변환] 딕셔너리로 변환 중...")
         data_list = []
         for idx, row in enumerate(results, 1):
+            
+            # 선긋기(qtype=4) 처리
+            qtype = row.get('qtype')
+            selects = {}
+            extra_data = {}
+
+            if qtype == 4:
+                try:
+                    left_items = json.loads(row.get('left_items') or '[]')
+                    right_items = json.loads(row.get('right_items') or '[]')
+                    sort_order = row.get('sort_order')
+                    
+                    if isinstance(sort_order, str):
+                        try:
+                            sort_order = json.loads(sort_order)
+                        except:
+                            sort_order = []
+                    
+                    display_rights = []
+                    if sort_order and isinstance(sort_order, list) and len(sort_order) == len(right_items):
+                         display_rights = [right_items[i] for i in sort_order]
+                    else:
+                         display_rights = right_items
+                    
+                    for i in range(5):
+                        l_item = left_items[i] if i < len(left_items) else ""
+                        r_item = display_rights[i] if i < len(display_rights) else ""
+                        
+                        extra_data[f'left{i+1}'] = l_item
+                        extra_data[f'right{i+1}'] = r_item
+                        
+                        selects[f'select{i+1}'] = f"{l_item}   ----------------   {r_item}" if l_item and r_item else ""
+                except Exception as e:
+                    logger.error(f"선긋기 데이터 파싱 오류: {e}")
+
             # 번호는 전체 문항 순서로 부여
-            data_list.append({
+            item = {
                 'nu': idx,
                 'question': row.get('question', ''),
-                'select1': row.get('select1', '') or '',
-                'select2': row.get('select2', '') or '',
-                'select3': row.get('select3', '') or '',
-                'select4': row.get('select4', '') or '',
-                'select5': row.get('select5', '') or '',
+                'select1': selects.get('select1') or row.get('select1', '') or '',
+                'select2': selects.get('select2') or row.get('select2', '') or '',
+                'select3': selects.get('select3') or row.get('select3', '') or '',
+                'select4': selects.get('select4') or row.get('select4', '') or '',
+                'select5': selects.get('select5') or row.get('select5', '') or '',
                 'answer': row.get('answer', ''),
                 'answer_explain': row.get('answer_explain', ''),
                 # 템플릿에 {passage}가 있으면 프로젝트 지문을 사용
                 'passage': row.get('passage', ''),
                 'boxcontent': row.get('box_content', '')
-            })
+            }
+            
+            if qtype == 4:
+                item.update(extra_data)
+            
+            data_list.append(item)
             if idx % 10 == 0 or idx == len(results):
                 logger.debug("진행 중... %s/%s", idx, len(results))
         
@@ -780,6 +987,16 @@ def replace_table_text(table, data, num):
         '{select3}': str(data.get('select3') or ''),
         '{select4}': str(data.get('select4') or ''),
         '{select5}': str(data.get('select5') or ''),
+        '{left1}': str(data.get('left1') or ''),
+        '{left2}': str(data.get('left2') or ''),
+        '{left3}': str(data.get('left3') or ''),
+        '{left4}': str(data.get('left4') or ''),
+        '{left5}': str(data.get('left5') or ''),
+        '{right1}': str(data.get('right1') or ''),
+        '{right2}': str(data.get('right2') or ''),
+        '{right3}': str(data.get('right3') or ''),
+        '{right4}': str(data.get('right4') or ''),
+        '{right5}': str(data.get('right5') or ''),
         '{answer}': str(data.get('answer') or ''),
         '{answer_explain}': str(data.get('answer_explain') or ''),
         '{passage}': str(data.get('passage') or ''),
@@ -793,6 +1010,8 @@ def replace_table_text(table, data, num):
     # 이 목록에 있는 플레이스홀더는 값이 비어있으면 해당 행을 삭제함
     check_placeholders = [
         '{question}', '{select1}', '{select2}', '{select3}', '{select4}', '{select5}', 
+        '{left1}', '{left2}', '{left3}', '{left4}', '{left5}',
+        '{right1}', '{right2}', '{right3}', '{right4}', '{right5}',
         '{answer}', '{answer_explain}', '{boxcontent}'
     ]
     

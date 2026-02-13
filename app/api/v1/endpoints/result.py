@@ -6,7 +6,7 @@ import tempfile
 import os
 from urllib.parse import quote
 
-from app.download.dev import fill_table_from_list, get_question_data_from_db
+from app.download.dev import fill_table_from_list, get_question_data_from_db, get_matching_question_data
 from app.db.database import select_one, update, select_with_query, get_db_connection
 from app.db.generate import get_project_all_questions
 from app.schemas.curriculum import (
@@ -370,11 +370,6 @@ async def download_selected_results(
     project_id로 문항을 조회하여 docx 파일로 반환합니다.
     카테고리는 project_scopes 테이블의 subject 필드에서 자동으로 조회합니다.
     """
-    # 템플릿 경로 (app/download/sample3.docx)
-    template_path = Path(__file__).resolve().parents[3] / "download" / "sample3.docx"
-    if not template_path.exists():
-        raise HTTPException(status_code=500, detail=f"템플릿 파일을 찾을 수 없습니다: {template_path}")
-
     # ✅ 프로젝트 소유권 확인 및 카테고리 조회
     user_id, role = user_data
 
@@ -385,7 +380,8 @@ async def download_selected_results(
             SELECT 
                 p.project_id,
                 p.project_name,
-                ps.subject as category
+                ps.subject as category,
+                IFNULL(psc.question_type, '프로젝트타입') as question_type
             FROM projects p
             LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
             LEFT JOIN project_source_config psc ON psc.config_id = (
@@ -401,7 +397,8 @@ async def download_selected_results(
             SELECT 
                 p.project_id,
                 p.project_name,
-                ps.subject as category
+                ps.subject as category,
+                IFNULL(psc.question_type, '프로젝트타입') as question_type
             FROM projects p
             LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
             LEFT JOIN project_source_config psc ON psc.config_id = (
@@ -417,7 +414,8 @@ async def download_selected_results(
             SELECT 
                 p.project_id,
                 p.project_name,
-                ps.subject as category
+                ps.subject as category,
+                IFNULL(psc.question_type, '프로젝트타입') as question_type
             FROM projects p
             LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
             LEFT JOIN project_source_config psc ON psc.config_id = (
@@ -442,17 +440,38 @@ async def download_selected_results(
     
     project_info = project_result[0]
     category = project_info.get("category") or ""  # subject가 없으면 빈 문자열
+    question_type = project_info.get("question_type")
+
+    # 템플릿 경로 설정
+    download_dir = Path(__file__).resolve().parents[3] / "download"
+    
+    if question_type == "선긋기":
+        template_name = "sample_matching.docx"
+    else:
+        template_name = "sample3.docx"
+        
+    template_path = download_dir / template_name
+    
+    if not template_path.exists():
+        # 선긋기 템플릿이 없으면 기본 템플릿 시도
+        if question_type == "선긋기" and (download_dir / "sample3.docx").exists():
+            logger.warning(f"선긋기 템플릿({template_name})을 찾을 수 없어 기본 템플릿을 사용합니다.")
+            template_path = download_dir / "sample3.docx"
+        else:
+            raise HTTPException(status_code=500, detail=f"템플릿 파일을 찾을 수 없습니다: {template_path}")
 
     # 데이터 조회
     try:
         # 내부에서도 user_id로 한번 더 검증/필터링
-        if role == "admin":
-            data_list = get_question_data_from_db(project_id, user_id=None)
+        target_user_id = None
+        if role not in ["admin", "master"]:
+            target_user_id = user_id
 
-        elif role == "master":
-            data_list = get_question_data_from_db(project_id, user_id=None)
+        if question_type == "선긋기":
+            data_list = get_matching_question_data(project_id, user_id=target_user_id)
         else:
-            data_list = get_question_data_from_db(project_id, user_id=user_id)
+            data_list = get_question_data_from_db(project_id, user_id=target_user_id)
+
     except Exception as e:
         logger.exception("문항 조회 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"문항 조회 실패: {str(e)}")
