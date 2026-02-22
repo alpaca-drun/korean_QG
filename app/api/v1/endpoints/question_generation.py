@@ -220,8 +220,11 @@ async def generate_questions_batch_async(
             batch_count = (requests.target_count // 10) + (1 if requests.target_count % 10 else 0)
         )
         
+    except HTTPException:
+        # HTTPException은 그대로 전파
+        raise
     except Exception as e:
-        # 예외 발생 시 FAIL 응답
+        # 그 외 예외 발생 시 FAIL 응답
         logger.exception("배치 문항 생성 시작 실패")
         update_project_status(requests.project_id, "FAILED")
         raise HTTPException(

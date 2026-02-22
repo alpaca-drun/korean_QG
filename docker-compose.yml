@@ -47,7 +47,7 @@ services:
       TZ: Asia/Seoul
     ports:
       - "${APP_PORT:-8000}:8000"
-    command: gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120 --keep-alive 5
+    #command: gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120 --keep-alive 5
     volumes:
       # 개발 모드: 코드 변경 시 자동 반영 (Hot Reload)
       - ./app:/app/app

@@ -144,6 +144,11 @@ class Question(BaseModel):
     batch_index: Optional[Union[int, str]] = Field(None, description="배치 인덱스 (숫자 또는 'retry_N')")
     is_used: Optional[int] = Field(None, description="사용 여부 (1: 사용, 0: 여분)")
     llm_difficulty: Optional[int] = Field(None, description="LLM 난이도 (1: 쉬움, 2: 보통, 3: 어려움) - DB 저장 시 자동으로 '쉬움', '보통', '어려움'으로 변환됨")
+    
+    # 선긋기형 전용 필드
+    left_items: Optional[List[str]] = Field(None, description="선긋기 왼쪽 항목")
+    right_items: Optional[List[str]] = Field(None, description="선긋기 오른쪽 항목 (정답)")
+    sort_order: Optional[List[int]] = Field(None, description="선긋기 오른쪽 항목 표시 순서 (인덱스)")
 
 
 # LLM 응답용 모델 (기존 실험 코드 구조)
@@ -162,9 +167,34 @@ class LLMQuestion(BaseModel):
         str_strip_whitespace = True
 
 
+class MatchingPair(BaseModel):
+    """선긋기 쌍 모델"""
+    left_item: str = Field(..., description="왼쪽 항목")
+    right_item: str = Field(..., description="오른쪽 항목")
+
+
+class MatchingLLMQuestion(BaseModel):
+    """LLM이 생성하는 선긋기 문항 모델"""
+    question_text: str = Field(..., description="문제 문장")
+    pairs: List[MatchingPair] = Field(..., description="선긋기 정답 쌍 목록")
+    left_item: str = Field(..., description="왼쪽 항목")
+    right_item: str = Field(..., description="오른쪽 항목")
+    explanation: str = Field(..., description="해설")
+    passage: Optional[str] = Field(default=None, description="관련 지문 (필요한 경우)")
+    llm_difficulty: Optional[int] = Field(default=None, description="문항 난이도 (1: 쉬움, 2: 보통, 3: 어려움)")
+
+    class Config:
+        str_strip_whitespace = True
+
+
 class MultipleQuestion(BaseModel):
     """다중 문항 모델 - LLM이 한 번에 여러 문항을 생성할 때 사용"""
     questions: List[LLMQuestion] = Field(..., description="문제 목록")
+
+
+class MultipleMatchingQuestion(BaseModel):
+    """다중 선긋기 문항 모델"""
+    questions: List[MatchingLLMQuestion] = Field(..., description="문제 목록")
 
 
 class QuestionGenerationErrorResponse(BaseModel):

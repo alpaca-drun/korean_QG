@@ -63,11 +63,20 @@ class QuestionGenerationService:
         counts = []
         file_paths_list = []
         file_display_names_list = []
+        response_schema_classes = []
         request_mapping = []  # 배치 결과를 원래 요청에 매핑하기 위한 리스트
         
         # 각 요청마다 school_level에 따라 디렉토리 생성 및 경로 변환
+        from app.schemas.question_generation import MultipleQuestion, MultipleMatchingQuestion
+        
         for req_idx, req in enumerate(requests):
             total_count = req.generation_count
+            
+            # 스키마 클래스 결정
+            schema_class = MultipleQuestion
+            if req.question_type == "선긋기":
+                schema_class = MultipleMatchingQuestion
+            
             batch_size = 10
             num_batches = (total_count + batch_size - 1) // batch_size  # 올림 계산
             
@@ -112,6 +121,7 @@ class QuestionGenerationService:
                 counts.append(current_batch_size)  # 실제 배치 크기
                 file_paths_list.append(resolved_file_paths)  # 변환된 경로 사용
                 file_display_names_list.append(req.file_display_names)
+                response_schema_classes.append(schema_class)
                 
                 # 원래 요청 인덱스와 배치 정보 저장
                 request_mapping.append({
@@ -128,7 +138,8 @@ class QuestionGenerationService:
                 user_prompts=user_prompts,
                 counts=counts,
                 file_paths_list=file_paths_list,
-                file_display_names_list=file_display_names_list
+                file_display_names_list=file_display_names_list,
+                response_schema_classes=response_schema_classes
             )
             
             # 배치 결과를 원래 요청별로 그룹화 (배치 정보 포함)
@@ -206,6 +217,11 @@ class QuestionGenerationService:
                             school_level=school_level
                         ) if request.file_paths else None
                         
+                        # 스키마 클래스 결정
+                        schema_class = MultipleQuestion
+                        if request.question_type == "선긋기":
+                            schema_class = MultipleMatchingQuestion
+                        
                         # 부족한 만큼만 재요청 (단일 요청, 메타데이터 포함)
                         retry_result = await self.llm_client.generate_questions(
                             system_prompt=sys_prompt,
@@ -213,7 +229,8 @@ class QuestionGenerationService:
                             count=shortage,
                             file_paths=resolved_file_paths,
                             file_display_names=request.file_display_names,
-                            return_metadata=True  # 메타데이터 포함 요청
+                            return_metadata=True,  # 메타데이터 포함 요청
+                            response_schema_class=schema_class
                         )
                         
                         # retry_result는 Dict 형태: {'questions': [...], 'metadata': {...}}

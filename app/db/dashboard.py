@@ -96,12 +96,17 @@ def get_question_counts_by_project_ids(project_ids: list) -> QuestionTypeCount:
     sa_result = select_with_query(sa_query, tuple(project_ids))
     sa_count = sa_result[0]["count"] if sa_result else 0
     
-    total = mc_count + tf_count + sa_count
+    mq_query = f"SELECT COUNT(*) as count FROM matching_questions WHERE project_id IN ({placeholders})"
+    mq_result = select_with_query(mq_query, tuple(project_ids))
+    mq_count = mq_result[0]["count"] if mq_result else 0
+    
+    total = mc_count + tf_count + sa_count + mq_count
     
     return QuestionTypeCount(
         multiple_choice=mc_count,
         true_false=tf_count,
         short_answer=sa_count,
+        matching=mq_count,
         total=total
     )
 
@@ -117,9 +122,10 @@ def get_total_question_count_by_project_ids(project_ids: list) -> int:
         SELECT 
             (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id IN ({placeholders})) +
             (SELECT COUNT(*) FROM true_false_questions WHERE project_id IN ({placeholders})) +
-            (SELECT COUNT(*) FROM short_answer_questions WHERE project_id IN ({placeholders})) as total
+            (SELECT COUNT(*) FROM short_answer_questions WHERE project_id IN ({placeholders})) +
+            (SELECT COUNT(*) FROM matching_questions WHERE project_id IN ({placeholders})) as total
     """
-    result = select_with_query(query, tuple(project_ids * 3))
+    result = select_with_query(query, tuple(project_ids * 4))
     return result[0]["total"] if result else 0
 
 
@@ -168,9 +174,12 @@ def get_avg_feedback_score_by_project_ids(project_ids: list) -> float | None:
             UNION ALL
             SELECT feedback_score FROM short_answer_questions 
             WHERE project_id IN ({placeholders}) AND feedback_score IS NOT NULL
+            UNION ALL
+            SELECT feedback_score FROM matching_questions 
+            WHERE project_id IN ({placeholders}) AND feedback_score IS NOT NULL
         ) as all_scores
     """
-    result = select_with_query(query, tuple(project_ids * 3))
+    result = select_with_query(query, tuple(project_ids * 4))
     
     if result and result[0] and result[0]["avg_score"]:
         return round(float(result[0]["avg_score"]), 2)
@@ -183,7 +192,8 @@ def get_question_count_for_project(project_id: int) -> int:
     mc_count = count("multiple_choice_questions", {"project_id": project_id})
     tf_count = count("true_false_questions", {"project_id": project_id})
     sa_count = count("short_answer_questions", {"project_id": project_id})
-    return mc_count + tf_count + sa_count
+    mq_count = count("matching_questions", {"project_id": project_id})
+    return mc_count + tf_count + sa_count + mq_count
 
 
 def get_status_label(status: str) -> str:
@@ -208,7 +218,9 @@ def get_question_type_label(question_type: str) -> str:
         "true_false": "OX형",
         "ox": "OX형",
         "short_answer": "단답형",
-        "단답형": "단답형"
+        "단답형": "단답형",
+        "matching": "선긋기형",
+        "선긋기": "선긋기형"
     }
     return type_map.get(question_type.lower(), question_type)
 

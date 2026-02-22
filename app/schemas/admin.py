@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 class UserListItem(BaseModel):
@@ -16,6 +16,10 @@ class UserListItem(BaseModel):
     memo: Optional[str] = Field(None, description="메모")
     updated_at: Optional[str] = Field(None, description="업데이트 일시")
     
+class UserListResponse(BaseModel):
+    items: List[UserListItem] = Field(..., description="사용자 목록")
+    exchange_rate: float = Field(1450.0, description="환율")
+
 class UserUpdateRoleRequest(BaseModel):
     role: str = Field(..., description="접근 권한 (admin | master | user | tester)")
 
