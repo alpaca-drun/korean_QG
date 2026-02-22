@@ -111,7 +111,7 @@ class EmailClient:
                     logger.debug("이메일 전송 시도 %d/%d: %s", attempt + 1, self.MAX_RETRIES, to_address)
                     
                     response = self.ses.send_email(
-                        Source=self.sender_email,
+                        Source=f"디지털사업팀 <{self.sender_email}>",
                         Destination=destination,
                         Message=message
                     )
