@@ -358,6 +358,8 @@ def save_question_to_db(
                 (config_id, project_id, batch_id, question, box_content, modified_passage, answer, answer_explain, is_used, llm_difficulty)
                 )
             elif question_type == "진위형":
+                # 진위형은 보기박스(box_content)가 불필요 — <보기>는 passage에 포함
+                box_content = None
                 sql = """
                     INSERT INTO true_false_questions (
                         config_id, project_id, batch_id, question, box_content, modified_passage,
