@@ -848,14 +848,13 @@ def get_generation_logs_by_project(project_id: int):
     """프로젝트의 생성 로그 조회"""
     query = """
         SELECT 
-            generation_log_id,
-            question_type,
-            input_token,
-            output_token,
-            model_name,
-            ls.created_at as selection_created_at
+            gl.generation_log_id,
+            gl.question_type,
+            gl.input_token,
+            gl.output_token,
+            gl.model_name,
+            gl.config_id
         FROM generation_logs gl
-        LEFT JOIN log_selection ls ON gl.selection_id = ls.selection_id
         WHERE gl.project_id = %s
         ORDER BY gl.generation_log_id DESC
     """
@@ -918,7 +917,7 @@ def get_download_history(project_id: int):
         SELECT 
             ld.download_id,
             ld.download_at,
-            ls.JSON as selected_questions
+            ls.selected_list as selected_questions
         FROM log_download ld
         INNER JOIN log_selection ls ON ld.selection_id = ls.selection_id
         WHERE ls.project_id = %s
