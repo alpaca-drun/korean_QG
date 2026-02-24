@@ -357,6 +357,18 @@ def save_question_to_db(
                 sql,
                 (config_id, project_id, batch_id, question, box_content, modified_passage, answer, answer_explain, is_used, llm_difficulty)
                 )
+            elif question_type == "진위형":
+                sql = """
+                    INSERT INTO true_false_questions (
+                        config_id, project_id, batch_id, question, box_content, modified_passage,
+                        answer, answer_explain, is_used, llm_difficulty, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """
+                cursor.execute(
+                    sql,
+                    (config_id, project_id, batch_id, question, box_content, modified_passage,
+                     answer, answer_explain, is_used, llm_difficulty)
+                )
             elif question_type == "선긋기":
                 import random
                 
