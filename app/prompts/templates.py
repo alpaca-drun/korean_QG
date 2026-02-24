@@ -11,6 +11,10 @@ from app.prompts.matching_prompts import (
     MATCHING_SYSTEM_PROMPT,
     MATCHING_USER_PROMPT
 )
+from app.prompts.true_false_prompts import (
+    TRUE_FALSE_SYSTEM_PROMPT,
+    TRUE_FALSE_USER_PROMPT
+)
 from app.core.logger import logger
 
 # difficulty.md 파일 읽어오기
@@ -68,6 +72,8 @@ class PromptTemplate:
                 system_prompt_template = COMMON_SYSTEM_PROMPT_SHORT_ANSWER
             elif request.question_type == "선긋기":
                 system_prompt_template = MATCHING_SYSTEM_PROMPT
+            elif request.question_type == "진위형":
+                system_prompt_template = TRUE_FALSE_SYSTEM_PROMPT
             else:
                 system_prompt_template = COMMON_SYSTEM_PROMPT
         if user_prompt_template is None:
@@ -77,6 +83,8 @@ class PromptTemplate:
                 user_prompt_template = COMMON_USER_PROMPT_SHORT_ANSWER
             elif request.question_type == "선긋기":
                 user_prompt_template = MATCHING_USER_PROMPT
+            elif request.question_type == "진위형":
+                user_prompt_template = TRUE_FALSE_USER_PROMPT
             else:
                 user_prompt_template = COMMON_USER_PROMPT
 
