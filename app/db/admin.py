@@ -37,6 +37,7 @@ def get_all_users_with_usage(start_date: str = None, end_date: str = None):
             psc.updated_at,
             u.subject,
             u.memo,
+            u.team_name,
             COALESCE(SUM(psc.input_tokens), 0) as input_tokens,
             COALESCE(SUM(psc.output_tokens), 0) as output_tokens
         FROM users u

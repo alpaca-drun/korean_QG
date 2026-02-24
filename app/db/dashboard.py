@@ -139,7 +139,7 @@ def get_token_usage_by_project_ids(project_ids: list) -> TokenUsage:
     query = f"""
         SELECT 
             COALESCE(SUM(input_tokens), 0) as total_input,
-            COALESCE(SUM(output_token), 0) as total_output
+            COALESCE(SUM(output_tokens), 0) as total_output
         FROM project_source_config 
         WHERE project_id IN ({placeholders})
     """

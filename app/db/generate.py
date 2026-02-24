@@ -668,7 +668,7 @@ def get_questions_by_feedback_score(project_id: int, min_score: float = 7.0):
         
         SELECT 
             'matching' as question_type,
-            question_id as id,
+            matching_question_id as id,
             question,
             NULL as answer,
             feedback_score,
