@@ -22,7 +22,9 @@ CREATE TABLE `users` (
 	`is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '계정 활성화 여부',
 	`email` VARCHAR(50) NULL COMMENT '이메일',
 	`team_name` VARCHAR(100) NULL,
-	PRIMARY KEY (`user_id`)
+	PRIMARY KEY (`user_id`),
+	UNIQUE KEY `UQ_users_login_id` (`login_id`),
+	UNIQUE KEY `UQ_users_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -45,7 +47,8 @@ CREATE TABLE `achievement` (
 	`code` VARCHAR(50) NULL COMMENT '성취기준 코드 (예: 9국01-01)',
 	`description` TEXT NULL COMMENT '성취기준 내용',
 	`evaluation_criteria` TEXT NULL COMMENT '평가기준',
-	PRIMARY KEY (`ach_id`)
+	PRIMARY KEY (`ach_id`),
+	UNIQUE KEY `UQ_achievement_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -114,7 +117,7 @@ CREATE TABLE `passage_custom` (
 	`context` LONGTEXT NOT NULL,
 	`passage_id` BIGINT NULL COMMENT '원본 지문이 있는 경우',
 	`created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
-	`is_use` INT NULL DEFAULT 1 COMMENT '지문 사용 여부',
+	`is_used` TINYINT(1) NULL DEFAULT 1 COMMENT '지문 사용 여부',
 	PRIMARY KEY (`custom_passage_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -149,8 +152,8 @@ CREATE TABLE `project_source_config` (
 DROP TABLE IF EXISTS `batch_logs`;
 CREATE TABLE `batch_logs` (
 	`batch_id` BIGINT NOT NULL AUTO_INCREMENT,
-	`input_token` INT NULL,
-	`output_token` INT NULL,
+	`input_tokens` INT NULL,
+	`output_tokens` INT NULL,
 	`total_duration` INT NULL,
 	`temperature` FLOAT NULL,
 	`top_p` FLOAT NULL,
@@ -188,7 +191,7 @@ CREATE TABLE `multiple_choice_questions` (
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	`modified_passage` LONGTEXT NULL COMMENT '변형된 지문',
-	`is_checked` TINYINT NULL DEFAULT 1 COMMENT '다운로드 사용 유무',
+	`is_checked` TINYINT(1) NULL DEFAULT 1 COMMENT '다운로드 사용 유무',
 	PRIMARY KEY (`question_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -209,7 +212,7 @@ CREATE TABLE `short_answer_questions` (
 	`feedback_score` DECIMAL(3, 1) NULL COMMENT '0.5~10점 평가',
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-	`is_checked` TINYINT NULL DEFAULT 1 COMMENT '다운로드 체크',
+	`is_checked` TINYINT(1) NULL DEFAULT 1 COMMENT '다운로드 체크',
 	`modified_passage` LONGTEXT NULL COMMENT '변형된 지문',
 	`llm_difficulty` VARCHAR(50) NULL,
 	`modified_difficulty` VARCHAR(50) NULL COMMENT '변경된 난이도',
@@ -232,7 +235,7 @@ CREATE TABLE `true_false_questions` (
 	`is_used` TINYINT(1) NULL COMMENT '문항사용여부',
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-	`is_checked` TINYINT NULL DEFAULT 1 COMMENT '다운로드 여부',
+	`is_checked` TINYINT(1) NULL DEFAULT 1 COMMENT '다운로드 여부',
 	`modified_passage` LONGTEXT NULL,
 	`llm_difficulty` VARCHAR(50) NULL,
 	`modified_difficulty` VARCHAR(50) NULL,
@@ -256,7 +259,7 @@ CREATE TABLE `matching_questions` (
 	`feedback_score` DECIMAL(3, 1) NULL COMMENT '0.5~10점 평가',
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-	`is_checked` TINYINT NULL DEFAULT 1 COMMENT '다운로드 체크',
+	`is_checked` TINYINT(1) NULL DEFAULT 1 COMMENT '다운로드 체크',
 	`modified_passage` LONGTEXT NULL COMMENT '변형된 지문',
 	`llm_difficulty` VARCHAR(50) NULL,
 	`modified_difficulty` VARCHAR(50) NULL COMMENT '변경된 난이도',
@@ -324,6 +327,10 @@ ADD CONSTRAINT `FK_project_scopes_TO_passages` FOREIGN KEY (`scope_id`) REFERENC
 ALTER TABLE `passage_custom`
 ADD CONSTRAINT `FK_project_scopes_TO_passage_custom` FOREIGN KEY (`scope_id`) REFERENCES `project_scopes` (`scope_id`);
 
+-- passages 참조
+ALTER TABLE `passage_custom`
+ADD CONSTRAINT `FK_passages_TO_passage_custom` FOREIGN KEY (`passage_id`) REFERENCES `passages` (`passage_id`);
+
 -- projects 참조
 ALTER TABLE `project_source_config`
 ADD CONSTRAINT `FK_projects_TO_project_source_config` FOREIGN KEY (`project_id`) REFERENCES `projects` (`project_id`);
@@ -351,6 +358,10 @@ ALTER TABLE `matching_questions`
 ADD CONSTRAINT `FK_project_source_config_TO_matching_questions` FOREIGN KEY (`config_id`) REFERENCES `project_source_config` (`config_id`);
 ALTER TABLE `generation_logs`
 ADD CONSTRAINT `FK_project_source_config_TO_generation_logs` FOREIGN KEY (`config_id`) REFERENCES `project_source_config` (`config_id`);
+
+-- user_preferences 참조
+ALTER TABLE `project_source_config`
+ADD CONSTRAINT `FK_user_preferences_TO_project_source_config` FOREIGN KEY (`pref_id`) REFERENCES `user_preferences` (`pref_id`);
 
 -- batch_logs 참조
 ALTER TABLE `multiple_choice_questions`

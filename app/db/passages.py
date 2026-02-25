@@ -37,10 +37,10 @@ def get_project_scope_id(project_id: int, user_id: int, connection=None) -> Opti
 def get_passage_info(passage_id: int, is_custom: bool, user_id: int = None, connection=None) -> Optional[Dict[str, Any]]:
     """지문 정보 조회 (원본 또는 커스텀)"""
     if is_custom:
-        # passage_custom 테이블은 is_deleted 대신 is_use 필드를 사용함 (또는 필터링 없음)
+        # passage_custom 테이블은 is_deleted 대신 is_used 필드를 사용함 (또는 필터링 없음)
         return select_one(
             table="passage_custom",
-            where={"custom_passage_id": passage_id, "user_id": user_id, "is_use": True},
+            where={"custom_passage_id": passage_id, "user_id": user_id, "is_used": True},
             connection=connection
         )
     else:
@@ -95,7 +95,7 @@ def get_custom_passages_paginated(scope_id: int, user_id: int, connection=None) 
             
             1 as is_custom
         FROM passage_custom
-        WHERE scope_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
+        WHERE scope_id = %s AND user_id = %s AND IFNULL(is_used, 1) = 1
         ORDER BY custom_passage_id DESC
     """
     items = select_with_query(query, (scope_id, user_id), connection=connection)
@@ -239,7 +239,7 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
                    NULL as description, scope_id, NULL as achievement_standard_id,
                    1 as is_custom
             FROM passage_custom
-            WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+            WHERE user_id = %s AND IFNULL(is_used, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
             ORDER BY id DESC
         """
         return select_with_query(query, (user_id, search_pattern, search_pattern, search_pattern), connection=connection)
@@ -277,7 +277,7 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
                 1 as is_custom,
                 created_at
             FROM passage_custom
-            WHERE user_id = %s AND IFNULL(is_use, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
+            WHERE user_id = %s AND IFNULL(is_used, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)
             ORDER BY is_custom ASC, created_at ASC
         """
         return select_with_query(query, (search_pattern, search_pattern, user_id, search_pattern, search_pattern, search_pattern))

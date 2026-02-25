@@ -222,7 +222,7 @@ def save_batch_log(
             # 배치 로그 테이블에 저장 (최소 컬럼)
             sql = """
                 INSERT INTO batch_logs (
-                    input_token, output_token, 
+                    input_tokens, output_tokens, 
                     total_duration,total_attempts,success_count
                 ) VALUES (%s, %s, %s, %s, %s)
             """
@@ -614,8 +614,8 @@ def get_multiple_choice_with_batch_info(project_id: int):
             mcq.is_used,
             bl.model_name,
             bl.temperature,
-            bl.input_token,
-            bl.output_token,
+            bl.input_tokens AS input_token,
+            bl.output_tokens AS output_token,
             bl.total_attempts,
             bl.success_count
         FROM multiple_choice_questions mcq
@@ -824,8 +824,8 @@ def get_batch_logs_by_project(project_id: int):
             bl.temperature,
             bl.top_p,
             bl.top_k,
-            bl.input_token,
-            bl.output_token,
+            bl.input_tokens AS input_token,
+            bl.output_tokens AS output_token,
             bl.total_duration,
             bl.total_attempts,
             bl.success_count,

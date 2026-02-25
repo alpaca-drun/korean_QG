@@ -194,10 +194,10 @@ async def get_passages(
                            COALESCE(custom_title, title) as title, 
                            context as content,
                            NULL as description, scope_id, NULL as achievement_standard_id,
-                           IFNULL(is_use, 1) as is_use,
+                           IFNULL(is_used, 1) as is_use,
                            1 as is_custom
                     FROM passage_custom
-                    WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
+                    WHERE {where_clause} AND user_id = %s AND IFNULL(is_used, 1) = 1
                     ORDER BY custom_passage_id DESC
                     LIMIT %s OFFSET %s
                 """
@@ -209,7 +209,7 @@ async def get_passages(
                     SELECT COUNT(*) as total FROM (
                         SELECT passage_id FROM passages WHERE {where_clause}
                         UNION ALL
-                        SELECT custom_passage_id FROM passage_custom WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
+                        SELECT custom_passage_id FROM passage_custom WHERE {where_clause} AND user_id = %s AND IFNULL(is_used, 1) = 1
                     ) as combined
                 """
                 count_params = params.copy()
@@ -234,11 +234,11 @@ async def get_passages(
                            COALESCE(custom_title, title) as title, 
                            context as content,
                            NULL as description, scope_id, NULL as achievement_standard_id,
-                           IFNULL(is_use, 1) as is_use,
+                           IFNULL(is_used, 1) as is_use,
                            2 as source_type,
                            1 as is_custom
                     FROM passage_custom
-                    WHERE {where_clause} AND user_id = %s AND IFNULL(is_use, 1) = 1
+                    WHERE {where_clause} AND user_id = %s AND IFNULL(is_used, 1) = 1
                     ORDER BY id DESC
                     LIMIT %s OFFSET %s
                 """
@@ -438,9 +438,9 @@ async def get_passage(
                            custom_title as custom_title,
                            context as content,
                            NULL as description, scope_id,
-                           IFNULL(is_use, 1) as is_use
+                           IFNULL(is_used, 1) as is_use
                     FROM passage_custom
-                    WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
+                    WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_used, 1) = 1
                 """
                 cursor.execute(sql, (passage_id, user_id))
                 passage = cursor.fetchone()
@@ -464,9 +464,9 @@ async def get_passage(
                            custom_title as custom_title,
                            context as content,
                            NULL as description, scope_id,
-                           IFNULL(is_use, 1) as is_use
+                           IFNULL(is_used, 1) as is_use
                     FROM passage_custom
-                    WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_use, 1) = 1
+                    WHERE custom_passage_id = %s AND user_id = %s AND IFNULL(is_used, 1) = 1
                 """
                 cursor.execute(sql, (passage_id, user_id))
                 passage = cursor.fetchone()
@@ -678,7 +678,7 @@ async def create_passage(
                 "auth": auth,
                 "context": content,
                 "passage_id": None,  # 완전 새로운 지문
-                "is_use": 1
+                "is_used": 1
             }, connection=connection)
             
             if not custom_passage_id:
@@ -746,7 +746,7 @@ async def update_passage(
 
         custom_title_list = select_all(
             table="passage_custom",
-            where={"user_id": user_id, "is_use": True},
+            where={"user_id": user_id, "is_used": True},
             columns="custom_title"
         )
         logger.debug("custom_title_list: %s", custom_title_list)
@@ -773,7 +773,7 @@ async def update_passage(
                 "auth": base_info.get("auth"),    # 원본 저자 정보 유지
                 "context": request.content,
                 "passage_id": original_id,
-                "is_use": 1
+                "is_used": 1
             }, connection=connection)
 
             update_project_config_status(request.project_id, 1, new_custom_id, connection=connection)
@@ -806,7 +806,7 @@ async def update_passage(
     "/delete/{passage_id}",
     status_code=status.HTTP_200_OK,
     summary="지문 삭제(소프트 삭제)",
-    description="실제 DELETE가 아니라 passage_custom.is_use=0으로 비활성 처리합니다.",
+    description="실제 DELETE가 아니라 passage_custom.is_used=0으로 비활성 처리합니다.",
     tags=["지문"]
 )
 async def delete_passage(
@@ -838,7 +838,7 @@ async def delete_passage(
             # source_type이 2이거나 None인 경우: 커스텀 지문 삭제 시도 (soft delete)
             updated = update(
                 table="passage_custom",
-                data={"is_use": 0},
+                data={"is_used": 0},
                 where={"custom_passage_id": passage_id, "user_id": user_id},
                 connection=connection
             )
@@ -861,7 +861,7 @@ async def delete_passage(
                     detail=f"커스텀 지문 ID {passage_id}를 찾을 수 없습니다."
                 )
 
-        return {"success": True, "message": "커스텀 지문이 비활성(is_use=0) 처리되었습니다.", "passage_id": passage_id}
+        return {"success": True, "message": "커스텀 지문이 비활성(is_used=0) 처리되었습니다.", "passage_id": passage_id}
 
     except HTTPException:
         raise
