@@ -488,6 +488,7 @@ def get_matching_question_data(project_id: int | None = None, user_id: int | Non
                 formatted_answer = row.get('answer', '')
 
             item = {
+                'qid': row.get('qid'),
                 'nu': idx,
                 'question': row.get('question', ''),
                 'select1': selects.get('select1') or '',
@@ -726,6 +727,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
 
             # 번호는 전체 문항 순서로 부여
             item = {
+                'qid': row.get('qid'),
                 'nu': idx,
                 'question': row.get('question', ''),
                 'select1': selects.get('select1') or row.get('select1', '') or '',
@@ -735,7 +737,6 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 'select5': selects.get('select5') or row.get('select5', '') or '',
                 'answer': row.get('answer', ''),
                 'answer_explain': row.get('answer_explain', ''),
-                # 템플릿에 {passage}가 있으면 프로젝트 지문을 사용
                 'passage': row.get('passage', ''),
                 'boxcontent': row.get('box_content', '')
             }

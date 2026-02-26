@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from app.download.dev import fill_table_from_list, get_question_data_from_db, get_matching_question_data
 from app.db.database import select_one, update, select_with_query, get_db_connection
-from app.db.generate import get_project_all_questions
+from app.db.generate import get_project_all_questions, save_selection_log, save_download_log
 from app.schemas.curriculum import (
     ListResponse, 
     SelectSaveResultRequest,
@@ -489,6 +489,17 @@ async def download_selected_results(
     except Exception as e:
         logger.exception("DOCX 생성 실패 (project_id=%s)", project_id)
         raise HTTPException(status_code=500, detail=f"DOCX 생성 실패: {str(e)}")
+
+    try:
+        selected_ids = [item.get("qid") for item in data_list if item.get("qid") is not None]
+        selection_id = save_selection_log(
+            project_id=project_id,
+            selected_list=json.dumps(selected_ids)
+        )
+        if selection_id:
+            save_download_log(selection_id=selection_id)
+    except Exception as e:
+        logger.warning("다운로드 로그 저장 실패 (project_id=%s): %s", project_id, e)
 
     # 파일명 인코딩 (한글 깨짐 방지)
     project_name = project_info.get('project_name') or "download"
