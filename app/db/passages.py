@@ -4,19 +4,18 @@ from app.db.database import select_one, select_all, count, select_with_query, in
 from app.core.logger import logger
 
 
-def get_scope_ids_by_achievement(achievement_standard_id: int, connection=None) -> List[int]:
+def get_scope_ids_by_achievement(achievement_code: str, connection=None) -> List[int]:
     """
-    achievement_standard_id로 scope_id 리스트를 조회합니다.
-    project_scopes 테이블의 achievement_ids JSON 필드에서 찾습니다.
+    성취기준 코드로 scope_id 리스트를 조회합니다.
+    project_scopes의 achievement_ids(코드 배열)에서 매칭합니다.
     """
     try:
         sql = """
             SELECT scope_id 
             FROM project_scopes
-            WHERE JSON_CONTAINS(achievement_ids, %s)
+            WHERE JSON_CONTAINS(achievement_ids, JSON_QUOTE(%s) COLLATE utf8mb4_unicode_ci, '$')
         """
-        # achievement_ids가 JSON 배열([1,5,12])이므로, 찾을 값은 스칼라(예: 1)로 전달해야 매칭됩니다.
-        results = select_with_query(sql, (json.dumps(achievement_standard_id),), connection=connection)
+        results = select_with_query(sql, (achievement_code,), connection=connection)
         return [row['scope_id'] for row in results] if results else []
     except Exception as e:
         logger.warning("scope_id 조회 오류: %s", e, exc_info=True)
@@ -219,7 +218,7 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
                        WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(SUBSTRING(context, 1, 50), '...')
                        ELSE context
                    END as content,
-                   NULL as description, scope_id, NULL as achievement_standard_id,
+                   NULL as description, scope_id, NULL as achievement_code,
                    0 as is_custom
             FROM passages
             WHERE title LIKE %s OR context LIKE %s
@@ -236,7 +235,7 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
                        WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(SUBSTRING(context, 1, 50), '...')
                        ELSE context
                    END as content,
-                   NULL as description, scope_id, NULL as achievement_standard_id,
+                   NULL as description, scope_id, NULL as achievement_code,
                    1 as is_custom
             FROM passage_custom
             WHERE user_id = %s AND IFNULL(is_used, 1) = 1 AND (custom_title LIKE %s OR title LIKE %s OR context LIKE %s)

@@ -75,20 +75,16 @@ class SmallUnitResponse(BaseModel):
 
 class AchievementStandardResponse(BaseModel):
     """성취기준 응답 스키마"""
-    id: int
-    small_unit_id: int
     code: str
-    content: str
     description: Optional[str] = None
+    evaluation_criteria: Optional[str] = None
 
     class Config:
         json_schema_extra = {
             "example": {
-                "id": 1,
-                "small_unit_id": 1,
-                "code": "1-1-1",
-                "content": "자연수의 덧셈을 이해하고 계산할 수 있다.",
-                "description": "자연수 덧셈 성취기준"
+                "code": "9국01-01",
+                "description": "듣기·말하기는 의미 공유의 과정임을 이해하고 듣기·말하기 활동을 한다.",
+                "evaluation_criteria": "평가기준 내용"
             }
         }
 
@@ -96,7 +92,7 @@ class AchievementStandardResponse(BaseModel):
 class PassageResponse(BaseModel):
     """지문 응답 스키마"""
     id: int
-    achievement_standard_id: int
+    achievement_code: Optional[str] = None
     title: str
     custom_title: Optional[str] = None
     content: str
@@ -109,11 +105,10 @@ class PassageResponse(BaseModel):
         json_schema_extra = {
             "example": {    
                 "id": 1,
-                "achievement_standard_id": 1,
+                "achievement_code": "9국01-01",
                 "title": "자연수의 덧셈 문제",
                 "content": "3 + 5 = ?",
                 "is_use": 1,
-
             }
         }       
 
@@ -125,9 +120,8 @@ class PassageCreateRequest(BaseModel):
     content: str  # 지문 내용 (필수)
     auth: Optional[str] = None  # 작성자 (선택)
 
-    # ✅ scope_id 또는 achievement_standard_id 중 하나는 필수 (둘 다 없으면 기본값 사용)
     scope_id: Optional[int] = None
-    achievement_standard_id: Optional[int] = None
+    achievement_code: Optional[str] = None
 
     # ✅ 선택 필드
     custom_title: Optional[str] = None  # 커스텀 제목
@@ -155,7 +149,7 @@ class PassageCreateRequest(BaseModel):
 
 class PassageCreateFromSourceRequest(BaseModel):
     """원본 지문 기반 새 지문 생성 요청 스키마"""
-    achievement_standard_id: int
+    achievement_code: Optional[str] = None
     title: str
     content: str
     description: Optional[str] = None
@@ -163,7 +157,7 @@ class PassageCreateFromSourceRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "achievement_standard_id": 1,
+                "achievement_code": "9국01-01",
                 "title": "수정된 자연수의 덧셈 문제",
                 "content": "5 + 7 = ?",
                 "description": "원본 지문을 수정한 새로운 지문"
@@ -173,7 +167,7 @@ class PassageCreateFromSourceRequest(BaseModel):
 
 class PassageUpdateRequest(BaseModel):
     """지문 수정 요청 스키마"""
-    achievement_standard_id: Optional[int] = None
+    achievement_code: Optional[str] = None
     title: Optional[str] = None
     content: Optional[str] = None
     description: Optional[str] = None
