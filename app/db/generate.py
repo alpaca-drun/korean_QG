@@ -108,9 +108,9 @@ def get_generation_config(project_id: int):
                 FROM achievement a
                 CROSS JOIN JSON_TABLE(
                     JSON_UNQUOTE(COALESCE(ps.achievement_ids, '[]')),
-                    '$[*]' COLUMNS (ach_id_value INT PATH '$')
+                    '$[*]' COLUMNS (code_value VARCHAR(50) PATH '$')
                 ) AS jt
-                WHERE a.ach_id = jt.ach_id_value
+                WHERE a.code = jt.code_value COLLATE utf8mb4_unicode_ci
             ) AS achievements
         FROM project_source_config psc
         INNER JOIN projects pr ON psc.project_id = pr.project_id
@@ -776,12 +776,11 @@ def get_achievement_by_scope(scope_id: int):
     """프로젝트 범위의 성취기준 정보 조회"""
     query = """
         SELECT 
-            a.ach_id,
             a.code,
             a.description,
             a.evaluation_criteria
         FROM achievement a
-        INNER JOIN project_scopes ps ON JSON_CONTAINS(ps.achievement_ids, CAST(a.ach_id AS JSON), '$')
+        INNER JOIN project_scopes ps ON JSON_CONTAINS(ps.achievement_ids, JSON_QUOTE(a.code) COLLATE utf8mb4_unicode_ci, '$')
         WHERE ps.scope_id = %s
     """
     results = select_with_query(query, (scope_id,))

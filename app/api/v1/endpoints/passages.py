@@ -122,11 +122,11 @@ async def get_passages_by_project(
     "/list",
     response_model=ListResponse,
     summary="지문 리스트 조회 (미사용)",
-    description="지문 리스트를 조회합니다. achievement_standard_id와 text_type으로 필터링 가능합니다.",
+    description="지문 리스트를 조회합니다. achievement_code와 text_type으로 필터링 가능합니다.",
     tags=["지문"]
 )
 async def get_passages(
-    achievement_standard_id: int = Query(None, description="성취기준 ID", example=1),
+    achievement_code: Optional[str] = Query(None, description="성취기준 코드", example="9국01-01"),
     text_type: int = Query(None, description="텍스트 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)", example=1),
     scope_id: Optional[int] = Query(None, description="스코프 ID", example=1),
     limit: int = Query(100, description="조회 개수 제한", ge=1, le=1000),
@@ -136,9 +136,9 @@ async def get_passages(
     """
     지문 리스트를 반환합니다.
     
-    - **achievement_standard_id**: 성취기준 ID (선택사항, 지정 시 해당 성취기준의 지문만 조회)
+    - **achievement_code**: 성취기준 코드 (선택사항, 지정 시 해당 성취기준의 지문만 조회)
     - **text_type**: 텍스트 타입 (1: 원본 지문, 2: 커스텀 지문, None: 전체)
-    - **scope_id**: 스코프 ID (선택사항, achievement_standard_id보다 우선)
+    - **scope_id**: 스코프 ID (선택사항, achievement_code보다 우선)
     - **limit**: 조회 개수 제한 (기본값: 100, 최대: 1000)
     - **offset**: 조회 시작 위치 (기본값: 0)
     - **id**: 지문 고유 ID
@@ -160,9 +160,8 @@ async def get_passages(
             if scope_id is not None:
                 # scope_id가 직접 제공된 경우
                 scope_ids = [scope_id]
-            elif achievement_standard_id is not None:
-                # achievement_standard_id로 scope_id 리스트 조회
-                scope_ids = get_scope_ids_by_achievement(achievement_standard_id, connection=connection)
+            elif achievement_code is not None:
+                scope_ids = get_scope_ids_by_achievement(achievement_code, connection=connection)
             
             # WHERE 조건 구성
             where_conditions = []
@@ -178,7 +177,7 @@ async def get_passages(
             if text_type == 1:  # 원본 지문만
                 sql = f"""
                     SELECT passage_id as id, title, context as content, 
-                           NULL as description, scope_id, NULL as achievement_standard_id,
+                           NULL as description, scope_id, NULL as achievement_code,
                            1 as is_use,
                            0 as is_custom
                     FROM passages
@@ -193,7 +192,7 @@ async def get_passages(
                     SELECT custom_passage_id as id, 
                            COALESCE(custom_title, title) as title, 
                            context as content,
-                           NULL as description, scope_id, NULL as achievement_standard_id,
+                           NULL as description, scope_id, NULL as achievement_code,
                            IFNULL(is_used, 1) as is_use,
                            1 as is_custom
                     FROM passage_custom
@@ -221,7 +220,7 @@ async def get_passages(
                 # 리스트 조회
                 sql = f"""
                     SELECT passage_id as id, title, context as content, 
-                           NULL as description, scope_id, NULL as achievement_standard_id,
+                           NULL as description, scope_id, NULL as achievement_code,
                            1 as is_use,
                            1 as source_type,
                            0 as is_custom
@@ -233,7 +232,7 @@ async def get_passages(
                     SELECT custom_passage_id as id, 
                            COALESCE(custom_title, title) as title, 
                            context as content,
-                           NULL as description, scope_id, NULL as achievement_standard_id,
+                           NULL as description, scope_id, NULL as achievement_code,
                            IFNULL(is_used, 1) as is_use,
                            2 as source_type,
                            1 as is_custom
@@ -247,45 +246,23 @@ async def get_passages(
                 cursor.execute(sql, list_params)
                 passages = cursor.fetchall()
                 
-                # achievement_standard_id 추가 및 형식 변환
                 items = []
                 for passage in passages:
                     item = dict(passage)
-                    # achievement_standard_id가 None이면 scope_id로 찾기
-                    if item.get('achievement_standard_id') is None and item.get('scope_id'):
+                    if item.get('achievement_code') is None and item.get('scope_id'):
                         with connection.cursor() as inner_cursor:
                             inner_sql = """
-                                SELECT achievement_ids
+                                SELECT JSON_UNQUOTE(JSON_EXTRACT(achievement_ids, '$[0]')) AS first_code
                                 FROM project_scopes
                                 WHERE scope_id = %s
                                 LIMIT 1
                             """
                             inner_cursor.execute(inner_sql, (item['scope_id'],))
                             scope_result = inner_cursor.fetchone()
-                            if scope_result and scope_result.get('achievement_ids'):
-                                try:
-                                    achievement_ids_raw = scope_result['achievement_ids']
-                                    # JSON 문자열인 경우 파싱
-                                    if isinstance(achievement_ids_raw, str):
-                                        achievement_ids = json.loads(achievement_ids_raw)
-                                    # 이미 리스트인 경우
-                                    elif isinstance(achievement_ids_raw, list):
-                                        achievement_ids = achievement_ids_raw
-                                    else:
-                                        achievement_ids = []
-                                    
-                                    # achievement_ids가 리스트이고 비어있지 않으면 첫 번째 값 사용
-                                    if isinstance(achievement_ids, list) and len(achievement_ids) > 0:
-                                        first_id = achievement_ids[0]
-                                        # 정수로 변환 가능한지 확인
-                                        if isinstance(first_id, int):
-                                            item['achievement_standard_id'] = first_id
-                                        elif isinstance(first_id, str) and first_id.isdigit():
-                                            item['achievement_standard_id'] = int(first_id)
-                                except:
-                                    pass
-                    if item.get('achievement_standard_id') is None:
-                        item['achievement_standard_id'] = achievement_standard_id or 0
+                            if scope_result and scope_result.get('first_code'):
+                                item['achievement_code'] = scope_result['first_code']
+                    if item.get('achievement_code') is None:
+                        item['achievement_code'] = achievement_code or ""
                     if item.get('description') is None:
                         item['description'] = ""
                     if item.get('is_use') is None:
@@ -317,58 +294,27 @@ async def get_passages(
             if not passages:
                 return ListResponse(items=[], total=0)
             
-            # achievement_standard_id 추가 및 형식 변환
             items = []
             for passage in passages:
                 item = dict(passage)
-                # is_custom 설정 (SQL에서 이미 설정되어 있지만, 명시적으로 정리)
                 if text_type == 1:
-                    # 원본 지문만: is_custom = 0
                     item['is_custom'] = 0
                 elif text_type == 2:
-                    # 커스텀 지문만: is_custom = 1
                     item['is_custom'] = 1
-                # achievement_standard_id가 None이면 scope_id로 찾기
-                if item.get('achievement_standard_id') is None and item.get('scope_id'):
+                if item.get('achievement_code') is None and item.get('scope_id'):
                     with connection.cursor() as inner_cursor:
                         inner_sql = """
-                            SELECT achievement_ids
+                            SELECT JSON_UNQUOTE(JSON_EXTRACT(achievement_ids, '$[0]')) AS first_code
                             FROM project_scopes
                             WHERE scope_id = %s
                             LIMIT 1
                         """
                         inner_cursor.execute(inner_sql, (item['scope_id'],))
                         scope_result = inner_cursor.fetchone()
-                        if scope_result and scope_result.get('achievement_ids'):
-                            try:
-                                achievement_ids_raw = scope_result['achievement_ids']
-                                # JSON 문자열인 경우 파싱
-                                if isinstance(achievement_ids_raw, str):
-                                    achievement_ids = json.loads(achievement_ids_raw)
-                                # 이미 리스트인 경우
-                                elif isinstance(achievement_ids_raw, list):
-                                    achievement_ids = achievement_ids_raw
-                                else:
-                                    achievement_ids = []
-                                
-                                # achievement_ids가 리스트이고 비어있지 않으면 첫 번째 값 사용
-                                if isinstance(achievement_ids, list) and len(achievement_ids) > 0:
-                                    first_id = achievement_ids[0]
-                                    # 정수로 변환 가능한지 확인
-                                    if isinstance(first_id, int):
-                                        item['achievement_standard_id'] = first_id
-                                    elif isinstance(first_id, str) and first_id.isdigit():
-                                        item['achievement_standard_id'] = int(first_id)
-                            except (json.JSONDecodeError, ValueError, TypeError):
-                                pass
-                # achievement_standard_id가 정수인지 확인하고 설정
-                if item.get('achievement_standard_id') is None:
-                    item['achievement_standard_id'] = achievement_standard_id if achievement_standard_id else 0
-                elif not isinstance(item.get('achievement_standard_id'), int):
-                    try:
-                        item['achievement_standard_id'] = int(item['achievement_standard_id']) if item['achievement_standard_id'] else 0
-                    except (ValueError, TypeError):
-                        item['achievement_standard_id'] = 0
+                        if scope_result and scope_result.get('first_code'):
+                            item['achievement_code'] = scope_result['first_code']
+                if item.get('achievement_code') is None:
+                    item['achievement_code'] = achievement_code if achievement_code else ""
                 if item.get('description') is None:
                     item['description'] = ""
                 if item.get('is_use') is None:
@@ -477,53 +423,23 @@ async def get_passage(
                     detail=f"지문 ID {passage_id}를 찾을 수 없습니다."
                 )
             
-            # scope_id로 achievement_standard_id 찾기
             scope_id = passage.get('scope_id')
-            achievement_standard_id = 0
+            found_code = None
             if scope_id:
                 with connection.cursor() as inner_cursor:
                     inner_sql = """
-                        SELECT achievement_ids
+                        SELECT JSON_UNQUOTE(JSON_EXTRACT(achievement_ids, '$[0]')) AS first_code
                         FROM project_scopes
                         WHERE scope_id = %s
                         LIMIT 1
                     """
                     inner_cursor.execute(inner_sql, (scope_id,))
                     scope_result = inner_cursor.fetchone()
-                    if scope_result and scope_result.get('achievement_ids'):
-                        try:
-                            achievement_ids_raw = scope_result['achievement_ids']
-                            # JSON 문자열인 경우 파싱
-                            if isinstance(achievement_ids_raw, str):
-                                achievement_ids = json.loads(achievement_ids_raw)
-                            # 이미 리스트인 경우
-                            elif isinstance(achievement_ids_raw, list):
-                                achievement_ids = achievement_ids_raw
-                            else:
-                                achievement_ids = []
-                            
-                            # achievement_ids가 리스트이고 비어있지 않으면 첫 번째 값 사용
-                            if isinstance(achievement_ids, list) and len(achievement_ids) > 0:
-                                first_id = achievement_ids[0]
-                                # 정수로 변환 가능한지 확인
-                                if isinstance(first_id, int):
-                                    achievement_standard_id = first_id
-                                elif isinstance(first_id, str) and first_id.isdigit():
-                                    achievement_standard_id = int(first_id)
-                        except (json.JSONDecodeError, ValueError, TypeError) as e:
-                            logger.warning("achievement_ids 파싱 오류: %s, 값: %s", e, scope_result.get('achievement_ids'))
-                            achievement_standard_id = 0
+                    if scope_result and scope_result.get('first_code'):
+                        found_code = scope_result['first_code']
             
-            # 응답 형식 변환
             item = dict(passage)
-            # achievement_standard_id가 정수인지 확인
-            if not isinstance(achievement_standard_id, int):
-                try:
-                    achievement_standard_id = int(achievement_standard_id) if achievement_standard_id else 0
-                except (ValueError, TypeError):
-                    achievement_standard_id = 0
-            
-            item['achievement_standard_id'] = achievement_standard_id
+            item['achievement_code'] = found_code or ""
             if item.get('description') is None:
                 item['description'] = ""
             if item.get('is_use') is None:
@@ -628,7 +544,7 @@ async def create_passage(
     **필수 필드:**
     - **title**: 지문 제목
     - **content**: 지문 내용
-    - **project_id**: 프로젝트 ID (scope_id와 achievement_standard_id를 자동으로 찾기 위해 사용)
+    - **project_id**: 프로젝트 ID (scope_id를 자동으로 찾기 위해 사용)
     
     **선택 필드:**
     - **auth**: 작성자

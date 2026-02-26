@@ -19,17 +19,15 @@ class SmallUnit(BaseModel):
 
 class AchievementStandard(BaseModel):
     """성취기준 모델"""
-    id: int
-    small_unit_id: int
     code: str
-    content: str
     description: Optional[str] = None
+    evaluation_criteria: Optional[str] = None
 
 
 class Passage(BaseModel):
     """지문 모델"""
     id: int
-    achievement_standard_id: int
+    achievement_code: Optional[str] = None
     title: str
     content: str
     description: Optional[str] = None

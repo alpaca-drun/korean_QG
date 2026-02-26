@@ -43,12 +43,10 @@ CREATE TABLE `user_preferences` (
 -- ----------------------------
 DROP TABLE IF EXISTS `achievement`;
 CREATE TABLE `achievement` (
-	`ach_id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '성취기준 id',
-	`code` VARCHAR(50) NULL COMMENT '성취기준 코드 (예: 9국01-01)',
+	`code` VARCHAR(50) NOT NULL COMMENT '성취기준 코드 (예: 9국01-01)',
 	`description` TEXT NULL COMMENT '성취기준 내용',
 	`evaluation_criteria` TEXT NULL COMMENT '평가기준',
-	PRIMARY KEY (`ach_id`),
-	UNIQUE KEY `UQ_achievement_code` (`code`)
+	PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -68,7 +66,7 @@ CREATE TABLE `project_scopes` (
 	`learning_objective` TEXT NULL COMMENT '학습목표',
 	`learning_activity` TEXT NULL COMMENT '학습활동',
 	`learning_element` TEXT NULL COMMENT '학습요소',
-	`achievement_ids` LONGTEXT NULL COMMENT '성취기준 맵핑 [1, 5, 12]',
+	`achievement_ids` LONGTEXT NULL COMMENT '성취기준 코드 맵핑 ["9국01-01", "9국01-02"]',
 	`study_area` VARCHAR(50) NULL COMMENT '영역(예: 말하기듣기, 매체 등)',
 	`school_level` VARCHAR(50) NULL DEFAULT '중학교' COMMENT '학교급(예: 중학교, 고등학교)',
 	PRIMARY KEY (`scope_id`)
