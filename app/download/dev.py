@@ -608,7 +608,7 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 NULL AS select3,
                 NULL AS select4,
                 NULL AS select5,
-                mq.answer AS answer,
+                NULL AS answer,
                 mq.answer_explain AS answer_explain,
                 NULL AS box_content,
                 4 AS qtype,
