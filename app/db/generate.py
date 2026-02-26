@@ -267,6 +267,48 @@ def save_batch_log(
         logger.exception("배치 로그 DB 저장 실패: %s", e)
         return None
 
+def save_generation_log(
+    project_id: int,
+    config_id: Optional[int] = None,
+    question_type: Optional[str] = None,
+    input_token: int = 0,
+    output_token: int = 0,
+    model_name: Optional[str] = None,
+    connection=None
+) -> Optional[int]:
+    """
+    generation_logs 테이블에 생성 로그 저장
+
+    Returns:
+        저장된 generation_log_id 또는 None
+    """
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO generation_logs (
+                    project_id, config_id, question_type,
+                    input_token, output_token, model_name
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                project_id, config_id, question_type,
+                input_token, output_token, model_name
+            ))
+            return cursor.lastrowid
+
+    try:
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as conn:
+                result = _execute(conn)
+                conn.commit()
+                return result
+    except Exception as e:
+        logger.exception("generation_logs 저장 실패: %s", e)
+        return None
+
+
 ### 문항 데이터 저장
 def save_question_to_db(
     question_data: Dict[str, Any],

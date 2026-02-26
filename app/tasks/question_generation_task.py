@@ -7,7 +7,7 @@ from app.schemas.question_generation import (
     QuestionGenerationErrorResponse
 )
 from app.services.question_generation_service import QuestionGenerationService
-from app.db.generate import save_batch_log, save_questions_batch_to_db
+from app.db.generate import save_batch_log, save_questions_batch_to_db, save_generation_log
 from app.db.generate import update_project_status
 from app.clients.email import get_email_client
 from app.core.logger import logger
@@ -116,8 +116,26 @@ class QuestionGenerationTask:
                                     connection=connection
                                 )
                             
+                            total_input_tokens = sum(
+                                b.input_tokens for b in batch_log_data
+                            )
+                            total_output_tokens = sum(
+                                b.output_tokens for b in batch_log_data
+                            )
+
+                            from app.core.config import settings as app_settings
+                            save_generation_log(
+                                project_id=project_id,
+                                config_id=config_id,
+                                question_type=question_type,
+                                input_token=total_input_tokens,
+                                output_token=total_output_tokens,
+                                model_name=app_settings.gemini_model_name,
+                                connection=connection
+                            )
+
                             connection.commit()
-                            logger.info("✅ 모든 배치 로그 및 문항 저장 완료")
+                            logger.info("✅ 모든 배치 로그, 문항, generation_logs 저장 완료")
 
                             ## 📢 project 테이블 상태값 업데이트
                             update_project_status(project_id, "COMPLETED", connection=connection)
