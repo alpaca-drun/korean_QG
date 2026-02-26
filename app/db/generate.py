@@ -951,8 +951,80 @@ def get_user_token_usage(user_id: int):
 
 
 # ===========================
-# 다운로드 로그 조회
+# 다운로드/선택 로그 저장 및 조회
 # ===========================
+
+def save_selection_log(
+    project_id: int,
+    selected_list: str,
+    connection=None
+) -> Optional[int]:
+    """
+    log_selection 테이블에 선택 로그 저장
+
+    Args:
+        project_id: 프로젝트 ID
+        selected_list: 선택된 문항 ID JSON 문자열 (예: "[1,2,3]")
+
+    Returns:
+        저장된 selection_id 또는 None
+    """
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO log_selection (project_id, selected_list)
+                VALUES (%s, %s)
+            """
+            cursor.execute(sql, (project_id, selected_list))
+            return cursor.lastrowid
+
+    try:
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as conn:
+                result = _execute(conn)
+                conn.commit()
+                return result
+    except Exception as e:
+        logger.exception("log_selection 저장 실패: %s", e)
+        return None
+
+
+def save_download_log(
+    selection_id: int,
+    connection=None
+) -> Optional[int]:
+    """
+    log_download 테이블에 다운로드 로그 저장
+
+    Args:
+        selection_id: log_selection의 selection_id (FK)
+
+    Returns:
+        저장된 download_id 또는 None
+    """
+    def _execute(conn):
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO log_download (selection_id)
+                VALUES (%s)
+            """
+            cursor.execute(sql, (selection_id,))
+            return cursor.lastrowid
+
+    try:
+        if connection:
+            return _execute(connection)
+        else:
+            with get_db_connection() as conn:
+                result = _execute(conn)
+                conn.commit()
+                return result
+    except Exception as e:
+        logger.exception("log_download 저장 실패: %s", e)
+        return None
+
 
 def get_download_history(project_id: int):
     """프로젝트의 다운로드 이력 조회"""
