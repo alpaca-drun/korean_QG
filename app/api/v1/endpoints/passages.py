@@ -16,7 +16,8 @@ from app.db.passages import (
     update_project_config_status,
     update_passage_use,
     search_passages_keyword,
-    get_scope_ids_by_achievement
+    get_scope_ids_by_achievement,
+    get_sibling_scope_ids
 )
 import json
 import traceback
@@ -85,9 +86,12 @@ async def get_passages_by_project(
                 detail="프로젝트를 찾을 수 없거나 범위가 설정되지 않았습니다."
             )
         
-        # 2. 원본/커스텀 지문 목록과 개수 가져오기 (SQL에서 이미 50자 절삭 처리됨)
-        original_list, total_original = get_original_passages_paginated(scope_id)
-        custom_list, total_custom = get_custom_passages_paginated(scope_id, user_id)
+        # 2. 같은 소단원의 모든 scope_id 조회 (지문별 learning_activity가 다른 경우 대응)
+        sibling_scope_ids = get_sibling_scope_ids(scope_id)
+        
+        # 3. 원본/커스텀 지문 목록과 개수 가져오기 (SQL에서 이미 50자 절삭 처리됨)
+        original_list, total_original = get_original_passages_paginated(sibling_scope_ids)
+        custom_list, total_custom = get_custom_passages_paginated(sibling_scope_ids, user_id)
         
         return PassageListResponse(
             success=True,

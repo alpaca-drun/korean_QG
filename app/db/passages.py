@@ -55,33 +55,41 @@ def create_custom_passage(data: Dict[str, Any], connection=None) -> int:
     return insert_one("passage_custom", data, connection=connection)
 
 
-def get_original_passages_paginated(scope_id: int, connection=None) -> Tuple[List[Dict[str, Any]], int]:
-    """범위(scope_id)에 해당하는 원본 지문 목록(50자 절삭)과 총 개수 반환"""
-    columns = """
-        passage_id as id,
-        title,
-        auth,
-        CASE 
-            WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(LEFT(context, 50), '...') 
-            ELSE context 
-        END as content,
-        scope_id,
-        0 as is_custom
+def get_original_passages_paginated(scope_ids, connection=None) -> Tuple[List[Dict[str, Any]], int]:
+    """범위(scope_ids)에 해당하는 원본 지문 목록(50자 절삭)과 총 개수 반환. scope_ids는 int 또는 list[int]."""
+    if isinstance(scope_ids, int):
+        scope_ids = [scope_ids]
+    if not scope_ids:
+        return [], 0
+
+    placeholders = ','.join(['%s'] * len(scope_ids))
+    query = f"""
+        SELECT 
+            passage_id as id,
+            title,
+            auth,
+            CASE 
+                WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(LEFT(context, 50), '...') 
+                ELSE context 
+            END as content,
+            scope_id,
+            0 as is_custom
+        FROM passages
+        WHERE scope_id IN ({placeholders})
+        ORDER BY passage_id DESC
     """
-    items = select_all(
-        table="passages",
-        columns=columns,
-        where={"scope_id": scope_id},
-        order_by="passage_id DESC",
-        connection=connection
-    )
-    
+    items = select_with_query(query, tuple(scope_ids), connection=connection)
     return items, len(items)
 
-def get_custom_passages_paginated(scope_id: int, user_id: int, connection=None) -> Tuple[List[Dict[str, Any]], int]:
-    """범위(scope_id)와 사용자 ID에 해당하는 커스텀 지문 목록(50자 절삭)과 총 개수 반환"""
-    # 1. 목록 조회
-    query = """
+def get_custom_passages_paginated(scope_ids, user_id: int, connection=None) -> Tuple[List[Dict[str, Any]], int]:
+    """범위(scope_ids)와 사용자 ID에 해당하는 커스텀 지문 목록(50자 절삭)과 총 개수 반환. scope_ids는 int 또는 list[int]."""
+    if isinstance(scope_ids, int):
+        scope_ids = [scope_ids]
+    if not scope_ids:
+        return [], 0
+
+    placeholders = ','.join(['%s'] * len(scope_ids))
+    query = f"""
         SELECT 
             custom_passage_id as id,
             custom_title,
@@ -91,14 +99,12 @@ def get_custom_passages_paginated(scope_id: int, user_id: int, connection=None) 
                 WHEN CHAR_LENGTH(context) > 50 THEN CONCAT(LEFT(context, 50), '...') 
                 ELSE context 
             END as content,
-            
             1 as is_custom
         FROM passage_custom
-        WHERE scope_id = %s AND user_id = %s AND IFNULL(is_used, 1) = 1
+        WHERE scope_id IN ({placeholders}) AND user_id = %s AND IFNULL(is_used, 1) = 1
         ORDER BY custom_passage_id DESC
     """
-    items = select_with_query(query, (scope_id, user_id), connection=connection)
-
+    items = select_with_query(query, tuple(scope_ids) + (user_id,), connection=connection)
     return items, len(items)
 
 
@@ -284,6 +290,32 @@ def search_passages_keyword(keyword: str, user_id: int, source_type: Optional[in
 
 
 
+
+
+def get_sibling_scope_ids(scope_id: int, connection=None) -> List[int]:
+    """
+    주어진 scope_id와 같은 소단원(large_unit_id + small_unit_id + publisher_author + grade + semester + subject)에
+    속하는 모든 scope_id를 반환합니다.
+    같은 소단원이지만 learning_activity가 다른 레코드(예: 수난이대 / 얼굴 반찬)를 모두 포함합니다.
+    """
+    try:
+        sql = """
+            SELECT s2.scope_id
+            FROM project_scopes s1
+            JOIN project_scopes s2
+              ON s1.large_unit_id = s2.large_unit_id
+             AND s1.small_unit_id = s2.small_unit_id
+             AND s1.publisher_author = s2.publisher_author
+             AND s1.grade = s2.grade
+             AND s1.semester = s2.semester
+             AND s1.subject = s2.subject
+            WHERE s1.scope_id = %s
+        """
+        results = select_with_query(sql, (scope_id,), connection=connection)
+        return [row['scope_id'] for row in results] if results else [scope_id]
+    except Exception as e:
+        logger.warning("sibling scope_ids 조회 오류 (fallback to single scope_id): %s", e, exc_info=True)
+        return [scope_id]
 
 
 def insert_without_passage(project_id: int, connection=None):
