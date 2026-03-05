@@ -152,17 +152,19 @@ async def refresh_token(request: RefreshTokenRequest):
     
     성공 시 새로운 액세스 토큰과 리프레시 토큰을 반환합니다.
     """
-    # 리프레시 토큰 검증
-    user_id = verify_token(request.refresh_token, token_type="refresh")
+    # 리프레시 토큰 검증 (verify_token은 (user_id, role) 튜플 반환)
+    result = verify_token(request.refresh_token, token_type="refresh")
     
-    if not user_id:
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="유효하지 않거나 만료된 리프레시 토큰입니다."
         )
     
+    user_id, _role = result
+    
     # DB에서 사용자 존재 여부 확인
-    user = get_user_by_id(int(user_id))  # user_id를 숫자로 저장한 경우
+    user = get_user_by_id(int(user_id))
     
     if not user:
         raise HTTPException(

@@ -1,11 +1,13 @@
 from typing import Optional
 from pathlib import Path
 from app.schemas.question_generation import QuestionGenerationRequest
-from app.prompts.common_templates import (
-    COMMON_SYSTEM_PROMPT, 
-    COMMON_USER_PROMPT,
-    COMMON_SYSTEM_PROMPT_SHORT_ANSWER, 
-    COMMON_USER_PROMPT_SHORT_ANSWER
+from app.prompts.fivechoice_prompts import (
+    FIVECHOICE_SYSTEM_PROMPT, 
+    FIVECHOICE_USER_PROMPT,
+)
+from app.prompts.shortanswer_prompts import (
+    SHORT_ANSWER_SYSTEM_PROMPT,
+    SHORT_ANSWER_USER_PROMPT,
 )
 from app.prompts.matching_prompts import (
     MATCHING_SYSTEM_PROMPT,
@@ -14,6 +16,10 @@ from app.prompts.matching_prompts import (
 from app.prompts.true_false_prompts import (
     TRUE_FALSE_SYSTEM_PROMPT,
     TRUE_FALSE_USER_PROMPT
+)
+from app.prompts.longanswer_prompts import (
+    LONG_ANSWER_SYSTEM_PROMPT,
+    LONG_ANSWER_USER_PROMPT,
 )
 from app.core.logger import logger
 
@@ -67,26 +73,30 @@ class PromptTemplate:
 
         if system_prompt is None:
             if request.question_type == "5지선다":
-                system_prompt_template = COMMON_SYSTEM_PROMPT
+                system_prompt_template = FIVECHOICE_SYSTEM_PROMPT
             elif request.question_type == "단답형":
-                system_prompt_template = COMMON_SYSTEM_PROMPT_SHORT_ANSWER
+                system_prompt_template = SHORT_ANSWER_SYSTEM_PROMPT
             elif request.question_type == "선긋기":
                 system_prompt_template = MATCHING_SYSTEM_PROMPT
             elif request.question_type == "진위형":
                 system_prompt_template = TRUE_FALSE_SYSTEM_PROMPT
+            elif request.question_type == "서술형":
+                system_prompt_template = LONG_ANSWER_SYSTEM_PROMPT
             else:
-                system_prompt_template = COMMON_SYSTEM_PROMPT
+                system_prompt_template = FIVECHOICE_SYSTEM_PROMPT
         if user_prompt_template is None:
             if request.question_type == "5지선다":
-                user_prompt_template = COMMON_USER_PROMPT
+                user_prompt_template = FIVECHOICE_USER_PROMPT
             elif request.question_type == "단답형":
-                user_prompt_template = COMMON_USER_PROMPT_SHORT_ANSWER
+                user_prompt_template = SHORT_ANSWER_USER_PROMPT
             elif request.question_type == "선긋기":
                 user_prompt_template = MATCHING_USER_PROMPT
             elif request.question_type == "진위형":
                 user_prompt_template = TRUE_FALSE_USER_PROMPT
+            elif request.question_type == "서술형":
+                user_prompt_template = LONG_ANSWER_USER_PROMPT
             else:
-                user_prompt_template = COMMON_USER_PROMPT
+                user_prompt_template = FIVECHOICE_USER_PROMPT
 
         # 사용자 발문 유형 처리
         stem_directive = getattr(request, 'stem_directive', None)

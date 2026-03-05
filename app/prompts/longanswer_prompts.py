@@ -1,0 +1,10 @@
+LONG_ANSWER_SYSTEM_PROMPT="""
+
+"""
+
+
+LONG_ANSWER_USER_PROMPT="""
+
+
+
+"""
