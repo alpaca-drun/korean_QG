@@ -126,11 +126,16 @@ class PromptTemplate:
                 semester=request.semester,
                 large_unit_name=request.large_unit,
                 small_unit_name=request.small_unit,
+                study_area=request.study_area,
                 achievement_text=achievement_text,
                 learning_objective=request.learning_objective,
                 learning_activity=getattr(request, 'learning_activity', ''),
                 learning_element=getattr(request, 'learning_element', ''),
                 passage=request.passage,
+                passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
+                passage_author=request.passage_author if hasattr(request, 'passage_author') else None,
+                difficulty_content=difficulty_content,
+                additional_prompt_section=additional_prompt_section
             )
             user_prompt = user_prompt_template.format(
                 school_level=request.school_level,

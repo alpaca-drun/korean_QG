@@ -1,5 +1,4 @@
 from typing import List, Optional
-from threading import Lock
 import logging
 from app.schemas.question_generation import (
     QuestionGeneration,
@@ -14,7 +13,6 @@ from app.schemas.question_generation import (
 from app.clients.factory import LLMClientFactory
 from app.clients.base import LLMClientBase
 from app.prompts.templates import PromptTemplate
-from app.db.storage import save_questions_batch_to_db
 from app.utils.file_path import resolve_file_paths, ensure_storage_directory
 from app.core.config import settings
 from app.core.logger import logger
@@ -189,7 +187,6 @@ class QuestionGenerationService:
             
             # 응답 생성 및 DB 저장
             responses = []
-            lock = Lock()
             
             for req_idx, request in enumerate(requests):
                 questions = request_questions.get(req_idx, [])
@@ -383,33 +380,6 @@ class QuestionGenerationService:
                         generated_at=timestamp,
                         batches=batch_info_objects
                     )
-                    
-                    # dict를 Question 객체로 변환
-                    question_objects = []
-                    for q_idx, q_dict in enumerate(questions):
-                        try:
-                            # passage_info의 빈 문자열 처리
-                            if 'passage_info' in q_dict and isinstance(q_dict['passage_info'], dict):
-                                passage_info = q_dict['passage_info']
-                                
-                                # original_used 처리
-                                orig_val = passage_info.get('original_used')
-                                if orig_val == '' or orig_val is None:
-                                    passage_info['original_used'] = True
-                                elif isinstance(orig_val, str):
-                                    # 문자열 "true"/"false" 처리
-                                    passage_info['original_used'] = orig_val.lower() == 'true'
-                                
-                                # source_type 처리
-                                src_val = passage_info.get('source_type')
-                                if src_val == '' or src_val is None:
-                                    passage_info['source_type'] = 'original'
-                            
-                            question_obj = Question(**q_dict)
-                            question_objects.append(question_obj)
-                        except Exception as e:
-                            logger.warning("문항 변환 실패 [%s]: %s", q_idx, e)
-                            continue
                     
                     responses.append(
                         QuestionGenerationSuccessResponse(

@@ -475,6 +475,103 @@ def save_question_to_db(
 
 
 
+_BATCH_INSERT_SQL = {
+    "5지선다": """
+        INSERT INTO multiple_choice_questions (
+            config_id, project_id, batch_id, question, box_content, modified_passage,
+            option1, option2, option3, option4, option5,
+            answer, answer_explain, is_used, llm_difficulty, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """,
+    "단답형": """
+        INSERT INTO short_answer_questions (
+            config_id, project_id, batch_id, question, box_content, modified_passage,
+            answer, answer_explain, is_used, llm_difficulty, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """,
+    "진위형": """
+        INSERT INTO true_false_questions (
+            config_id, project_id, batch_id, question, box_content, modified_passage,
+            answer, answer_explain, is_used, llm_difficulty, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """,
+    "선긋기": """
+        INSERT INTO matching_questions (
+            config_id, project_id, batch_id, question, box_content, modified_passage,
+            left_items, right_items, sort_order,
+            answer_explain, is_used, llm_difficulty, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """,
+}
+
+
+def _prepare_question_values(
+    question_data: Dict[str, Any],
+    question_type: str,
+    config_id: Optional[int],
+    project_id: Optional[int],
+) -> tuple:
+    """단일 문항 데이터에서 DB INSERT용 파라미터 튜플을 생성"""
+    import random as _random
+
+    def _clean(v):
+        if v is None or str(v).lower() == 'null' or v == '':
+            return None
+        return v
+
+    batch_id = question_data.get("batch_index")
+    qt = question_data.get("question_text", {})
+    question = _clean(qt.get("text"))
+    modified_passage = _clean(qt.get("modified_passage"))
+    box_content = _clean(qt.get("box_content"))
+
+    options = question_data.get("choices", [])
+    answer = _clean(question_data.get("correct_answer"))
+    answer_explain = _clean(question_data.get("explanation"))
+    is_used = question_data.get("is_used", 1)
+
+    raw_diff = question_data.get("llm_difficulty")
+    diff_map = {1: "쉬움", 2: "보통", 3: "어려움"}
+    llm_difficulty = _clean(diff_map.get(raw_diff)) if raw_diff else None
+
+    def _opt(idx):
+        return _clean(options[idx]["text"]) if len(options) > idx and "text" in options[idx] else None
+
+    if question_type == "5지선다":
+        return (config_id, project_id, batch_id, question, box_content, modified_passage,
+                _opt(0), _opt(1), _opt(2), _opt(3), _opt(4),
+                answer, answer_explain, is_used, llm_difficulty)
+
+    if question_type == "단답형":
+        return (config_id, project_id, batch_id, question, box_content, modified_passage,
+                answer, answer_explain, is_used, llm_difficulty)
+
+    if question_type == "진위형":
+        return (config_id, project_id, batch_id, question, None, modified_passage,
+                answer, answer_explain, is_used, llm_difficulty)
+
+    if question_type == "선긋기":
+        left_items = [opt.get("text") for opt in options] if options else []
+        try:
+            right_items = json.loads(answer) if answer else []
+            if not isinstance(right_items, list):
+                right_items = str(answer).split(" | ")
+        except (json.JSONDecodeError, TypeError):
+            right_items = str(answer).split(" | ") if answer else []
+
+        n = min(len(left_items), len(right_items))
+        indices = list(range(n))
+        _random.shuffle(indices)
+
+        return (config_id, project_id, batch_id, question, box_content, modified_passage,
+                json.dumps(left_items, ensure_ascii=False),
+                json.dumps(right_items, ensure_ascii=False),
+                json.dumps(indices, ensure_ascii=False),
+                answer_explain, is_used, llm_difficulty)
+
+    return ()
+
+
 def save_questions_batch_to_db(
     questions_data: list[Dict[str, Any]],
     question_type: Optional[str] = None,
@@ -483,21 +580,21 @@ def save_questions_batch_to_db(
     connection=None
 ) -> list[Optional[int]]:
     """
-    여러 문항을 배치로 데이터베이스에 저장 (단일 트랜잭션 사용)
+    여러 문항을 배치로 데이터베이스에 저장 (executemany로 단일 라운드트립)
     """
-    
+    if not questions_data or question_type not in _BATCH_INSERT_SQL:
+        return []
+
     def _execute(conn):
-        ids = []
-        for question_data in questions_data:
-            question_id = save_question_to_db(
-                question_data, 
-                question_type=question_type,
-                project_id=project_id, 
-                config_id=config_id, 
-                connection=conn
-            )
-            ids.append(question_id)
-        return ids
+        sql = _BATCH_INSERT_SQL[question_type]
+        params_list = [
+            _prepare_question_values(qd, question_type, config_id, project_id)
+            for qd in questions_data
+        ]
+        with conn.cursor() as cursor:
+            cursor.executemany(sql, params_list)
+            first_id = cursor.lastrowid
+            return list(range(first_id, first_id + len(params_list)))
 
     try:
         if connection:
@@ -728,40 +825,6 @@ def get_questions_by_feedback_score(project_id: int, min_score: float = 7.0):
 # 지문 관련 조회
 # ===========================
 
-def get_passage_info(passage_id: int = None, scope_id: int = None):
-    """원본 지문 정보 조회"""
-    if passage_id:
-        query = """
-            SELECT 
-                p.passage_id,
-                p.title,
-                p.context,
-                p.auth,
-                ps.grade,
-                ps.semester,
-                ps.subject,
-                ps.study_area
-            FROM passages p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            WHERE p.passage_id = %s
-        """
-        results = select_with_query(query, (passage_id,))
-        return results[0] if results else None
-    elif scope_id:
-        query = """
-            SELECT 
-                passage_id,
-                title,
-                context,
-                auth
-            FROM passages
-            WHERE scope_id = %s
-        """
-        results = select_with_query(query, (scope_id,))
-        return results
-    return None
-
-
 def get_custom_passage_info(user_id: int):
     """사용자가 업로드한 커스텀 지문 목록 조회"""
     query = """
@@ -834,25 +897,32 @@ def get_achievement_by_scope(scope_id: int):
 # ===========================
 
 def get_project_statistics(project_id: int):
-    """프로젝트의 문항 생성 통계"""
+    """프로젝트의 문항 생성 통계 (UNION ALL로 테이블당 1회 스캔)"""
     query = """
-        SELECT 
-            (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id = %s) as mc_count,
-            (SELECT COUNT(*) FROM true_false_questions WHERE project_id = %s) as tf_count,
-            (SELECT COUNT(*) FROM short_answer_questions WHERE project_id = %s) as sa_count,
-            (SELECT COUNT(*) FROM matching_questions WHERE project_id = %s) as mq_count,
-            
-            (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id = %s AND is_used = TRUE) as mc_used_count,
-            (SELECT COUNT(*) FROM true_false_questions WHERE project_id = %s AND is_used = TRUE) as tf_used_count,
-            (SELECT COUNT(*) FROM short_answer_questions WHERE project_id = %s AND is_used = TRUE) as sa_used_count,
-            (SELECT COUNT(*) FROM matching_questions WHERE project_id = %s AND is_used = TRUE) as mq_used_count,
-            
-            (SELECT AVG(feedback_score) FROM multiple_choice_questions WHERE project_id = %s) as avg_mc_score,
-            (SELECT AVG(feedback_score) FROM true_false_questions WHERE project_id = %s) as avg_tf_score,
-            (SELECT AVG(feedback_score) FROM short_answer_questions WHERE project_id = %s) as avg_sa_score,
-            (SELECT AVG(feedback_score) FROM matching_questions WHERE project_id = %s) as avg_mq_score
+        SELECT
+            SUM(CASE WHEN qt = 'mc' THEN 1 ELSE 0 END) as mc_count,
+            SUM(CASE WHEN qt = 'tf' THEN 1 ELSE 0 END) as tf_count,
+            SUM(CASE WHEN qt = 'sa' THEN 1 ELSE 0 END) as sa_count,
+            SUM(CASE WHEN qt = 'mq' THEN 1 ELSE 0 END) as mq_count,
+            SUM(CASE WHEN qt = 'mc' AND is_used = TRUE THEN 1 ELSE 0 END) as mc_used_count,
+            SUM(CASE WHEN qt = 'tf' AND is_used = TRUE THEN 1 ELSE 0 END) as tf_used_count,
+            SUM(CASE WHEN qt = 'sa' AND is_used = TRUE THEN 1 ELSE 0 END) as sa_used_count,
+            SUM(CASE WHEN qt = 'mq' AND is_used = TRUE THEN 1 ELSE 0 END) as mq_used_count,
+            AVG(CASE WHEN qt = 'mc' THEN feedback_score END) as avg_mc_score,
+            AVG(CASE WHEN qt = 'tf' THEN feedback_score END) as avg_tf_score,
+            AVG(CASE WHEN qt = 'sa' THEN feedback_score END) as avg_sa_score,
+            AVG(CASE WHEN qt = 'mq' THEN feedback_score END) as avg_mq_score
+        FROM (
+            SELECT 'mc' as qt, is_used, feedback_score FROM multiple_choice_questions WHERE project_id = %s
+            UNION ALL
+            SELECT 'tf', is_used, feedback_score FROM true_false_questions WHERE project_id = %s
+            UNION ALL
+            SELECT 'sa', is_used, feedback_score FROM short_answer_questions WHERE project_id = %s
+            UNION ALL
+            SELECT 'mq', is_used, feedback_score FROM matching_questions WHERE project_id = %s
+        ) all_questions
     """
-    results = select_with_query(query, (project_id,) * 12)
+    results = select_with_query(query, (project_id,) * 4)
     return results[0] if results else None
 
 
