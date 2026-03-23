@@ -545,7 +545,9 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 1 AS qtype,
                 NULL AS left_items,
                 NULL AS right_items,
-                NULL AS sort_order
+                NULL AS sort_order,
+                NULL AS accepted_answers,
+                NULL AS scoring_criteria
             FROM multiple_choice_questions mcq
             JOIN projects p ON p.project_id = mcq.project_id
             WHERE mcq.project_id = %s
@@ -568,7 +570,9 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 2 AS qtype,
                 NULL AS left_items,
                 NULL AS right_items,
-                NULL AS sort_order
+                NULL AS sort_order,
+                NULL AS accepted_answers,
+                NULL AS scoring_criteria
             FROM short_answer_questions saq
             JOIN projects p2 ON p2.project_id = saq.project_id
             WHERE saq.project_id = %s
@@ -591,7 +595,9 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 3 AS qtype,
                 NULL AS left_items,
                 NULL AS right_items,
-                NULL AS sort_order
+                NULL AS sort_order,
+                NULL AS accepted_answers,
+                NULL AS scoring_criteria
             FROM true_false_questions tfq
             JOIN projects p3 ON p3.project_id = tfq.project_id
             WHERE tfq.project_id = %s
@@ -614,10 +620,37 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 4 AS qtype,
                 mq.left_items AS left_items,
                 mq.right_items AS right_items,
-                mq.sort_order AS sort_order
+                mq.sort_order AS sort_order,
+                NULL AS accepted_answers,
+                NULL AS scoring_criteria
             FROM matching_questions mq
             JOIN projects p4 ON p4.project_id = mq.project_id
             WHERE mq.project_id = %s
+        )
+        UNION ALL
+        (
+            SELECT
+                laq.long_question_id AS qid,
+                laq.created_at AS created_at,
+                laq.question AS question,
+                NULLIF(laq.modified_passage, '') AS passage,
+                NULL AS select1,
+                NULL AS select2,
+                NULL AS select3,
+                NULL AS select4,
+                NULL AS select5,
+                laq.answer AS answer,
+                laq.answer_explain AS answer_explain,
+                laq.box_content AS box_content,
+                5 AS qtype,
+                NULL AS left_items,
+                NULL AS right_items,
+                NULL AS sort_order,
+                laq.accepted_answers AS accepted_answers,
+                laq.scoring_criteria AS scoring_criteria
+            FROM long_answer_questions laq
+            JOIN projects p5 ON p5.project_id = laq.project_id
+            WHERE laq.project_id = %s
         )
         ORDER BY qid ASC
     """
@@ -648,11 +681,11 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
         # 프로젝트 소유권/삭제 여부 필터링(선택)
         if user_id is None:
             base_filters = " AND 1=1 AND p.is_deleted = 0"
-            params = (project_id_int, project_id_int, project_id_int, project_id_int)
+            params = (project_id_int, project_id_int, project_id_int, project_id_int, project_id_int)
         else:
             base_filters = " AND p.user_id = %s AND p.is_deleted = 0"
-            # p2/p3/p4도 동일하게 적용되도록 문자열 치환
-            params = (project_id_int, user_id, project_id_int, user_id, project_id_int, user_id, project_id_int, user_id)
+            # p2/p3/p4/p5도 동일하게 적용되도록 문자열 치환
+            params = (project_id_int, user_id, project_id_int, user_id, project_id_int, user_id, project_id_int, user_id, project_id_int, user_id)
 
         filtered_query = (
             query
@@ -674,6 +707,12 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 (f"WHERE mq.project_id = %s AND p4.user_id = %s AND p4.is_deleted = 0 AND IFNULL(mq.is_checked, 0) = 1")
                 if user_id is not None
                 else "WHERE mq.project_id = %s AND IFNULL(mq.is_checked, 0) = 1"
+            )
+            .replace(
+                "WHERE laq.project_id = %s",
+                (f"WHERE laq.project_id = %s AND p5.user_id = %s AND p5.is_deleted = 0 AND IFNULL(laq.is_checked, 0) = 1")
+                if user_id is not None
+                else "WHERE laq.project_id = %s AND IFNULL(laq.is_checked, 0) = 1"
             )
         )
 
@@ -737,7 +776,9 @@ def get_question_data_from_db(project_id: int | None = None, user_id: int | None
                 'answer': row.get('answer', ''),
                 'answer_explain': row.get('answer_explain', ''),
                 'passage': row.get('passage', ''),
-                'boxcontent': row.get('box_content', '')
+                'boxcontent': row.get('box_content', ''),
+                'accepted_answers': row.get('accepted_answers', ''),
+                'scoring_criteria': row.get('scoring_criteria', '')
             }
             
             if qtype == 4:
@@ -1000,7 +1041,9 @@ def replace_table_text(table, data, num):
         '{answer}': str(data.get('answer') or ''),
         '{answer_explain}': str(data.get('answer_explain') or ''),
         '{passage}': str(data.get('passage') or ''),
-        '{boxcontent}': str(data.get('boxcontent') or '')
+        '{boxcontent}': str(data.get('boxcontent') or ''),
+        '{accepted_answers}': str(data.get('accepted_answers') or ''),
+        '{scoring_criteria}': str(data.get('scoring_criteria') or '')
     }
     
     # 1. 값이 비어있는 경우 해당 행 삭제 처리
@@ -1012,7 +1055,8 @@ def replace_table_text(table, data, num):
         '{question}', '{select1}', '{select2}', '{select3}', '{select4}', '{select5}', 
         '{left1}', '{left2}', '{left3}', '{left4}', '{left5}',
         '{right1}', '{right2}', '{right3}', '{right4}', '{right5}',
-        '{answer}', '{answer_explain}', '{boxcontent}'
+        '{answer}', '{answer_explain}', '{boxcontent}',
+        '{accepted_answers}', '{scoring_criteria}'
     ]
     
     for row in table.rows:
