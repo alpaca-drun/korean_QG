@@ -1,11 +1,13 @@
 from typing import Optional
 from pathlib import Path
 from app.schemas.question_generation import QuestionGenerationRequest
-from app.prompts.common_templates import (
-    COMMON_SYSTEM_PROMPT, 
-    COMMON_USER_PROMPT,
-    COMMON_SYSTEM_PROMPT_SHORT_ANSWER, 
-    COMMON_USER_PROMPT_SHORT_ANSWER
+from app.prompts.fivechoice_prompts import (
+    FIVECHOICE_SYSTEM_PROMPT, 
+    FIVECHOICE_USER_PROMPT,
+)
+from app.prompts.shortanswer_prompts import (
+    SHORT_ANSWER_SYSTEM_PROMPT,
+    SHORT_ANSWER_USER_PROMPT,
 )
 from app.prompts.matching_prompts import (
     MATCHING_SYSTEM_PROMPT,
@@ -14,6 +16,10 @@ from app.prompts.matching_prompts import (
 from app.prompts.true_false_prompts import (
     TRUE_FALSE_SYSTEM_PROMPT,
     TRUE_FALSE_USER_PROMPT
+)
+from app.prompts.longanswer_prompts import (
+    LONG_ANSWER_SYSTEM_PROMPT,
+    LONG_ANSWER_USER_PROMPT,
 )
 from app.core.logger import logger
 
@@ -67,26 +73,30 @@ class PromptTemplate:
 
         if system_prompt is None:
             if request.question_type == "5지선다":
-                system_prompt_template = COMMON_SYSTEM_PROMPT
+                system_prompt_template = FIVECHOICE_SYSTEM_PROMPT
             elif request.question_type == "단답형":
-                system_prompt_template = COMMON_SYSTEM_PROMPT_SHORT_ANSWER
+                system_prompt_template = SHORT_ANSWER_SYSTEM_PROMPT
             elif request.question_type == "선긋기":
                 system_prompt_template = MATCHING_SYSTEM_PROMPT
             elif request.question_type == "진위형":
                 system_prompt_template = TRUE_FALSE_SYSTEM_PROMPT
+            elif request.question_type == "서술형":
+                system_prompt_template = LONG_ANSWER_SYSTEM_PROMPT
             else:
-                system_prompt_template = COMMON_SYSTEM_PROMPT
+                system_prompt_template = FIVECHOICE_SYSTEM_PROMPT
         if user_prompt_template is None:
             if request.question_type == "5지선다":
-                user_prompt_template = COMMON_USER_PROMPT
+                user_prompt_template = FIVECHOICE_USER_PROMPT
             elif request.question_type == "단답형":
-                user_prompt_template = COMMON_USER_PROMPT_SHORT_ANSWER
+                user_prompt_template = SHORT_ANSWER_USER_PROMPT
             elif request.question_type == "선긋기":
                 user_prompt_template = MATCHING_USER_PROMPT
             elif request.question_type == "진위형":
                 user_prompt_template = TRUE_FALSE_USER_PROMPT
+            elif request.question_type == "서술형":
+                user_prompt_template = LONG_ANSWER_USER_PROMPT
             else:
-                user_prompt_template = COMMON_USER_PROMPT
+                user_prompt_template = FIVECHOICE_USER_PROMPT
 
         # 사용자 발문 유형 처리
         stem_directive = getattr(request, 'stem_directive', None)
@@ -108,63 +118,40 @@ class PromptTemplate:
             additional_prompt_section = ''
             additional_prompt_instruction = ''
 
-        # 선긋기 유형의 경우 포맷팅 인자가 다를 수 있음
-        if request.question_type == "선긋기":
-            system_prompt = system_prompt_template.format(
-                school_level=request.school_level,
-                grade_level=request.grade_level,
-                semester=request.semester,
-                large_unit_name=request.large_unit,
-                small_unit_name=request.small_unit,
-                achievement_text=achievement_text,
-                learning_objective=request.learning_objective,
-                learning_activity=getattr(request, 'learning_activity', ''),
-                learning_element=getattr(request, 'learning_element', ''),
-                passage=request.passage,
-            )
-            user_prompt = user_prompt_template.format(
-                school_level=request.school_level,
-                grade_level=request.grade_level,
-                semester=request.semester,
-                generation_count=request.generation_count,
-            )
-        else:
-            # 기존 5지선다/단답형 포맷팅
-            # 사용자 프롬프트에 변수 채우기
-            # 프롬프트에서는 항상 10문항씩 생성하도록 고정
-            # question_count와 generation_count 둘 다 전달 (템플릿에 따라 다름)
-            system_prompt = system_prompt_template.format(
-                school_level=request.school_level,
-                grade_level=request.grade_level,
-                semester=request.semester,
-                large_unit_name=request.large_unit,
-                small_unit_name=request.small_unit,
-                study_area=request.study_area,
-                achievement_text=achievement_text,
-                learning_objective=request.learning_objective,
-                learning_activity=getattr(request, 'learning_activity', ''),
-                learning_element=getattr(request, 'learning_element', ''),
-                passage=request.passage,
-                passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
-                passage_author=request.passage_author if hasattr(request, 'passage_author') else None,
-                difficulty_content=difficulty_content,
-                stem_directive_section=stem_directive_section,
-                additional_prompt_section=additional_prompt_section
-            )
-            user_prompt = user_prompt_template.format(
-                school_level=request.school_level,
-                grade_level=request.grade_level,
-                semester=request.semester,
-                generation_count=request.generation_count,
-                study_area=request.study_area,
-                passage=request.passage,
-                learning_objective=request.learning_objective,
-                learning_activity=getattr(request, 'learning_activity', ''),
-                learning_element=getattr(request, 'learning_element', ''),
-                stem_directive=stem_directive or "",
-                stem_directive_instruction=stem_directive_instruction,
-                additional_prompt_instruction=additional_prompt_instruction
-            )
+        # 모든 문항 유형에 통합 포맷팅 적용
+        # (시스템 프롬프트가 FIVECHOICE_SYSTEM_PROMPT 기반으로 통일되어 동일한 변수 세트 사용)
+        system_prompt = system_prompt_template.format(
+            school_level=request.school_level,
+            grade_level=request.grade_level,
+            semester=request.semester,
+            large_unit_name=request.large_unit,
+            small_unit_name=request.small_unit,
+            study_area=request.study_area,
+            achievement_text=achievement_text,
+            learning_objective=request.learning_objective,
+            learning_activity=getattr(request, 'learning_activity', ''),
+            learning_element=getattr(request, 'learning_element', ''),
+            passage=request.passage,
+            passage_title=request.passage_title if hasattr(request, 'passage_title') else None,
+            passage_author=request.passage_author if hasattr(request, 'passage_author') else None,
+            difficulty_content=difficulty_content,
+            stem_directive_section=stem_directive_section,
+            additional_prompt_section=additional_prompt_section
+        )
+        user_prompt = user_prompt_template.format(
+            school_level=request.school_level,
+            grade_level=request.grade_level,
+            semester=request.semester,
+            generation_count=request.generation_count,
+            study_area=request.study_area,
+            passage=request.passage,
+            learning_objective=request.learning_objective,
+            learning_activity=getattr(request, 'learning_activity', ''),
+            learning_element=getattr(request, 'learning_element', ''),
+            stem_directive=stem_directive or "",
+            stem_directive_instruction=stem_directive_instruction,
+            additional_prompt_instruction=additional_prompt_instruction
+        )
 
         return system_prompt, user_prompt
 

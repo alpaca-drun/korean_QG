@@ -16,8 +16,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# app/download/database.py 사용
-from app.db.storage import get_db_connection
+from app.db.database import get_db_connection
 from app.core.logger import logger
 
 

@@ -137,8 +137,8 @@ class Question(BaseModel):
     question_number: int = Field(..., description="문제번호")
     passage_info: PassageInfo = Field(..., description="지문 정보")
     question_text: QuestionText = Field(..., description="문제 텍스트")
-    choices: Optional[List[Choice]] = Field(None, description="선지 목록 (5지선다: 4~5개, 단답형: null)")
-    correct_answer: str = Field(..., description="정답 (5지선다: 번호, 단답형: 텍스트, 여러개인경우 ,로구분)")
+    choices: Optional[List[Choice]] = Field(None, description="선지 목록 (5지선다: 4~5개, 단답형/서술형: null)")
+    correct_answer: str = Field(..., description="정답 (5지선다: 번호, 단답형: 텍스트, 서술형: 기본 답안, 여러개인경우 ,로구분)")
     explanation: str = Field(..., description="해설")
     db_question_id: Optional[int] = Field(None, description="데이터베이스에 저장된 문항 ID")
     batch_index: Optional[Union[int, str]] = Field(None, description="배치 인덱스 (숫자 또는 'retry_N')")
@@ -149,6 +149,10 @@ class Question(BaseModel):
     left_items: Optional[List[str]] = Field(None, description="선긋기 왼쪽 항목")
     right_items: Optional[List[str]] = Field(None, description="선긋기 오른쪽 항목 (정답)")
     sort_order: Optional[List[int]] = Field(None, description="선긋기 오른쪽 항목 표시 순서 (인덱스)")
+    
+    # 서술형 전용 필드
+    accepted_answers: Optional[List[str]] = Field(None, description="인정 답안 목록 (서술형 전용)")
+    scoring_criteria: Optional[str] = Field(None, description="채점기준 (서술형 전용)")
 
 
 # LLM 응답용 모델 (기존 실험 코드 구조)
@@ -195,6 +199,27 @@ class MultipleQuestion(BaseModel):
 class MultipleMatchingQuestion(BaseModel):
     """다중 선긋기 문항 모델"""
     questions: List[MatchingLLMQuestion] = Field(..., description="문제 목록")
+
+
+class LongAnswerLLMQuestion(BaseModel):
+    """LLM이 생성하는 서술형 문항 모델 (발문 · 보기 · 기본 답안 · 인정 답안 · 채점기준 · 해설 포함)"""
+    question_text: str = Field(..., description="발문 및 <작성 조건> 포함 문제 문장")
+    reference_text: Optional[str] = Field(default=None, description="보기 내용 (있는 경우)")
+    passage: Optional[str] = Field(default=None, description="지문 (변형/신규 생성 시 전체 본문, 원본 사용 시 '1', 불필요 시 null)")
+    source_type: Optional[str] = Field(default=None, description="지문 출처 타입: original / modified / none")
+    correct_answer: str = Field(..., description="기본 답안 (공백 포함 글자 수 표기 포함, 예: '...의미한다. (공백 포함 NN자)')")
+    accepted_answers: Optional[List[str]] = Field(default=None, description="인정 답안 목록 (최소 1개 이상)")
+    scoring_criteria: str = Field(..., description="채점기준 전문 (필수 의미 단위, 단계별 점수 기준, 감점 규정 포함)")
+    explanation: str = Field(..., description="해설 (5단 구조: 핵심 원리 → 근거 제시 → 채점 연계 → 허용 답안/오답 함정 → 학생 피드백)")
+    llm_difficulty: Optional[int] = Field(default=None, description="문항 난이도 (1: 하/쉬움, 2: 중/보통, 3: 상/어려움)")
+
+    class Config:
+        str_strip_whitespace = True
+
+
+class MultipleLongAnswerQuestion(BaseModel):
+    """다중 서술형 문항 모델 - LLM이 한 번에 여러 서술형 문항을 생성할 때 사용"""
+    questions: List[LongAnswerLLMQuestion] = Field(..., description="서술형 문항 목록")
 
 
 class QuestionGenerationErrorResponse(BaseModel):

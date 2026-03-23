@@ -5,7 +5,7 @@ from pymysql.cursors import DictCursor
 from dbutils.pooled_db import PooledDB
 from app.core.config import settings
 from app.core.logger import logger
-from app.db.database import select_with_query, select_all, count, select_with_query, select_one, update
+from app.db.database import select_with_query, select_all, count, select_one, update
 
 from app.schemas.dashboard import (
     DashboardResponse, 
@@ -78,37 +78,39 @@ def get_project_info_admin_dashboard(project_id: int, connection=None) -> Option
 
 
 def get_question_counts_by_project_ids(project_ids: list) -> QuestionTypeCount:
-    """프로젝트 ID 목록에 해당하는 문항 수를 조회합니다."""
+    """프로젝트 ID 목록에 해당하는 문항 수를 단일 쿼리로 조회합니다."""
     if not project_ids:
         return QuestionTypeCount()
     
     placeholders = ", ".join(["%s"] * len(project_ids))
     
-    mc_query = f"SELECT COUNT(*) as count FROM multiple_choice_questions WHERE project_id IN ({placeholders})"
-    mc_result = select_with_query(mc_query, tuple(project_ids))
-    mc_count = mc_result[0]["count"] if mc_result else 0
+    query = f"""
+        SELECT 
+            (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id IN ({placeholders})) as mc_count,
+            (SELECT COUNT(*) FROM true_false_questions WHERE project_id IN ({placeholders})) as tf_count,
+            (SELECT COUNT(*) FROM short_answer_questions WHERE project_id IN ({placeholders})) as sa_count,
+            (SELECT COUNT(*) FROM matching_questions WHERE project_id IN ({placeholders})) as mq_count,
+            (SELECT COUNT(*) FROM long_answer_questions WHERE project_id IN ({placeholders})) as la_count
+    """
+    result = select_with_query(query, tuple(project_ids * 5))
     
-    tf_query = f"SELECT COUNT(*) as count FROM true_false_questions WHERE project_id IN ({placeholders})"
-    tf_result = select_with_query(tf_query, tuple(project_ids))
-    tf_count = tf_result[0]["count"] if tf_result else 0
+    if result and result[0]:
+        row = result[0]
+        mc = row["mc_count"]
+        tf = row["tf_count"]
+        sa = row["sa_count"]
+        mq = row["mq_count"]
+        la = row["la_count"]
+        return QuestionTypeCount(
+            multiple_choice=mc,
+            true_false=tf,
+            short_answer=sa,
+            matching=mq,
+            long_answer=la,
+            total=mc + tf + sa + mq + la
+        )
     
-    sa_query = f"SELECT COUNT(*) as count FROM short_answer_questions WHERE project_id IN ({placeholders})"
-    sa_result = select_with_query(sa_query, tuple(project_ids))
-    sa_count = sa_result[0]["count"] if sa_result else 0
-    
-    mq_query = f"SELECT COUNT(*) as count FROM matching_questions WHERE project_id IN ({placeholders})"
-    mq_result = select_with_query(mq_query, tuple(project_ids))
-    mq_count = mq_result[0]["count"] if mq_result else 0
-    
-    total = mc_count + tf_count + sa_count + mq_count
-    
-    return QuestionTypeCount(
-        multiple_choice=mc_count,
-        true_false=tf_count,
-        short_answer=sa_count,
-        matching=mq_count,
-        total=total
-    )
+    return QuestionTypeCount()
 
 
 def get_total_question_count_by_project_ids(project_ids: list) -> int:
@@ -123,9 +125,10 @@ def get_total_question_count_by_project_ids(project_ids: list) -> int:
             (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id IN ({placeholders})) +
             (SELECT COUNT(*) FROM true_false_questions WHERE project_id IN ({placeholders})) +
             (SELECT COUNT(*) FROM short_answer_questions WHERE project_id IN ({placeholders})) +
-            (SELECT COUNT(*) FROM matching_questions WHERE project_id IN ({placeholders})) as total
+            (SELECT COUNT(*) FROM matching_questions WHERE project_id IN ({placeholders})) +
+            (SELECT COUNT(*) FROM long_answer_questions WHERE project_id IN ({placeholders})) as total
     """
-    result = select_with_query(query, tuple(project_ids * 4))
+    result = select_with_query(query, tuple(project_ids * 5))
     return result[0]["total"] if result else 0
 
 
@@ -177,9 +180,12 @@ def get_avg_feedback_score_by_project_ids(project_ids: list) -> float | None:
             UNION ALL
             SELECT feedback_score FROM matching_questions 
             WHERE project_id IN ({placeholders}) AND feedback_score IS NOT NULL
+            UNION ALL
+            SELECT feedback_score FROM long_answer_questions 
+            WHERE project_id IN ({placeholders}) AND feedback_score IS NOT NULL
         ) as all_scores
     """
-    result = select_with_query(query, tuple(project_ids * 4))
+    result = select_with_query(query, tuple(project_ids * 5))
     
     if result and result[0] and result[0]["avg_score"]:
         return round(float(result[0]["avg_score"]), 2)
@@ -188,12 +194,17 @@ def get_avg_feedback_score_by_project_ids(project_ids: list) -> float | None:
 
 
 def get_question_count_for_project(project_id: int) -> int:
-    """개별 프로젝트의 총 문항 수를 조회합니다."""
-    mc_count = count("multiple_choice_questions", {"project_id": project_id})
-    tf_count = count("true_false_questions", {"project_id": project_id})
-    sa_count = count("short_answer_questions", {"project_id": project_id})
-    mq_count = count("matching_questions", {"project_id": project_id})
-    return mc_count + tf_count + sa_count + mq_count
+    """개별 프로젝트의 총 문항 수를 단일 쿼리로 조회합니다."""
+    query = """
+        SELECT 
+            (SELECT COUNT(*) FROM multiple_choice_questions WHERE project_id = %s) +
+            (SELECT COUNT(*) FROM true_false_questions WHERE project_id = %s) +
+            (SELECT COUNT(*) FROM short_answer_questions WHERE project_id = %s) +
+            (SELECT COUNT(*) FROM matching_questions WHERE project_id = %s) +
+            (SELECT COUNT(*) FROM long_answer_questions WHERE project_id = %s) as total
+    """
+    result = select_with_query(query, (project_id, project_id, project_id, project_id, project_id))
+    return result[0]["total"] if result else 0
 
 
 def get_status_label(status: str) -> str:
@@ -220,7 +231,9 @@ def get_question_type_label(question_type: str) -> str:
         "short_answer": "단답형",
         "단답형": "단답형",
         "matching": "선긋기형",
-        "선긋기": "선긋기형"
+        "선긋기": "선긋기형",
+        "long_answer": "서술형",
+        "서술형": "서술형",
     }
     return type_map.get(question_type.lower(), question_type)
 

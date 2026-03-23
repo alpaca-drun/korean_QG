@@ -56,6 +56,21 @@ def truncate_passage_content(passage: dict, max_length: int = CONTENT_PREVIEW_LE
     return truncated
 
 
+def _bulk_fetch_achievement_codes(scope_ids: list, cursor) -> dict:
+    """scope_id 목록에 대한 achievement_code를 단일 쿼리로 일괄 조회"""
+    if not scope_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(scope_ids))
+    sql = f"""
+        SELECT scope_id, JSON_UNQUOTE(JSON_EXTRACT(achievement_ids, '$[0]')) AS first_code
+        FROM project_scopes
+        WHERE scope_id IN ({placeholders})
+    """
+    cursor.execute(sql, tuple(scope_ids))
+    results = cursor.fetchall()
+    return {row['scope_id']: row['first_code'] for row in results if row.get('first_code')}
+
+
 @router.get(
     "/list-by-project",
     response_model=PassageListResponse,
@@ -74,11 +89,12 @@ async def get_passages_by_project(
     try:
         
         # 1. project_id로 scope_id 찾기
-        scope_id = select_one(
+        project_row = select_one(
             table="projects",
             where={"project_id": project_id, "user_id": user_id, "is_deleted": False},
             columns="scope_id"
-        ).get("scope_id")
+        )
+        scope_id = project_row.get("scope_id") if project_row else None
 
         if not scope_id:
             raise HTTPException(
@@ -253,18 +269,19 @@ async def get_passages(
                 items = []
                 for passage in passages:
                     item = dict(passage)
+                    if item.get('source_type') == 1:
+                        item['is_custom'] = 0
+                    elif item.get('source_type') == 2:
+                        item['is_custom'] = 1
+                    item.pop('source_type', None)
+                    items.append(item)
+                
+                scope_ids_to_fetch = list({item['scope_id'] for item in items if item.get('achievement_code') is None and item.get('scope_id')})
+                achievement_map = _bulk_fetch_achievement_codes(scope_ids_to_fetch, cursor)
+                
+                for item in items:
                     if item.get('achievement_code') is None and item.get('scope_id'):
-                        with connection.cursor() as inner_cursor:
-                            inner_sql = """
-                                SELECT JSON_UNQUOTE(JSON_EXTRACT(achievement_ids, '$[0]')) AS first_code
-                                FROM project_scopes
-                                WHERE scope_id = %s
-                                LIMIT 1
-                            """
-                            inner_cursor.execute(inner_sql, (item['scope_id'],))
-                            scope_result = inner_cursor.fetchone()
-                            if scope_result and scope_result.get('first_code'):
-                                item['achievement_code'] = scope_result['first_code']
+                        item['achievement_code'] = achievement_map.get(item['scope_id'], "")
                     if item.get('achievement_code') is None:
                         item['achievement_code'] = achievement_code or ""
                     if item.get('description') is None:
@@ -276,16 +293,6 @@ async def get_passages(
                             item['is_use'] = int(item['is_use']) if item['is_use'] is not None else 1
                         except (ValueError, TypeError):
                             item['is_use'] = 1
-                    # is_custom 설정 (source_type 기반)
-                    if item.get('source_type') == 1:
-                        # 원본 지문: is_custom = 0
-                        item['is_custom'] = 0
-                    elif item.get('source_type') == 2:
-                        # 커스텀 지문: is_custom = 1
-                        item['is_custom'] = 1
-                    # source_type 제거 (응답에 포함하지 않음)
-                    item.pop('source_type', None)
-                    items.append(item)
                 
                 # 리스트 조회에서는 content를 50자로 제한
                 truncated_passages = [truncate_passage_content(p) for p in items]
@@ -305,18 +312,14 @@ async def get_passages(
                     item['is_custom'] = 0
                 elif text_type == 2:
                     item['is_custom'] = 1
+                items.append(item)
+            
+            scope_ids_to_fetch = list({item['scope_id'] for item in items if item.get('achievement_code') is None and item.get('scope_id')})
+            achievement_map = _bulk_fetch_achievement_codes(scope_ids_to_fetch, cursor)
+            
+            for item in items:
                 if item.get('achievement_code') is None and item.get('scope_id'):
-                    with connection.cursor() as inner_cursor:
-                        inner_sql = """
-                            SELECT JSON_UNQUOTE(JSON_EXTRACT(achievement_ids, '$[0]')) AS first_code
-                            FROM project_scopes
-                            WHERE scope_id = %s
-                            LIMIT 1
-                        """
-                        inner_cursor.execute(inner_sql, (item['scope_id'],))
-                        scope_result = inner_cursor.fetchone()
-                        if scope_result and scope_result.get('first_code'):
-                            item['achievement_code'] = scope_result['first_code']
+                    item['achievement_code'] = achievement_map.get(item['scope_id'], "")
                 if item.get('achievement_code') is None:
                     item['achievement_code'] = achievement_code if achievement_code else ""
                 if item.get('description') is None:
@@ -328,7 +331,6 @@ async def get_passages(
                         item['is_use'] = int(item['is_use']) if item['is_use'] is not None else 1
                     except (ValueError, TypeError):
                         item['is_use'] = 1
-                items.append(item)
             
             # 리스트 조회에서는 content를 50자로 제한
             truncated_passages = [truncate_passage_content(p) for p in items]

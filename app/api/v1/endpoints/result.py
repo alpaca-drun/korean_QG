@@ -27,6 +27,41 @@ import json
 router = APIRouter()
 
 
+def _query_project_with_scope(select_clause: str, project_id: int, user_id: int, role: str, admin_role_filter: bool = False):
+    """역할에 따른 프로젝트+스코프+설정 조회 공통 로직
+
+    Args:
+        select_clause: SELECT ... 절 (FROM 이전까지)
+        project_id: 프로젝트 ID
+        user_id: 사용자 ID
+        role: 사용자 역할 (admin/master/user 등)
+        admin_role_filter: True이면 admin일 때 users 테이블 JOIN하여 role 필터 적용
+    """
+    base = f"""
+        {select_clause}
+        FROM projects p
+        LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
+        LEFT JOIN project_source_config psc ON psc.config_id = (
+            SELECT MAX(config_id) FROM project_source_config WHERE project_id = p.project_id
+        )
+    """
+    if role == "admin" and admin_role_filter:
+        query = base + """
+            LEFT JOIN users u ON u.user_id = p.user_id
+            WHERE p.project_id = %s AND p.is_deleted = FALSE AND u.role in ('admin', 'user')
+        """
+        params = (project_id,)
+    elif role in ("admin", "master"):
+        query = base + " WHERE p.project_id = %s AND p.is_deleted = FALSE"
+        params = (project_id,)
+    else:
+        query = base + " WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE"
+        params = (project_id, user_id)
+
+    result = select_with_query(query, params)
+    return result[0] if result else None
+
+
 @router.get(
     "/list",
     response_model=ListResponse,
@@ -77,7 +112,7 @@ async def get_result(
 
     items = get_project_all_questions(project_id=project_id)
     
-    # 선긋기 문항의 JSON 필드 파싱
+    # JSON 필드 파싱 (선긋기, 서술형)
     for item in items:
         if item.get("question_type") == "matching":
             for field in ["left_items", "right_items", "sort_order"]:
@@ -87,6 +122,13 @@ async def get_result(
                         item[field] = json.loads(val)
                     except Exception:
                         item[field] = []
+        if item.get("question_type") == "long_answer":
+            val = item.get("accepted_answers")
+            if isinstance(val, str):
+                try:
+                    item["accepted_answers"] = json.loads(val)
+                except Exception:
+                    item["accepted_answers"] = []
                         
     # question_type이 제공된 경우에만 필터링
     if question_type:
@@ -181,9 +223,12 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
             ("multiple_choice_questions", "question_id", "multiple_choice"),
         ]
     elif question_type == "단답형":
-    # 테이블/PK 매핑 (question_id로 테이블 자동 판단)
         table_configs = [
             ("short_answer_questions", "short_question_id", "short_answer"),
+        ]
+    elif question_type == "서술형":
+        table_configs = [
+            ("long_answer_questions", "long_question_id", "long_answer"),
         ]
     else:
         table_configs = [
@@ -191,6 +236,7 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
             ("short_answer_questions", "short_question_id", "short_answer"),
             ("true_false_questions", "ox_question_id", "true_false"),
             ("matching_questions", "question_id", "matching"),
+            ("long_answer_questions", "long_question_id", "long_answer"),
         ]
     
     # 각 문항 업데이트 (단일 트랜잭션으로 처리)
@@ -336,9 +382,10 @@ async def update_selected_results(request: QuestionMetaUpdateRequest, user_data:
         "true_false": ("true_false_questions", "ox_question_id"),
         "short_answer": ("short_answer_questions", "short_question_id"),
         "matching": ("matching_questions", "question_id"),
+        "long_answer": ("long_answer_questions", "long_question_id"),
     }
     if request.question_type not in table_map:
-        raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다.")
+        raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer/long_answer 중 하나여야 합니다.")
 
     table, pk = table_map[request.question_type]
 
@@ -373,72 +420,18 @@ async def download_selected_results(
     # ✅ 프로젝트 소유권 확인 및 카테고리 조회
     user_id, role = user_data
 
+    project_info = _query_project_with_scope(
+        """SELECT 
+            p.project_id,
+            p.project_name,
+            ps.subject as category,
+            IFNULL(psc.question_type, '프로젝트타입') as question_type""",
+        project_id, user_id, role,
+        admin_role_filter=True
+    )
 
-    if role == "admin":
-        # 프로젝트 정보와 카테고리(subject) 조회
-        project_query = """
-            SELECT 
-                p.project_id,
-                p.project_name,
-                ps.subject as category,
-                IFNULL(psc.question_type, '프로젝트타입') as question_type
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            LEFT JOIN project_source_config psc ON psc.config_id = (
-                SELECT MAX(config_id)
-                FROM project_source_config
-                WHERE project_id = p.project_id
-            )
-            LEFT JOIN users u ON u.user_id = p.user_id
-            WHERE p.project_id = %s AND p.is_deleted = FALSE AND u.role in ('admin', 'user')
-        """
-    elif role == "master":
-        project_query = """
-            SELECT 
-                p.project_id,
-                p.project_name,
-                ps.subject as category,
-                IFNULL(psc.question_type, '프로젝트타입') as question_type
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            LEFT JOIN project_source_config psc ON psc.config_id = (
-                SELECT MAX(config_id)
-                FROM project_source_config
-                WHERE project_id = p.project_id
-            )
-            WHERE p.project_id = %s AND p.is_deleted = FALSE 
-        """
-    else:
-        # 프로젝트 정보와 카테고리(subject) 조회
-        project_query = """
-            SELECT 
-                p.project_id,
-                p.project_name,
-                ps.subject as category,
-                IFNULL(psc.question_type, '프로젝트타입') as question_type
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            LEFT JOIN project_source_config psc ON psc.config_id = (
-                SELECT MAX(config_id)
-                FROM project_source_config
-                WHERE project_id = p.project_id
-            )
-            WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
-        """
-    # 튜플로 파라미터 전달 (role에 따라 분기)
-    if role == "admin":
-        download_params = (project_id,)
-    elif role == "master":
-        download_params = (project_id,)
-    else:
-        download_params = (project_id, user_id)
-        
-    project_result = select_with_query(project_query, download_params)
-    
-    if not project_result:
+    if not project_info:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)")
-    
-    project_info = project_result[0]
     category = project_info.get("category") or ""  # subject가 없으면 빈 문자열
     question_type = project_info.get("question_type")
 
@@ -541,72 +534,26 @@ async def get_project_meta(
     - 소단원 (small_unit_name)
     """
     user_id, role = user_data
-    if role in ["admin", "master"]:
-        # 프로젝트 소유권 확인 및 메타정보 조회
-        project_query = """
-            SELECT 
-                p.project_id,
-                p.project_name,
 
-                ps.grade,
-                ps.semester,
-                ps.subject,
-                ps.publisher_author,
-                ps.large_unit_name,
-                ps.small_unit_name,
+    project_info = _query_project_with_scope(
+        """SELECT 
+            p.project_id,
+            p.project_name,
+            ps.grade,
+            ps.semester,
+            ps.subject,
+            ps.publisher_author,
+            ps.large_unit_name,
+            ps.small_unit_name,
+            IFNULL(psc.question_type, '프로젝트타입') as question_type,
+            IFNULL(psc.target_count, 0) as target_count,
+            IFNULL(psc.additional_prompt, "") as additional_prompt,
+            IFNULL(psc.stem_directive, "") as stem_directive""",
+        project_id, user_id, role
+    )
 
-                IFNULL(psc.question_type, '프로젝트타입') as question_type,
-
-                IFNULL(psc.target_count, 0) as target_count,
-                IFNULL(psc.additional_prompt, "") as additional_prompt,
-                IFNULL(psc.stem_directive, "") as stem_directive
-
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            LEFT JOIN project_source_config psc ON psc.config_id = (
-                SELECT MAX(config_id)
-                FROM project_source_config
-                WHERE project_id = p.project_id
-            )
-            WHERE p.project_id = %s AND p.is_deleted = FALSE
-        """
-    else:
-        # 프로젝트 소유권 확인 및 메타정보 조회
-        project_query = """
-            SELECT 
-                p.project_id,
-                p.project_name,
-
-                ps.grade,
-                ps.semester,
-                ps.subject,
-                ps.publisher_author,
-                ps.large_unit_name,
-                ps.small_unit_name,
-
-                IFNULL(psc.question_type, '프로젝트타입') as question_type,
-
-                IFNULL(psc.target_count, 0) as target_count,
-                IFNULL(psc.additional_prompt, "") as additional_prompt,
-                IFNULL(psc.stem_directive, "") as stem_directive
-
-            FROM projects p
-            LEFT JOIN project_scopes ps ON p.scope_id = ps.scope_id
-            LEFT JOIN project_source_config psc ON psc.config_id = (
-                SELECT MAX(config_id)
-                FROM project_source_config
-                WHERE project_id = p.project_id
-            )
-            WHERE p.project_id = %s AND p.user_id = %s AND p.is_deleted = FALSE
-        """
-    params = (project_id,) if role in ["admin", "master"] else (project_id, user_id)
-    
-    project_result = select_with_query(project_query, params)
-    
-    if not project_result:
+    if not project_info:
         return ProjectMetaResponse(success=False, message="프로젝트를 찾을 수 없습니다. (권한 없음 또는 삭제됨)", project_id=0, grade=None, semester=None, subject=None, publisher_author=None, large_unit_name=None, small_unit_name=None, target_count=None, additional_prompt=None, stem_directive=None)
-    
-    project_info = project_result[0]
     
     return ProjectMetaResponse(
         success=True,
