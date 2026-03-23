@@ -112,7 +112,7 @@ async def get_result(
 
     items = get_project_all_questions(project_id=project_id)
     
-    # 선긋기 문항의 JSON 필드 파싱
+    # JSON 필드 파싱 (선긋기, 서술형)
     for item in items:
         if item.get("question_type") == "matching":
             for field in ["left_items", "right_items", "sort_order"]:
@@ -122,6 +122,13 @@ async def get_result(
                         item[field] = json.loads(val)
                     except Exception:
                         item[field] = []
+        if item.get("question_type") == "long_answer":
+            val = item.get("accepted_answers")
+            if isinstance(val, str):
+                try:
+                    item["accepted_answers"] = json.loads(val)
+                except Exception:
+                    item["accepted_answers"] = []
                         
     # question_type이 제공된 경우에만 필터링
     if question_type:
@@ -216,9 +223,12 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
             ("multiple_choice_questions", "question_id", "multiple_choice"),
         ]
     elif question_type == "단답형":
-    # 테이블/PK 매핑 (question_id로 테이블 자동 판단)
         table_configs = [
             ("short_answer_questions", "short_question_id", "short_answer"),
+        ]
+    elif question_type == "서술형":
+        table_configs = [
+            ("long_answer_questions", "long_question_id", "long_answer"),
         ]
     else:
         table_configs = [
@@ -226,6 +236,7 @@ async def save_selected_results(request: QuestionMetaBatchUpdateRequest, user_da
             ("short_answer_questions", "short_question_id", "short_answer"),
             ("true_false_questions", "ox_question_id", "true_false"),
             ("matching_questions", "question_id", "matching"),
+            ("long_answer_questions", "long_question_id", "long_answer"),
         ]
     
     # 각 문항 업데이트 (단일 트랜잭션으로 처리)
@@ -371,9 +382,10 @@ async def update_selected_results(request: QuestionMetaUpdateRequest, user_data:
         "true_false": ("true_false_questions", "ox_question_id"),
         "short_answer": ("short_answer_questions", "short_question_id"),
         "matching": ("matching_questions", "question_id"),
+        "long_answer": ("long_answer_questions", "long_question_id"),
     }
     if request.question_type not in table_map:
-        raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer 중 하나여야 합니다.")
+        raise HTTPException(status_code=422, detail="question_type은 multiple_choice/true_false/short_answer/long_answer 중 하나여야 합니다.")
 
     table, pk = table_map[request.question_type]
 

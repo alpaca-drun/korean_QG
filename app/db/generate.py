@@ -502,6 +502,12 @@ _BATCH_INSERT_SQL = {
             answer_explain, is_used, llm_difficulty, created_at
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
     """,
+    "서술형": """
+        INSERT INTO long_answer_questions (
+            config_id, project_id, batch_id, question, box_content, modified_passage,
+            answer, accepted_answers, answer_explain, scoring_criteria, is_used, llm_difficulty, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """,
 }
 
 
@@ -568,6 +574,16 @@ def _prepare_question_values(
                 json.dumps(right_items, ensure_ascii=False),
                 json.dumps(indices, ensure_ascii=False),
                 answer_explain, is_used, llm_difficulty)
+
+    if question_type == "서술형":
+        scoring_criteria = _clean(question_data.get("scoring_criteria"))
+        accepted_answers_raw = question_data.get("accepted_answers")
+        if isinstance(accepted_answers_raw, list) and accepted_answers_raw:
+            accepted_answers = json.dumps(accepted_answers_raw, ensure_ascii=False)
+        else:
+            accepted_answers = None
+        return (config_id, project_id, batch_id, question, box_content, modified_passage,
+                answer, accepted_answers, answer_explain, scoring_criteria, is_used, llm_difficulty)
 
     return ()
 
@@ -638,7 +654,8 @@ def get_project_all_questions(project_id: int):
             NULLIF(mcq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(mcq.modified_difficulty, 'null') as modified_difficulty,
             NULLIF(mcq.modified_passage, 'null') as modified_passage,
-            NULL as left_items, NULL as right_items, NULL as sort_order
+            NULL as left_items, NULL as right_items, NULL as sort_order,
+            NULL as scoring_criteria, NULL as accepted_answers
         FROM multiple_choice_questions mcq
         WHERE mcq.project_id = %s AND IFNULL(mcq.is_used, 1) = 1
     """
@@ -664,7 +681,8 @@ def get_project_all_questions(project_id: int):
             NULLIF(tfq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(tfq.modified_difficulty, 'null') as modified_difficulty,
             NULLIF(tfq.modified_passage, 'null') as modified_passage,
-            NULL as left_items, NULL as right_items, NULL as sort_order
+            NULL as left_items, NULL as right_items, NULL as sort_order,
+            NULL as scoring_criteria, NULL as accepted_answers
         FROM true_false_questions tfq
         WHERE tfq.project_id = %s AND IFNULL(tfq.is_used, 1) = 1
     """
@@ -690,7 +708,8 @@ def get_project_all_questions(project_id: int):
             NULLIF(saq.llm_difficulty, 'null') as llm_difficulty,
             NULLIF(saq.modified_difficulty, 'null') as modified_difficulty,
             NULLIF(saq.modified_passage, 'null') as modified_passage,
-            NULL as left_items, NULL as right_items, NULL as sort_order
+            NULL as left_items, NULL as right_items, NULL as sort_order,
+            NULL as scoring_criteria, NULL as accepted_answers
         FROM short_answer_questions saq
         WHERE saq.project_id = %s AND IFNULL(saq.is_used, 1) = 1
     """
@@ -714,9 +733,34 @@ def get_project_all_questions(project_id: int):
             NULLIF(mq.modified_passage, 'null') as modified_passage,
             mq.left_items,
             mq.right_items,
-            mq.sort_order
+            mq.sort_order,
+            NULL as scoring_criteria, NULL as accepted_answers
         FROM matching_questions mq
         WHERE mq.project_id = %s AND IFNULL(mq.is_used, 1) = 1
+    """
+
+    # 서술형 문항
+    la_query = """
+        SELECT 
+            'long_answer' as question_type,
+            laq.long_question_id as id,
+            NULLIF(laq.question, 'null') as question,
+            NULLIF(laq.answer, 'null') as answer,
+            NULLIF(laq.answer_explain, 'null') as answer_explain,
+            laq.feedback_score,
+            laq.is_used,
+            laq.is_checked,
+            laq.created_at,
+            NULLIF(laq.box_content, 'null') as box_content,
+            NULL as option1, NULL as option2, NULL as option3, NULL as option4, NULL as option5,
+            NULLIF(laq.llm_difficulty, 'null') as llm_difficulty,
+            NULLIF(laq.modified_difficulty, 'null') as modified_difficulty,
+            NULLIF(laq.modified_passage, 'null') as modified_passage,
+            NULL as left_items, NULL as right_items, NULL as sort_order,
+            NULLIF(laq.scoring_criteria, 'null') as scoring_criteria,
+            NULLIF(laq.accepted_answers, 'null') as accepted_answers
+        FROM long_answer_questions laq
+        WHERE laq.project_id = %s AND IFNULL(laq.is_used, 1) = 1
     """
     
     # UNION으로 통합
@@ -728,10 +772,12 @@ def get_project_all_questions(project_id: int):
         {sa_query}
         UNION ALL
         {mq_query}
+        UNION ALL
+        {la_query}
         ORDER BY created_at ASC, id ASC
     """
     
-    results = select_with_query(union_query, (project_id, project_id, project_id, project_id))
+    results = select_with_query(union_query, (project_id, project_id, project_id, project_id, project_id))
     return results
 
 

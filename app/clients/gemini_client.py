@@ -1,3 +1,4 @@
+import re
 import json
 import asyncio
 from typing import List, Optional, Dict, Any
@@ -707,7 +708,10 @@ class GeminiClient(LLMClientBase):
         API 응답을 Question 객체 리스트로 파싱
         MultipleQuestion 또는 다른 형식으로 응답이 오는 경우 처리
         """
-        from app.schemas.question_generation import MultipleQuestion, LLMQuestion, MultipleMatchingQuestion, MatchingLLMQuestion
+        from app.schemas.question_generation import (
+            MultipleQuestion, LLMQuestion, MultipleMatchingQuestion, MatchingLLMQuestion,
+            MultipleLongAnswerQuestion, LongAnswerLLMQuestion
+        )
         
         # 기본값 설정
         if not schema_class:
@@ -719,6 +723,16 @@ class GeminiClient(LLMClientBase):
             # JSON 파싱
             data = json.loads(response_text)
             
+            # MultipleLongAnswerQuestion 형식인 경우 (서술형)
+            if schema_class == MultipleLongAnswerQuestion:
+                if "questions" in data:
+                    multiple_question = MultipleLongAnswerQuestion(**data)
+                    for idx, llm_question in enumerate(multiple_question.questions[:expected_count], 1):
+                        question = self._convert_long_answer_llm_question_to_question(llm_question, idx)
+                        if question:
+                            questions.append(question)
+                return questions
+
             # MultipleMatchingQuestion 형식인 경우
             if schema_class == MultipleMatchingQuestion:
                 if "questions" in data:
@@ -756,6 +770,24 @@ class GeminiClient(LLMClientBase):
         
         return questions
     
+    @staticmethod
+    def _clean_strikethrough(text: Optional[str]) -> Optional[str]:
+        """마크다운/HTML 취소선 문법 제거 및 Unicode 아티팩트 정리"""
+        if not text:
+            return text
+        # 취소선 제거
+        text = re.sub(r'~~(.*?)~~', r'\1', text, flags=re.DOTALL)
+        text = re.sub(r'<s>(.*?)</s>', r'\1', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<del>(.*?)</del>', r'\1', text, flags=re.DOTALL | re.IGNORECASE)
+        # Gemini가 한국어 음절 대신 혼용 출력하는 Unicode 아티팩트 제거
+        # 패턴1: 라틴 + 데바나가리 결합 모음 (예: gु → 구 일부가 깨진 경우)
+        #   데바나가리 U+0900-U+097F 전체 제거 (한국어 텍스트에 데바나가리 불필요)
+        text = re.sub(r'[\u0900-\u097F]', '', text)
+        # 패턴2: 라틴 + 고립 한글 자모 (예: tㅔ → 태 일부가 깨진 경우)
+        #   라틴 문자 바로 뒤 고립 자모(U+3131-U+318E)가 오면 둘 다 제거
+        text = re.sub(r'[a-zA-Z][\u3131-\u318E]', '', text)
+        return text
+
     def _convert_llm_question_to_question(
         self, 
         llm_question, 
@@ -764,7 +796,7 @@ class GeminiClient(LLMClientBase):
         """LLMQuestion을 Question 형식으로 변환"""
         try:
             from app.schemas.question_generation import (
-                Question, PassageInfo, QuestionText, LLMQuestion
+                Question, PassageInfo, QuestionText, LLMQuestion, Choice
             )
             
             # dict인 경우 LLMQuestion으로 변환
@@ -789,6 +821,21 @@ class GeminiClient(LLMClientBase):
                 has_passage = True
                 original_used = True  # 명시적으로 True 할당
                 source_type = "modified"
+
+            # 취소선 제거 적용
+            clean = self._clean_strikethrough
+            cleaned_passage = clean(passage) if has_passage else None
+            cleaned_reference = clean(llm_question.reference_text)
+            cleaned_question_text = clean(llm_question.question_text)
+            cleaned_explanation = clean(llm_question.explanation)
+
+            # 선지 취소선 제거
+            choices = llm_question.choices
+            if choices:
+                choices = [
+                    Choice(number=c.number, text=clean(c.text) or c.text)
+                    for c in choices
+                ]
             
             return Question(
                 question_id=str(question_number),
@@ -798,17 +845,86 @@ class GeminiClient(LLMClientBase):
                     source_type=source_type
                 ),
                 question_text=QuestionText(
-                    text=llm_question.question_text,
-                    modified_passage=passage if has_passage else None,
-                    box_content=llm_question.reference_text if llm_question.reference_text and llm_question.reference_text.strip() else None
+                    text=cleaned_question_text,
+                    modified_passage=cleaned_passage,
+                    box_content=cleaned_reference if cleaned_reference and cleaned_reference.strip() else None
                 ),
-                choices=llm_question.choices,
+                choices=choices,
                 correct_answer=llm_question.correct_answer,
-                explanation=llm_question.explanation,
+                explanation=cleaned_explanation,
                 llm_difficulty=llm_question.llm_difficulty
             )
         except Exception as e:
             logger.warning("문항 변환 실패 [Q%s]: %s", question_number, e)
+            return None
+
+    def _convert_long_answer_llm_question_to_question(
+        self,
+        llm_question,
+        question_number: int
+    ) -> Optional[Question]:
+        """LongAnswerLLMQuestion을 Question 형식으로 변환 (서술형 전용)"""
+        try:
+            from app.schemas.question_generation import (
+                Question, PassageInfo, QuestionText, LongAnswerLLMQuestion
+            )
+
+            if isinstance(llm_question, dict):
+                llm_question = LongAnswerLLMQuestion(**llm_question)
+            elif not isinstance(llm_question, LongAnswerLLMQuestion):
+                return None
+
+            # 지문 처리
+            passage = llm_question.passage
+            source_type = llm_question.source_type or "none"
+
+            if not passage or (isinstance(passage, str) and not passage.strip()):
+                has_passage = False
+                original_used = False
+                source_type = "none"
+            elif passage == "1":
+                has_passage = False
+                original_used = True
+                source_type = "original"
+            else:
+                has_passage = True
+                original_used = True
+                if source_type not in ("original", "modified", "none"):
+                    source_type = "modified"
+
+            clean = self._clean_strikethrough
+            cleaned_passage = clean(passage) if has_passage else None
+            cleaned_reference = clean(llm_question.reference_text)
+            cleaned_question_text = clean(llm_question.question_text)
+            cleaned_explanation = clean(llm_question.explanation)
+            cleaned_scoring_criteria = clean(llm_question.scoring_criteria)
+            cleaned_correct_answer = clean(llm_question.correct_answer)
+            cleaned_accepted_answers = (
+                [clean(a) for a in llm_question.accepted_answers if a]
+                if llm_question.accepted_answers else None
+            )
+
+            return Question(
+                question_id=str(question_number),
+                question_number=question_number,
+                passage_info=PassageInfo(
+                    original_used=original_used,
+                    source_type=source_type
+                ),
+                question_text=QuestionText(
+                    text=cleaned_question_text,
+                    modified_passage=cleaned_passage,
+                    box_content=cleaned_reference if cleaned_reference and cleaned_reference.strip() else None
+                ),
+                choices=None,
+                correct_answer=cleaned_correct_answer or "",
+                explanation=cleaned_explanation or "",
+                llm_difficulty=llm_question.llm_difficulty,
+                scoring_criteria=cleaned_scoring_criteria,
+                accepted_answers=cleaned_accepted_answers
+            )
+        except Exception as e:
+            logger.warning("서술형 문항 변환 실패 [Q%s]: %s", question_number, e)
             return None
 
     def _convert_matching_llm_question_to_question(
@@ -826,14 +942,17 @@ class GeminiClient(LLMClientBase):
             if isinstance(llm_question, dict):
                 llm_question = MatchingLLMQuestion(**llm_question)
             
-            # pairs 처리
+            # 취소선 제거 적용
+            clean = self._clean_strikethrough
+
+            # pairs 처리 (취소선 제거 포함)
             pairs = llm_question.pairs
             choices = []
             right_items = []
             
             for idx, pair in enumerate(pairs, 1):
-                choices.append(Choice(number=idx, text=pair.left_item))
-                right_items.append(pair.right_item)
+                choices.append(Choice(number=idx, text=clean(pair.left_item) or pair.left_item))
+                right_items.append(clean(pair.right_item) or pair.right_item)
             
             # correct_answer에 오른쪽 아이템들을 JSON 문자열로 저장 (안전성 확보)
             correct_answer = json.dumps(right_items, ensure_ascii=False)
@@ -846,13 +965,13 @@ class GeminiClient(LLMClientBase):
                     source_type="modified" if llm_question.passage else "none"
                 ),
                 question_text=QuestionText(
-                    text=llm_question.question_text,
-                    modified_passage=llm_question.passage,
+                    text=clean(llm_question.question_text),
+                    modified_passage=clean(llm_question.passage),
                     box_content=None
                 ),
                 choices=choices,
                 correct_answer=correct_answer,
-                explanation=llm_question.explanation,
+                explanation=clean(llm_question.explanation),
                 llm_difficulty=llm_question.llm_difficulty
             )
         except Exception as e:

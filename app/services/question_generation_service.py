@@ -65,7 +65,7 @@ class QuestionGenerationService:
         request_mapping = []  # 배치 결과를 원래 요청에 매핑하기 위한 리스트
         
         # 각 요청마다 school_level에 따라 디렉토리 생성 및 경로 변환
-        from app.schemas.question_generation import MultipleQuestion, MultipleMatchingQuestion
+        from app.schemas.question_generation import MultipleQuestion, MultipleMatchingQuestion, MultipleLongAnswerQuestion
         
         for req_idx, req in enumerate(requests):
             total_count = req.generation_count
@@ -74,6 +74,8 @@ class QuestionGenerationService:
             schema_class = MultipleQuestion
             if req.question_type == "선긋기":
                 schema_class = MultipleMatchingQuestion
+            elif req.question_type == "서술형":
+                schema_class = MultipleLongAnswerQuestion
             
             batch_size = 10
             num_batches = (total_count + batch_size - 1) // batch_size  # 올림 계산
@@ -218,6 +220,8 @@ class QuestionGenerationService:
                         schema_class = MultipleQuestion
                         if request.question_type == "선긋기":
                             schema_class = MultipleMatchingQuestion
+                        elif request.question_type == "서술형":
+                            schema_class = MultipleLongAnswerQuestion
                         
                         # 부족한 만큼만 재요청 (단일 요청, 메타데이터 포함)
                         retry_result = await self.llm_client.generate_questions(
