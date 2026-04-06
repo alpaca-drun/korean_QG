@@ -22,6 +22,7 @@ class TokenData(BaseModel):
     refresh_token: str = Field(..., description="JWT 리프레시 토큰")
     token_type: str = Field(default="bearer", description="토큰 타입")
     expires_in: int = Field(..., description="액세스 토큰 만료 시간 (초)")
+    user_name: Optional[str] = Field(None, description="사용자 이름")
 
 
 class LoginSuccessResponse(BaseModel):
@@ -39,7 +40,8 @@ class LoginSuccessResponse(BaseModel):
                     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                     "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                     "token_type": "bearer",
-                    "expires_in": 1800
+                    "expires_in": 1800,
+                    "user_name": "홍길동"
                 }
             }
         }

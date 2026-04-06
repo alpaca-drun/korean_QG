@@ -105,18 +105,19 @@ async def login(request: LoginRequest):
         
         # 4. JWT 토큰 생성 (user_id 또는 email을 토큰 subject로 사용)
         user_identifier = str(user["user_id"])  # 또는 user["email"]
-        access_token = create_access_token(data={"sub": user_identifier, "role": user["role"]})
-        refresh_token = create_refresh_token(data={"sub": user_identifier, "role": user["role"]})
+        access_token = create_access_token(data={"sub": user_identifier, "role": user["role"], "name": user.get("name")})
+        refresh_token = create_refresh_token(data={"sub": user_identifier, "role": user["role"], "name": user.get("name")})
         
         # 토큰 데이터 구성
         token_data = TokenData(
             access_token=access_token,
             refresh_token=refresh_token,  # 로그인 시에도 리프레시 토큰 반환
             token_type="bearer",
-            expires_in=settings.jwt_access_token_expire_minutes * 60  # 초 단위로 변환
+            expires_in=settings.jwt_access_token_expire_minutes * 60,  # 초 단위로 변환
+            user_name=user.get("name")
         )
         
-        logger.info("로그인 성공: user_id=%s", user_identifier)
+        logger.info("로그인 성공: user_id=%s, name=%s", user_identifier, user.get("name"))
         return LoginSuccessResponse(
             success=True,
             message="로그인에 성공했습니다.",
@@ -182,15 +183,16 @@ async def refresh_token(request: RefreshTokenRequest):
     # 새로운 토큰 생성 (Refresh Token Rotation 전략)
     # 보안을 위해 액세스 토큰과 리프레시 토큰을 모두 새로 발급합니다.
     # 이전 리프레시 토큰은 더 이상 사용할 수 없습니다.
-    new_access_token = create_access_token(data={"sub": user_id})
-    new_refresh_token = create_refresh_token(data={"sub": user_id})
+    new_access_token = create_access_token(data={"sub": user_id, "role": user.get("role"), "name": user.get("name")})
+    new_refresh_token = create_refresh_token(data={"sub": user_id, "role": user.get("role"), "name": user.get("name")})
     
     # 토큰 데이터 구성
     token_data = TokenData(
         access_token=new_access_token,
         refresh_token=new_refresh_token, 
         token_type="bearer",
-        expires_in=settings.jwt_access_token_expire_minutes * 60
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        user_name=user.get("name")
     )
     
     return LoginSuccessResponse(
